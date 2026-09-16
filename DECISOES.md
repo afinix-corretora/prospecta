@@ -77,6 +77,17 @@ Postura de risco definida. **Consequência de projeto:** isolar raiz de identida
 domínios de prospecção separados do institucional, BM separado do BM de anúncios, chips como
 recurso descartável com custo unitário conhecido e health score no pool.
 
+### D12 — Schema antes dos adapters; inverte a ordem das Fases 1 e 2
+A ordem original punha `ChannelAdapter` antes do schema novo. Invertido após o inventário da Fase 0.
+*Justificativa:* as quatro invariantes são garantidas por schema — chave única `(enrollment_id,
+step_id)`, índice parcial em `next_run_at`, gate de supressão, quota por remetente. Schema errado
+custa migration em dado de produção; adapter errado custa uma classe. Além disso a Fase 0 mostrou
+que a Fase 1 é bem maior do que se supunha (5 caminhos de saída e 7 de entrada, não 3 clientes),
+então deixá-la depois evita bloquear o resto.
+**Consequência:** o schema central nasce com teste automatizado das invariantes (`tests/run.sh`)
+antes de existir qualquer código de envio. O motor não envia nada até a Fase 1 — o que é aceitável,
+porque shadow mode (`status = 'simulado'`) já é caminho de primeira classe no schema.
+
 ---
 
 ## Decisões adiadas (não decidir agora)
@@ -107,9 +118,9 @@ Se viável, entra depois como pool de remetentes — a interface já estará pro
 
 | Fase | Entrega | Risco |
 |---|---|---|
-| 0 | Inventário read-only: toda edge function, tabela, cron e dependência, classificados em migra/adapta/descarta | Nenhum |
-| 1 | Interface `ChannelAdapter` envolvendo Gupshup, Comtele e UAZAPI sem mudar comportamento | Muito baixo |
-| 2 | Schema novo em paralelo ao antigo + backfill de contatos com dedup | Baixo |
+| 0 | ✅ Inventário read-only — `INVENTARIO-FASE-0.md`: 83 edge functions e 52 tabelas classificadas | Nenhum |
+| 2 | Schema novo com invariantes garantidas por constraint/trigger + backfill de contatos com dedup | Baixo |
+| 1 | Interface `ChannelAdapter` sobre os 5 provedores reais (Evolution, Meta Cloud, Gupshup, Twilio, Z-API/360dialog) sem mudar comportamento — ver D12 | Muito baixo |
 | 3 | **Shadow mode**: motor calcula e grava tudo como `simulado`, não envia. Compara com o Disparador atual | Nenhum — de-risca tudo |
 | 4 | Cutover por campanha, começando por resgate (D5) | Controlado |
 | 5 | Deletar o caminho antigo — **com data definida** | Baixo |

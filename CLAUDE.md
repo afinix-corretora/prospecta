@@ -99,15 +99,20 @@ e elas têm teste automatizado obrigatório.**
 
 ## Fase atual
 
-> **Fase 0 — inventário (read-only).**
-> Mapear toda edge function, tabela, cron e dependência externa dos projetos existentes
-> (`sdr-resgate-evolution`, `nina-sdr-evolution`, `AqueceJá`, `ProfitCare`), classificando cada item
-> em **migra / adapta / descarta**. Identificar integrações duplicadas — especialmente WhatsApp,
-> que provavelmente existe em mais de um lugar.
+> **Fase 2 — schema central.**
+> O schema das 12 tabelas existe em `supabase/migrations/`, com as quatro invariantes garantidas
+> por constraint e trigger, não por convenção. Próximo passo: backfill com dedup — e antes dele, o
+> mapa de `status` antigo → `enrollments.status`, sem o qual o backfill inventa estado.
 >
-> **Não alterar código nesta fase.**
+> Toda mudança de schema roda `tests/run.sh` antes do commit. Teste vermelho é bloqueio, não aviso.
 
-Fases seguintes em `DECISOES.md`.
+**Fase 0 concluída** — inventário em `INVENTARIO-FASE-0.md`: 83 edge functions e 52 tabelas
+classificadas em migra/adapta/descarta. Leitura obrigatória antes de propor qualquer migração de
+código antigo; várias suposições do `DECISOES.md` foram corrigidas lá (em especial: UAZAPI não
+existe na base — o WhatsApp não-oficial é Evolution API).
+
+A Fase 1 (`ChannelAdapter`) vem depois do schema — ver D12 em `DECISOES.md`.
+Demais fases em `DECISOES.md`.
 
 ---
 
