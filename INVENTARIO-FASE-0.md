@@ -186,7 +186,7 @@ resposta hoje é ambígua.
 
 | Grupo | Functions | Destino |
 |---|---|---|
-| Saída de canal (5) | `send-evolution-message`, `whatsapp-sender`, `meta-send-via-bsp`, `gupshup-send-session`, `gupshup-send-test-message` | Colapsam em `ChannelAdapter.send()` — um adapter por provedor real (Evolution, Meta Cloud, Gupshup). Twilio/Z-API/360dialog em `meta-send-via-bsp` são código morto a confirmar antes de portar. |
+| Saída de canal (5) | `send-evolution-message`, `whatsapp-sender`, `meta-send-via-bsp`, `gupshup-send-session`, `gupshup-send-test-message` | Colapsam em `ChannelAdapter.send()` — um adapter por provedor. São cinco provedores implementados, não três: Evolution, Meta Cloud, Gupshup, Twilio, Z-API/360dialog. |
 | Entrada de canal (7) | `evolution-webhook`, `whatsapp-webhook`, `gupshup-webhook`, `meta-webhook`, `bsp-webhook`, `rescue-webhook-inbound`, `inbound-lead-webhook` | Colapsam em `ChannelAdapter.normalizeWebhook()`. As 1177 linhas do `evolution-webhook` são o maior item isolado de trabalho da Fase 1. |
 | Cadência (3) | `rescue-engine`, `rescue-reengage`, `rescue-response-reconciler` | Núcleo do agendador novo. `rescue-engine` já tem estado por lead, janela de envio, ciclo e claim idempotente. |
 | CRM (3) | `rescue-pipefy-poller`, `rescue-pipefy-webhook`, `dispatch-integration` | Poller e webhook viram `PipefySource`. `dispatch-integration` (817 linhas, Pipefy+HubSpot+Pipedrive) vira writeback via `outbox` — hoje é síncrono no caminho de envio. |
@@ -203,6 +203,67 @@ resposta hoje é ambígua.
 | Limpeza de travados (5) | `audit-stuck-leads`, `fix-stuck-leads`, `reprocess-stuck-leads`, `auto-requeue-messages`, `merge-and-resume` | Existem só para consertar o mutex por status. Sem a causa, somem. |
 | Agente de IA (6) | `nina-orchestrator` (1921 linhas), `generate-prompt`, `generate-embeddings`, `test-prompt-chat`, `test-full-qualification`, `search-social-profiles` | Nina é agente conversacional de qualificação — produto diferente do motor de cadência. Fica onde está; o motor entrega o lead e sai. |
 | Infra, teste e uso único (17) | `health-check`, `initialize-system`, `import-settings`, `validate-setup`, `debug-pipeline`, `invite-team-member`, `seed-appointments`, `simulate-webhook`, `simulate-audio-webhook`, `test-appointment-webhook`, `test-elevenlabs-tts`, `test-whatsapp-message`, `merge-duplicate-contacts`, `validate-contacts`, `blast-create-card`, `blast-delete-card`, `blast-mark-disregard` | Scaffolding, testes manuais e operações acopladas ao schema antigo. Nada a preservar. |
+
+---
+
+## Classificação — tabelas de `sdr-resgate-evolution`
+
+52 tabelas, todas classificadas. **Adapta 31 · Descarta 19 · Migra 2.**
+A coluna "destino" usa os nomes do schema novo definido no `CLAUDE.md`.
+
+### Adapta — vira schema novo (31)
+
+| Destino | Tabelas de origem | Nota |
+|---|---|---|
+| `contacts` / `contact_identities` | `contacts` | Backfill com dedup (Fase 2). Hoje a identidade é coluna `phone_number` no próprio contato — não há tabela de identidades, então `contact_identities` nasce vazia e é populada a partir daí. |
+| `suppression` | `contact_blacklist` | Só telefone. Migra 1:1 para o canal WhatsApp/SMS; e-mail e handle nascem sem histórico. |
+| `campaigns` | `rescue_campaigns`, `blast_campaigns`, `broadcast_campaigns` | Três tabelas quase idênticas viram uma. `tipo_campanha` (D4) não existe em nenhuma — é campo novo, não migrado. |
+| `flows` / `flow_versions` / `flow_steps` | `rescue_messages`, `meta_templates` | `rescue_messages` já tem `sequence_order` e `layer` — é a cadência linear da v1 (D8). Não há versionamento: os passos são editáveis em lugar, exatamente o que D9 proíbe. |
+| `enrollments` | `rescue_leads`, `blast_leads`, `broadcast_recipients` | `rescue_leads` é o mais próximo: já tem `current_step`, `next_scheduled_at`, `cycle_count`, `status`. `blast_leads` traz `wa_status`/`sms_status` por canal — no modelo novo isso são `messages`, não colunas. |
+| `messages` / `message_events` | `rescue_message_logs`, `blast_message_logs`, `messages`, `conversations`, `conversation_states` | `rescue_message_logs` carrega o índice único parcial que garante a idempotência — preservar o padrão. `conversation_states` é estado sobrescrito; `message_events` é append-only, então vira derivação, não migração. |
+| `sender_accounts` | `whatsapp_instances`, `whatsapp_instance_secrets`, `official_api_configs`, `official_api_metrics`, `gupshup_config`, `gupshup_partner_accounts`, `comtele_credentials`, `round_robin_state` | Oito tabelas, uma por provedor — é a modelagem por canal que a anti-regra proíbe. `round_robin_state` é o embrião do pool; não tem quota nem health score. |
+| health score de `sender_accounts` | `warming_chips`, `warming_groups`, `warming_group_members`, `warming_messages`, `warming_pairs`, `warming_phases` | O módulo "AqueceJá". Tem a noção de fase de aquecimento e de chip, que é o que falta no pool de envio. Hoje vive isolado do caminho de disparo. |
+| `outbox` | `integration_destinations`, `integration_logs` | Destinos e log de writeback existem; o que não existe é a fila assíncrona com retry (D3) — hoje `dispatch-integration` escreve inline. |
+
+### Migra (2)
+
+`pipefy_credentials` e `pipefy_oauth_tokens` — o par que sustenta `_shared/pipefy.ts`. Migram
+como estão, **menos a coluna `access_token` em texto puro**, cujo fallback deve morrer junto.
+
+### Descarta (19)
+
+| Grupo | Tabelas | Por quê |
+|---|---|---|
+| Filas de execução (4) | `send_queue`, `message_grouping_queue`, `message_processing_queue`, `nina_processing_queue` | Fila com estado na execução. O modelo novo põe o estado no contato: a "fila" é `enrollments.next_run_at` com índice parcial. |
+| Nina / RAG (3) | `nina_settings`, `knowledge_chunks`, `knowledge_files` | Pertencem ao agente conversacional, não ao motor. |
+| CRM embutido (6) | `deals`, `deal_activities`, `appointments`, `pipelines`, `pipeline_stages`, `tag_definitions` | O motor não tem CRM próprio (D1) — lê e escreve no Pipefy/ProfitCare por contrato estreito (D3). |
+| Aplicação (6) | `profiles`, `teams`, `team_members`, `team_functions`, `user_roles`, `design_settings` | Multi-tenant e UI do produto antigo. O serviço novo é autônomo, com API própria. |
+
+### O risco real da Fase 2 é o vocabulário de `status`, não o volume
+
+O backfill é 3 → 1 em campanha, lead e log. O que atrapalha é que os três pipelines usam
+vocabulários diferentes e incoerentes entre si:
+
+- **`rescue_leads`** — 14 valores no `CHECK` final: `pending`, `in_progress`, `responded`,
+  `engaged`, `reengaging`, `qualified`, `disqualified`, `blacklisted`, `completed`,
+  `waiting_cycle`, `failed`, `sent`, `paused`, `cancelled`. A restrição foi **alargada quatro vezes
+  em seis semanas** (9 valores em 20/04 → 12 → 10 → 14 em 02/06). Uma coluna de status que só cresce
+  é sintoma de estado que devia estar em outro lugar — no modelo novo isso se separa em
+  `enrollments.status` (ciclo de vida da inscrição) e `message_events` (o que aconteceu com cada
+  disparo).
+- **`blast_leads`** — 8 valores, semântica disjunta: `pending`, `processing`, `sent`, `positive`,
+  `discarded`, `blacklisted`, `failed`, `cancelled`. Mistura estado de entrega com **desfecho
+  comercial** (`positive`, `discarded`), e ainda mantém `wa_status`/`sms_status` em paralelo, por
+  canal, na mesma linha.
+
+Há também **vocabulário morto**: `responded` está no `CHECK` de `rescue_leads` mas nenhuma function
+escreve esse valor — `rescue-response-reconciler` grava `status: 'engaged'` com `responded_at`,
+embora o próprio docstring dela diga "marks the lead as `responded`". Documentação e código já
+divergem hoje; migrar sem decidir qual vence propaga a ambiguidade para o schema novo.
+
+**Consequência prática:** o mapa de `status` antigo → (`enrollments.status` + evento) precisa ser
+escrito e revisado **antes** do backfill. Sem ele o backfill inventa estado, e o shadow mode da
+Fase 3 compara contra uma baseline que já nasce errada.
 
 ---
 
@@ -230,11 +291,29 @@ projeto vivo é pré-requisito do cutover (Fase 4) e **não foi possível aqui**
 | Gupshup (BSP) | 7 functions | Adapta |
 | Comtele (SMS) | `comtele-send-sms`, `blast-engine` | Migra |
 | Pipefy (OAuth client_credentials) | `_shared/pipefy.ts` + 6 functions | Migra |
-| Twilio, Z-API, 360dialog | só dentro de `meta-send-via-bsp` | **A confirmar** — provável código morto; não portar sem evidência de uso |
+| Twilio, Z-API, 360dialog | `meta-send-via-bsp`, `bsp-webhook`, `sync-all-templates` + formulários próprios na UI | **Adapta** — não é código morto (ver abaixo) |
 | OpenAI / Lovable AI Gateway / ElevenLabs / Firecrawl | Nina, transcrição, enriquecimento | Descarta do motor (fica com Nina) |
 | HubSpot, Pipedrive | `dispatch-integration` | Descarta na v1 — CRM é Pipefy/ProfitCare (D1, D3) |
 | Google Sheets / OAuth, SMTP (`smtplw.com.br`) | ProfitCare | Fora do escopo do motor |
-| n8n (`criadordigital-n8n-webhook...easypanel.host`) | 2 repos | **A investigar** — orquestração externa não documentada |
+| n8n (`criadordigital-n8n-webhook...easypanel.host`) | uma URL fixa em `test-appointment-webhook` | **Descarta** — não é integração do motor (ver abaixo) |
+
+### Os três BSPs extras são funcionalidade, não resíduo
+
+Levantamento inicial sugeriu código morto. É o contrário: `official_api_configs.connection_method`
+tem `CHECK` com `meta_direct`, `bsp_360dialog`, `bsp_gupshup`, `bsp_twilio`, `bsp_zapi`
+(migration `20260423130820_*.sql`), e cada um tem formulário próprio na UI
+(`TwilioForm.tsx`, `ZApiForm.tsx`, `Dialog360Form.tsx`, sob `BspSelector`), tratamento em
+`bsp-webhook` e em `sync-all-templates`. É uma abstração multi-BSP deliberada — e é a coisa mais
+próxima de um `ChannelAdapter` que já existe na base.
+
+O que continua em aberto é **runtime, não código**: se há alguma conta de fato configurada em cada
+BSP. Só se responde consultando `official_api_configs` no projeto vivo. A decisão de portar os cinco
+ou só os usados depende disso.
+
+### n8n está resolvido
+
+Único ponto de contato é uma URL fixa no corpo de `test-appointment-webhook` — function de teste
+manual, já classificada em descarta. Não há orquestração externa no caminho de envio.
 
 ---
 
@@ -250,8 +329,12 @@ Itens que a Fase 0 pede e que **não foi possível fechar** com o acesso desta s
 3. **Quais sistemas ainda estão em uso.** `sdr` e `sdr-evolution` não recebem commit há 4 e 6 meses,
    mas os projetos Supabase seguem de pé. Se estão desligados, são descarte imediato; se há tráfego,
    a Fase 5 tem três desligamentos, não um.
-4. **Twilio / Z-API / 360dialog / n8n** — usados ou mortos.
+4. **Quais BSPs têm conta configurada.** O código dos cinco existe e é funcional; quantos estão em
+   uso é dado de runtime — `select connection_method, count(*) from official_api_configs group by 1`.
 5. **Qual projeto é o ProfitCare de verdade** — `mnowzzftjukjchakghcl` ou `tjtmjflqgwjwcxfclzew`.
+
+Fechadas durante o levantamento: n8n (não é integração do motor) e Twilio/Z-API/360dialog
+(funcionalidade real, não código morto).
 
 ---
 
