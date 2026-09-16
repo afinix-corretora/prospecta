@@ -6,6 +6,7 @@ e pergunta "quem está vencido agora?".
 Contexto e regras do projeto em [`CLAUDE.md`](CLAUDE.md).
 Decisões de arquitetura em [`DECISOES.md`](DECISOES.md).
 Inventário dos sistemas que ele substitui em [`INVENTARIO-FASE-0.md`](INVENTARIO-FASE-0.md).
+Mapa de `status` legado → modelo novo em [`MAPA-STATUS.md`](MAPA-STATUS.md).
 
 ## Estrutura
 
