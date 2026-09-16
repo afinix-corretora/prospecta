@@ -101,8 +101,12 @@ e elas têm teste automatizado obrigatório.**
 
 > **Fase 2 — schema central.**
 > O schema das 12 tabelas existe em `supabase/migrations/`, com as quatro invariantes garantidas
-> por constraint e trigger, não por convenção. Próximo passo: backfill com dedup — e antes dele, o
-> mapa de `status` antigo → `enrollments.status`, sem o qual o backfill inventa estado.
+> por constraint e trigger, não por convenção. O agendador e o roteador existem
+> (`processar_vencidos`), decidem e reivindicam sem enviar — o que torna a Fase 3 possível sem
+> nenhum adapter. O mapa de status do backfill está fechado em `backfill/mapa_status.sql`.
+>
+> Falta da Fase 2: o backfill em si, que depende de acesso aos dados do projeto legado
+> `gtivnngoeccqbvfjiyne`.
 >
 > Toda mudança de schema roda `tests/run.sh` antes do commit. Teste vermelho é bloqueio, não aviso.
 

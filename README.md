@@ -53,6 +53,34 @@ vocabulários legados, mais as propriedades que importam — `sent` significa co
 origem, status desconhecido derruba o backfill em vez de inventar estado, todo encerrado tem motivo,
 e só quem tem registro de saída pede supressão.
 
+## O agendador
+
+`processar_vencidos(limite, modo)` é uma passada do worker: acorda, pergunta quem está vencido,
+decide e reivindica o passo. **Não envia** — o adapter da Fase 1 consome `messages` com status
+`pendente`. Por isso o shadow mode não depende de adapter nenhum: é o mesmo código gravando
+`simulado`.
+
+A decisão vive em SQL porque precisa ser atômica com a reivindicação do passo. Separar o `SELECT`
+do `INSERT` entre processos reabriria a janela de corrida que a invariante 1 fecha.
+
+Cada passada devolve o que fez em cada enrollment, para o shadow mode ser comparado passo a passo
+em vez de por total:
+
+| Ação | Quando |
+|---|---|
+| `mensagem_criada` | Passo reivindicado e mensagem gravada |
+| `encerrado_fim` | Não há próximo passo |
+| `encerrado_supressao` | Contato entrou na supressão depois de inscrito |
+| `passo_pulado_canal` | Canal do passo não está habilitado na campanha |
+| `passo_pulado_sem_identidade` | Contato não tem endereço nesse canal |
+| `passo_pulado_identidade_suprimida` | Endereço suprimido — inutiliza o canal, não a pessoa |
+| `adiado_sem_remetente` | Pool vazio ou quota estourada: adia sem consumir o passo |
+| `passo_ja_reivindicado` | Outro worker chegou antes (invariante 1 funcionando) |
+| `ignorado_campanha_inativa` | Campanha desligada segura a cadência sem encerrar ninguém |
+
+A quota é reservada nos dois modos de propósito: o shadow mode existe para mostrar o que o motor
+faria, e o que ele faria inclui ser freado pelo rate limit.
+
 ## Convenção
 
 Teste vermelho é bloqueio, não aviso. Toda mudança de schema roda `tests/run.sh` antes do commit.

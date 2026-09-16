@@ -45,6 +45,10 @@ psql -v ON_ERROR_STOP=1 -d "$BANCO" -f "$RAIZ/tests/mapa_status.sql"
 # da função. Duas sessões simultâneas têm que pegar lotes disjuntos.
 # ---------------------------------------------------------------------------
 echo ""
+echo "→ agendador e roteador"
+psql -v ON_ERROR_STOP=1 -d "$BANCO" -f "$RAIZ/tests/agendador.sql"
+
+echo ""
 echo "→ concorrência do agendador (SKIP LOCKED)"
 
 TOTAL=$(psql -tA -d "$BANCO" -c "SELECT count(*) FROM proximos_vencidos(100)")
@@ -74,7 +78,8 @@ fi
 # ---------------------------------------------------------------------------
 echo ""
 echo "→ reversibilidade das migrations"
-psql -q -v ON_ERROR_STOP=1 -d "$BANCO" -c "DROP SCHEMA t CASCADE; DROP SCHEMA m CASCADE" >/dev/null
+psql -q -v ON_ERROR_STOP=1 -d "$BANCO" \
+  -c "DROP SCHEMA t CASCADE; DROP SCHEMA m CASCADE; DROP SCHEMA a CASCADE" >/dev/null
 psql -q -v ON_ERROR_STOP=1 -d "$BANCO" \
   -c "DROP FUNCTION mapear_status_legado(text,text,jsonb); DROP TYPE acao_reinscricao" >/dev/null
 
