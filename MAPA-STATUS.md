@@ -1,7 +1,10 @@
 # Mapa de `status` legado → modelo novo
 
 > Pré-requisito do backfill da Fase 2. Sem ele o backfill inventa estado.
-> Quatro itens precisam de decisão humana — estão marcados como **DECISÃO** e listados no fim.
+> As quatro decisões em aberto foram tomadas (D13 em `DECISOES.md`) e o mapa está fechado.
+>
+> **Este documento é a explicação; a fonte de verdade é `backfill/mapa_status.sql`**, testado em
+> `tests/mapa_status.sql` com os 27 valores legados. Divergiu, vale o código — e o teste acusa.
 
 ---
 
@@ -38,7 +41,8 @@ primeiro dia de produção, com registro de que ela pediu para sair.
 
 Regra derivada: **o backfill não lê `discarded` isolado.** Lê o par
 (`status`, `source_metadata.discarded_reason`), e trata ausência de metadado pelo lado seguro
-(ver DECISÃO 4).
+(D13.4). `backfill/mapa_status.sql` implementa isso, e `tests/mapa_status.sql` cobre as três
+variantes de `discarded`.
 
 ---
 
@@ -59,9 +63,9 @@ Regra derivada: **o backfill não lê `discarded` isolado.** Lê o par
 | `completed` | `encerrado` | `fim_dos_passos` | — |
 | `failed` | `encerrado` | `falha_permanente` | — |
 | `paused` | `pausado` | — | `next_run_at = NULL` |
-| `waiting_cycle` | **DECISÃO 2** | | |
-| `reengaging` | **DECISÃO 1** | | |
-| `cancelled` | `encerrado` | **DECISÃO 3** | Falta valor no enum |
+| `waiting_cycle` | `encerrado` | `fim_dos_passos` | **+ enrollment novo** na mesma campanha, `next_run_at = next_scheduled_at` |
+| `reengaging` | `encerrado` | `resposta` | **+ enrollment novo** em campanha de reengajamento (o lead está aqui porque respondeu) |
+| `cancelled` | `encerrado` | `cancelado_operacional` | Valor acrescentado ao enum pela migration `20260916140000` |
 
 ## `blast_leads` → `enrollments`
 
@@ -75,10 +79,11 @@ paralelo na mesma linha — esses dois viram `messages` + `message_events`, nunc
 | `sent` | `encerrado` | `fim_dos_passos` | Blast é disparo único: enviado = cadência terminada |
 | `positive` | `encerrado` | `mudanca_etapa_crm` | `blast-create-card` criou card no CRM |
 | `discarded` com `discarded_reason = 'opt_out'` | `encerrado` | `supressao` | **+ linha em `suppression`** |
-| `discarded` sem `discarded_reason` | `encerrado` | **DECISÃO 3** | Descarte operacional |
+| `discarded` com outro `discarded_reason` | `encerrado` | `cancelado_operacional` | Descarte operacional explícito |
+| `discarded` sem `discarded_reason` | `encerrado` | `supressao` | **+ `suppression`** — lado seguro, ver D13.4 |
 | `blacklisted` | `encerrado` | `supressao` | + linha em `suppression` |
 | `failed` | `encerrado` | `falha_permanente` | |
-| `cancelled` | `encerrado` | **DECISÃO 3** | |
+| `cancelled` | `encerrado` | `cancelado_operacional` | |
 
 ## `broadcast_recipients` → `enrollments`
 
@@ -101,8 +106,8 @@ Mapear a coluna é a parte pequena. O resto:
 1. **`contact_blacklist` → `suppression`, primeiro de tudo.** Antes de qualquer enrollment. O
    trigger `messages_respeita_supressao` só protege se a supressão já existir. `contact_blacklist`
    é indexada por telefone normalizado, então vira `suppression (canal='whatsapp', valor_norm=...)`.
-   Suprimir a **pessoa** (`contact_id`, `canal IS NULL`) é mais forte e provavelmente mais correto,
-   já que quem pediu para sair pediu para sair de tudo — ver DECISÃO 4.
+   Mas por D13.4 a supressão migrada é da **pessoa** (`contact_id`, `canal IS NULL`), não da
+   identidade: quem pediu para sair pediu para sair de tudo.
 2. **Identidades com dedup.** `contacts.phone_number` do modelo antigo vira `contact_identities`.
    O índice único `(canal, valor_norm)` recusa duplicata: a ingestão normaliza antes de inserir, e
    colisão entre contatos diferentes precisa de resolução, não de `ON CONFLICT DO NOTHING`.
@@ -117,51 +122,49 @@ Ordem obrigatória: `suppression` → `contacts`/`contact_identities` → `campa
 
 ---
 
-## Decisões que precisam de você
+## Decisões tomadas
 
-### DECISÃO 1 — `reengaging` (camada 2 do resgate)
+Registradas como D13 em `DECISOES.md`. Cada uma está materializada em
+`backfill/mapa_status.sql` e coberta por teste.
 
-`rescue-reengage` implementa uma segunda camada: o lead que respondeu e esfriou recebe um lembrete,
-com `layer2_step` e `layer2_last_sent_at` próprios. O modelo novo não tem camadas — tem enrollments.
+### D13.1 — `reengaging` vira enrollment novo em campanha própria
 
-- **(a) Recomendado — vira enrollment novo** numa campanha "reengajamento", com flow próprio. Fica
-  explícito, contável e reutilizável para qualquer campanha, não só resgate.
-- (b) Vira passo adicional no mesmo flow. Mais barato de migrar, mas reintroduz a camada dentro do
-  enrollment e some com a distinção no relatório.
+`rescue-reengage` implementa uma camada 2 com `layer2_step` e `layer2_last_sent_at` próprios. O
+modelo novo não tem camadas, tem enrollments. O lead em `reengaging` chegou lá porque respondeu:
+o enrollment original encerra por `resposta`, e o reengajamento é uma inscrição nova, numa campanha
+de reengajamento com flow próprio.
 
-### DECISÃO 2 — `waiting_cycle` (ciclo de recomeço)
+*Por quê:* fica explícito, contável e reutilizável por qualquer campanha — não só resgate. A
+alternativa (passo extra no mesmo flow) migraria mais barato, mas reintroduziria a camada dentro do
+enrollment e sumiria com a distinção no relatório.
 
-Campanha com `cycle_enabled` reinicia o lead após `cycle_interval_days`, zerando `current_step`.
+### D13.2 — `waiting_cycle` encerra e reinscreve
 
-- **(a) Recomendado — encerra e reinscreve.** `encerrado` / `fim_dos_passos`, mais um enrollment novo
-  com `next_run_at = next_scheduled_at`. Mantém a regra "um enrollment é uma passada pelo flow",
-  preserva o histórico de cada ciclo e funciona com o índice único de enrollment ativo por campanha.
-- (b) Mantém `ativo` com `next_run_at` no futuro e `passo_atual = 0`. Migra em uma linha, mas
-  colapsa todos os ciclos num registro só.
+Campanha com `cycle_enabled` reinicia o lead após `cycle_interval_days`. No modelo novo isso é
+`encerrado` / `fim_dos_passos`, mais um enrollment novo com `next_run_at = next_scheduled_at`.
 
-### DECISÃO 3 — Falta um motivo de encerramento operacional
+*Por quê:* mantém a regra "um enrollment é uma passada pelo flow", preserva o histórico de cada
+ciclo separadamente, e convive com o índice único de enrollment ativo por campanha. Manter `ativo`
+com o passo zerado colapsaria todos os ciclos num registro só.
 
-`cancelled` (nos três pipelines) e o `discarded` manual do blast não têm destino honesto no enum
-atual: não foram resposta, nem mudança de etapa, nem fim dos passos, nem supressão, nem falha.
+### D13.3 — Existe `cancelado_operacional` no enum
 
-Forçá-los em `falha_permanente` mente no relatório — vira "o motor falhou" quando foi decisão de
-alguém. Recomendo **adicionar `cancelado_operacional`** ao enum `motivo_encerramento`, em migration
-própria antes do backfill. É aditivo e barato agora; depois do backfill, caro.
+Migration `20260916140000_motivo_cancelado_operacional.sql`. `cancelled` (nos três pipelines) e o
+`discarded` manual do blast não são resposta, nem mudança de etapa, nem fim dos passos, nem
+supressão, nem falha.
 
-### DECISÃO 4 — Alcance da supressão migrada
+*Por quê:* forçá-los em `falha_permanente` faria o relatório contar decisão humana como falha do
+motor. Aditivo antes do backfill é barato; depois de haver dado gravado com o motivo errado, não é.
 
-Hoje a blacklist é só telefone. Ao migrar:
+### D13.4 — Supressão migrada alcança a pessoa, não só o número
 
-- **(a) Recomendado — suprime a pessoa** (`contact_id`, todos os canais). Quem pediu para sair do
-  WhatsApp não autorizou e-mail frio; o motor novo é multicanal e a lista é descrita no `CLAUDE.md`
-  como "global". Mais restritivo, e o erro cai para o lado de não incomodar.
-- (b) Suprime só a identidade de WhatsApp. Fiel ao dado antigo, mas abre e-mail e SMS para quem já
-  pediu para sair.
+`contact_blacklist` (só telefone) vira `suppression (contact_id, canal IS NULL)` — todos os canais.
+E `discarded` sem `discarded_reason` é tratado como opt-out.
 
-A mesma escolha vale para `discarded` sem `discarded_reason`: tratar como opt-out (seguro, pode
-suprimir alguém que só foi descartado por engano) ou como descarte operacional (arriscado, pode
-remessagear quem pediu para sair). **Recomendo o lado seguro** — um lead a menos custa menos que uma
-reclamação de LGPD e um remetente queimado.
+*Por quê:* quem pediu para sair do WhatsApp não autorizou e-mail frio, e o `CLAUDE.md` descreve a
+lista como global. Nos dois casos o erro cai para o lado de não incomodar: suprimir alguém
+descartado por engano custa um lead; remessagear quem pediu para sair custa reclamação de LGPD e
+remetente queimado.
 
 ---
 

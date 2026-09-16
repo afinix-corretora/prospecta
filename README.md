@@ -13,7 +13,8 @@ Mapa de `status` legado → modelo novo em [`MAPA-STATUS.md`](MAPA-STATUS.md).
 ```
 supabase/migrations/   schema, incremental
 supabase/down/         reversão de cada migration
-tests/                 testes das invariantes
+backfill/              ferramentas da migração de dados (fora do schema de runtime)
+tests/                 testes das invariantes e do mapa de status
 ```
 
 ## Rodando os testes
@@ -46,6 +47,11 @@ O que o suite cobre:
 
 Também cobre D2 (dedup de identidade), D3 (contrato estreito da outbox), D4 (isolamento morna/fria),
 D9 (`flow_versions` imutáveis) e `message_events` append-only.
+
+O mapa de status do backfill (`backfill/mapa_status.sql`) tem suite própria: os 27 valores dos três
+vocabulários legados, mais as propriedades que importam — `sent` significa coisas opostas conforme a
+origem, status desconhecido derruba o backfill em vez de inventar estado, todo encerrado tem motivo,
+e só quem tem registro de saída pede supressão.
 
 ## Convenção
 

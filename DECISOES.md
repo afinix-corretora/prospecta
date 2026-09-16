@@ -88,6 +88,26 @@ então deixá-la depois evita bloquear o resto.
 antes de existir qualquer código de envio. O motor não envia nada até a Fase 1 — o que é aceitável,
 porque shadow mode (`status = 'simulado'`) já é caminho de primeira classe no schema.
 
+### D13 — Mapa de status legado: quatro escolhas que o backfill precisava
+Tomadas ao fechar `MAPA-STATUS.md`, antes de qualquer linha migrada.
+
+1. **`reengaging` vira enrollment novo** em campanha de reengajamento. O modelo novo não tem camadas.
+2. **`waiting_cycle` encerra e reinscreve**, em vez de manter um enrollment vivo com o passo zerado.
+3. **`cancelado_operacional` entra no enum** `motivo_encerramento`. Decisão humana não é falha do
+   motor, e o relatório precisa distinguir.
+4. **Supressão migrada alcança a pessoa**, todos os canais — e `discarded` sem metadado é tratado
+   como opt-out.
+
+*Justificativa da 4, que é a de maior consequência:* `blast_leads.status = 'discarded'` é gravado
+por dois caminhos opostos — opt-out detectado pelo `evolution-webhook` (com `discarded_reason` e
+inserção em `contact_blacklist`) e descarte manual pelo operador (sem metadado). Colapsar os dois
+num destino só faria quem pediu para sair voltar a ser elegível, quebrando a invariante 2 no
+primeiro dia de produção, com registro de que a pessoa pediu para sair.
+
+**Consequência:** o mapa deixa de ser prosa e vira `backfill/mapa_status.sql`, coberto por
+`tests/mapa_status.sql` nos 27 valores legados. Status sem mapeamento derruba o backfill em vez de
+virar estado inventado. A migration `20260916140000` acrescenta o valor do item 3.
+
 ---
 
 ## Decisões adiadas (não decidir agora)
