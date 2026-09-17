@@ -81,6 +81,9 @@ e elas têm teste automatizado obrigatório.**
   `contact_identity`.
 - **Nunca** deixar campanha fria usar remetente ou domínio da operação institucional.
 - **Nunca** encerrar enrollment por clique em link. Clique é engajamento, não resposta.
+- **Nunca** criar tabela de domínio sem `tenant_id`, nem chave estrangeira entre tabelas de domínio
+  que não seja composta `(tenant_id, id)`. RLS não alcança o worker, que roda com service key.
+- **Nunca** deixar tenant implícito em assinatura de função. É como bug entre clientes acontece.
 
 ---
 
@@ -116,6 +119,10 @@ e elas têm teste automatizado obrigatório.**
 > Falta da Fase 2: o backfill em si, que depende de acesso aos dados do projeto legado
 > `gtivnngoeccqbvfjiyne` — e com ele a comparação contra o Disparador.
 >
+> O schema é **multi-tenant desde a primeira migration** (D18): `tenant_id` em toda tabela de
+> domínio, chaves estrangeiras compostas `(tenant_id, id)` e RLS por papel. `tests/tenants.sql`
+> entra na pele de dois clientes diferentes e confere o SQLSTATE de cada recusa.
+>
 > Toda mudança de schema roda `tests/run.sh` antes do commit. Teste vermelho é bloqueio, não aviso.
 > `demo/gerar.sh` roda o motor num cenário completo e `ui/console.html` mostra o resultado — foi
 > assim que D15 apareceu, um erro que teste unitário nenhum pegava.
@@ -139,4 +146,5 @@ Demais fases em `DECISOES.md`.
 | **Sender account** | Remetente físico: inbox, chip, número oficial. Tem quota e health score. |
 | **Tipo de campanha** | Morna (base própria, opt-in) ou fria. Define base legal, canais e pool permitidos. |
 | **Resgate** | Reativação de oportunidade antiga da base própria. |
-| **Supressão** | Lista global e imutável de quem não pode receber nada. Acima de qualquer regra. |
+| **Supressão** | Lista imutável, **por tenant**, de quem não pode receber nada. Acima de qualquer regra do cliente — e o opt-out dado a um cliente não é fato de outro. |
+| **Tenant** | Cliente do produto. Dono dos seus contatos, campanhas, remetentes e agentes. Papéis: dono, admin, operador, leitor. |

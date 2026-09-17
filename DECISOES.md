@@ -156,6 +156,27 @@ só `chave_secret_id` apontando para o Vault. A anti-regra "nunca colocar secret
 deixa de depender de disciplina e passa a ser verificada pelo banco, com teste.
 Lista de modelos é sugestão, não enum: catálogo de modelo muda toda semana e lista fixa envelhece.
 
+### D18 — Multi-tenant desde a primeira migration, em três camadas
+`tenant_id` em toda tabela de domínio, chaves estrangeiras **compostas** `(tenant_id, id)`, e RLS
+por tenant com papel decidindo escrita (`dono`, `admin`, `operador`, `leitor`).
+*Justificativa:* não existe "começa com um cliente e depois vira multi". Adicionar `tenant_id` a
+tabelas com dados dentro é backfill com janela de inconsistência em cima de um sistema que já
+manda mensagem para gente real. Custa quase nada agora e é reescrita depois.
+**Por que três camadas e não só RLS:** RLS protege o que passa pelo PostgREST com um JWT. O worker
+roda com a service key e RLS não o alcança — é a chave composta que impede um enrollment do cliente
+A apontar para a campanha do cliente B, e ela vale inclusive para superusuário. As camadas cobrem
+buracos diferentes; nenhuma confia na de cima.
+**Consequências:**
+- Supressão é por cliente. O mesmo telefone pode estar na base de dois clientes, e o opt-out dado a
+  um não é um fato do outro. `esta_suprimido()` recebe o tenant como primeiro argumento.
+- Tenant é sempre explícito em chamada de função. `criar_campanha_de_modelo()` perdeu a sobrecarga
+  curta: tenant implícito em função é exatamente como bug entre clientes acontece.
+- Catálogo (`campaign_templates` e `agents` com `tenant_id IS NULL`) é compartilhado e imutável para
+  o cliente. Atribuir um agente do catálogo **copia** a linha para o tenant — editar a persona não
+  vaza para os outros clientes.
+- Teste de negação confere SQLSTATE, não só que deu erro: `42501` (RLS), `23503` (chave composta),
+  `23001` (gatilho agente/campanha). "Levantou exceção" também é o que um typo faz.
+
 ---
 
 ## Decisões adiadas (não decidir agora)

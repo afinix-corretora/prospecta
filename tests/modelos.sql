@@ -42,7 +42,7 @@ SELECT mo.confere('modelo frio nunca usa canal de janela restrita',
 DO $$
 DECLARE r record; v_camp campaigns%ROWTYPE;
 BEGIN
-  SELECT * INTO r FROM criar_campanha_de_modelo('resgate-multicanal','Resgate Q4');
+  SELECT * INTO r FROM criar_campanha_de_modelo('00000000-0000-0000-0000-0000000000aa','resgate-multicanal','Resgate Q4');
 
   PERFORM mo.confere('instanciar cria a cadência inteira', r.passos_criados = 4, r.passos_criados::text);
 
@@ -78,7 +78,7 @@ DO $$
 DECLARE r record;
 BEGIN
   -- Mesmo modelo, só WhatsApp: os passos de e-mail e SMS somem.
-  SELECT * INTO r FROM criar_campanha_de_modelo('resgate-multicanal','Só WhatsApp','{whatsapp}');
+  SELECT * INTO r FROM criar_campanha_de_modelo('00000000-0000-0000-0000-0000000000aa','resgate-multicanal','Só WhatsApp','{whatsapp}');
 
   PERFORM mo.confere('escolher um canal reduz a cadência a esse canal',
     r.passos_criados = 2, r.passos_criados::text);
@@ -97,7 +97,7 @@ $$;
 
 DO $$
 BEGIN
-  PERFORM * FROM criar_campanha_de_modelo('resgate-whatsapp','Impossível','{email}');
+  PERFORM * FROM criar_campanha_de_modelo('00000000-0000-0000-0000-0000000000aa','resgate-whatsapp','Impossível','{email}');
   PERFORM mo.confere('canal fora do modelo é recusado', false, 'foi aceito');
 EXCEPTION WHEN others THEN
   PERFORM mo.confere('canal fora do modelo é recusado', true);
@@ -106,7 +106,7 @@ $$;
 
 DO $$
 BEGIN
-  PERFORM * FROM criar_campanha_de_modelo('modelo-que-nao-existe','X');
+  PERFORM * FROM criar_campanha_de_modelo('00000000-0000-0000-0000-0000000000aa','modelo-que-nao-existe','X');
   PERFORM mo.confere('modelo inexistente é recusado', false, 'foi aceito');
 EXCEPTION WHEN others THEN
   PERFORM mo.confere('modelo inexistente é recusado', true);
@@ -116,7 +116,7 @@ $$;
 DO $$
 BEGIN
   UPDATE campaign_templates SET ativo = false WHERE slug = 'reengajamento';
-  PERFORM * FROM criar_campanha_de_modelo('reengajamento','X');
+  PERFORM * FROM criar_campanha_de_modelo('00000000-0000-0000-0000-0000000000aa','reengajamento','X');
   PERFORM mo.confere('modelo inativo não vira campanha nova', false, 'foi aceito');
 EXCEPTION WHEN others THEN
   PERFORM mo.confere('modelo inativo não vira campanha nova', true);
@@ -130,7 +130,7 @@ $$;
 DO $$
 DECLARE r record; v_antes text;
 BEGIN
-  SELECT * INTO r FROM criar_campanha_de_modelo('resgate-whatsapp','Congelada');
+  SELECT * INTO r FROM criar_campanha_de_modelo('00000000-0000-0000-0000-0000000000aa','resgate-whatsapp','Congelada');
   SELECT template INTO v_antes FROM flow_steps
    WHERE flow_version_id = r.flow_version_id AND ordem = 1;
 
@@ -152,7 +152,7 @@ $$;
 DO $$
 DECLARE r record; v_contato uuid; v_enr uuid; v_acao text;
 BEGIN
-  SELECT * INTO r FROM criar_campanha_de_modelo('prospeccao-fria','Fria SP','{whatsapp}');
+  SELECT * INTO r FROM criar_campanha_de_modelo('00000000-0000-0000-0000-0000000000aa','prospeccao-fria','Fria SP','{whatsapp}');
 
   INSERT INTO sender_accounts (canal, identificador, provedor, tipo_permitido, quota_diaria)
   VALUES ('whatsapp','chip-frio-1','evolution','fria',50);

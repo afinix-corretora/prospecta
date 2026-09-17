@@ -169,6 +169,37 @@ monta a partir disso e não conhece provedor nenhum; provedor novo é uma linha 
 recusa gravar qualquer um deles em `config`. Não existe coluna para a chave — só `chave_secret_id`
 apontando para o Vault. A anti-regra deixou de depender de disciplina.
 
+## Multi-tenant e RLS
+
+O produto nasce multi-cliente. Não há modo "um cliente só" que depois vira multi — isso é reescrita
+de schema com dados dentro. `tenant_id` está em toda tabela de domínio desde agora.
+
+Três camadas, e nenhuma confia na de cima:
+
+1. **`tenant_id` em toda tabela de domínio.** Quem esquecer de filtrar não passa da camada 2.
+2. **Chaves estrangeiras compostas `(tenant_id, id)`.** Um enrollment do cliente A não consegue
+   apontar para a campanha do cliente B nem por bug de aplicação — o banco recusa com `23503`,
+   mesmo como superusuário, onde RLS nem entra em cena.
+3. **RLS por tenant, com papel decidindo escrita.** `dono` e `admin` administram, `operador` opera,
+   `leitor` lê. As credenciais de IA só são visíveis para quem administra.
+
+Papéis ficam em `tenant_users (tenant_id, user_id, papel)`. As políticas chamam
+`pertence_ao_tenant()`, `pode_operar()` e `pode_administrar()`, todas `SECURITY DEFINER` — a política
+de `tenant_users` não pode consultar `tenant_users` sob RLS, seria recursão.
+
+**Supressão é por cliente, não global.** O mesmo telefone pode estar na base de dois clientes; o
+opt-out dado a um não é um fato do outro. `esta_suprimido()` recebe o tenant como primeiro argumento.
+
+**O catálogo é compartilhado.** `campaign_templates` e `agents` com `tenant_id IS NULL` são do
+sistema e todo cliente enxerga. Usar um agente do catálogo **copia** a linha para o tenant na
+primeira atribuição, então editar a persona não mexe no catálogo nem nos outros clientes.
+
+`tests/tenants.sql` é o que sustenta a afirmação "pode ser vendido": 32 asserções que entram na pele
+de usuários de dois clientes diferentes. Os testes de negação conferem o **SQLSTATE**, não só que
+deu erro — `42501` é o RLS recusando, `23503` é a chave composta, `23001` é o gatilho de coerência
+entre agente e campanha. Um teste que só olha "levantou exceção" também passa com um typo no nome
+da coluna.
+
 ## Console de operação
 
 `demo/gerar.sh` cria duas campanhas **a partir dos modelos**, roda o motor sobre sete contatos,

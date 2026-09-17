@@ -125,7 +125,7 @@ INSERT INTO suppression (contact_id, motivo) VALUES
 
 SELECT t.confere(
   'inv2: esta_suprimido reconhece contato suprimido',
-  esta_suprimido('22222222-2222-2222-2222-222222222222','whatsapp','5511900000002'));
+  esta_suprimido('00000000-0000-0000-0000-0000000000aa','22222222-2222-2222-2222-222222222222','whatsapp','5511900000002'));
 
 SELECT t.recusa(
   'inv2: contato suprimido não recebe nada, por nenhum caminho',
@@ -189,7 +189,7 @@ SELECT t.confere('inv3: conta com erro sai do pool sozinha (circuito aberto)',
     WHERE id = '5a000000-0000-0000-0000-000000000002'));
 
 SELECT t.confere('inv3: remetente com circuito aberto não aparece no pool',
-  NOT EXISTS (SELECT 1 FROM remetentes_disponiveis('whatsapp','fria')
+  NOT EXISTS (SELECT 1 FROM remetentes_disponiveis('00000000-0000-0000-0000-0000000000aa','whatsapp','fria')
                WHERE id = '5a000000-0000-0000-0000-000000000002'));
 
 SELECT t.confere('inv3: remetente com circuito aberto não reserva envio',
@@ -280,11 +280,11 @@ SELECT t.recusa(
     VALUES ('e0000000-0000-0000-0000-000000000005','fc000000-0000-0000-0000-000000000002','a4000000-0000-0000-0000-000000000001','5a000000-0000-0000-0000-000000000001','whatsapp','enviado','x')$$);
 
 SELECT t.confere('D4: pool de campanha fria não devolve remetente morno',
-  NOT EXISTS (SELECT 1 FROM remetentes_disponiveis('whatsapp','fria')
+  NOT EXISTS (SELECT 1 FROM remetentes_disponiveis('00000000-0000-0000-0000-0000000000aa','whatsapp','fria')
                WHERE tipo_permitido = 'morna'));
 
 SELECT t.confere('D4: pool de campanha morna não devolve remetente frio',
-  NOT EXISTS (SELECT 1 FROM remetentes_disponiveis('whatsapp','morna')
+  NOT EXISTS (SELECT 1 FROM remetentes_disponiveis('00000000-0000-0000-0000-0000000000aa','whatsapp','morna')
                WHERE tipo_permitido = 'fria'));
 
 SELECT t.recusa(

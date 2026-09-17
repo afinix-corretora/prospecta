@@ -401,8 +401,8 @@ DECLARE v_contato uuid; v_enr uuid; v_quando timestamptz;
 BEGIN
   -- Quota esgotada: o pool só volta na virada da janela diária.
   PERFORM a.confere('adiamento: quota esgotada espera a virada da janela',
-    proximo_horario_de_pool('sms','fria')::date = current_date + 1,
-    proximo_horario_de_pool('sms','fria')::text);
+    proximo_horario_de_pool('00000000-0000-0000-0000-0000000000aa','sms','fria')::date = current_date + 1,
+    proximo_horario_de_pool('00000000-0000-0000-0000-0000000000aa','sms','fria')::text);
 
   -- E o agendador usa isso em vez de 15 minutos.
   v_contato := gen_random_uuid();
@@ -431,16 +431,16 @@ BEGIN
    WHERE id = 'b7000000-0000-0000-0000-000000000009';
 
   PERFORM a.confere('adiamento: circuito aberto espera o circuito fechar',
-    proximo_horario_de_pool('instagram','fria') BETWEEN now() + interval '19 minutes'
+    proximo_horario_de_pool('00000000-0000-0000-0000-0000000000aa','instagram','fria') BETWEEN now() + interval '19 minutes'
                                                     AND now() + interval '21 minutes',
-    proximo_horario_de_pool('instagram','fria')::text);
+    proximo_horario_de_pool('00000000-0000-0000-0000-0000000000aa','instagram','fria')::text);
 END;
 $$;
 
 SELECT a.confere('adiamento: pool vazio tenta de novo em uma hora',
-  proximo_horario_de_pool('email','fria') BETWEEN now() + interval '59 minutes'
+  proximo_horario_de_pool('00000000-0000-0000-0000-0000000000aa','email','fria') BETWEEN now() + interval '59 minutes'
                                               AND now() + interval '61 minutes',
-  proximo_horario_de_pool('email','fria')::text);
+  proximo_horario_de_pool('00000000-0000-0000-0000-0000000000aa','email','fria')::text);
 
 -- ---------------------------------------------------------------------------
 -- Relatório

@@ -112,14 +112,14 @@ $$;
 -- ---------------------------------------------------------------------------
 
 DO $$
-DECLARE r record; v_ana uuid; v_caio uuid; v_bia uuid; v_edu uuid;
+DECLARE r record; v_ana uuid; v_caio uuid; v_bia uuid; v_edu uuid; v_copia uuid;
 BEGIN
-  SELECT id INTO v_ana  FROM agents WHERE nome LIKE 'Ana%';
-  SELECT id INTO v_caio FROM agents WHERE nome LIKE 'Caio%';
-  SELECT id INTO v_bia  FROM agents WHERE nome LIKE 'Bia%';
-  SELECT id INTO v_edu  FROM agents WHERE nome LIKE 'Edu%';
+  SELECT id INTO v_ana  FROM agents WHERE nome LIKE 'Ana%'  AND tenant_id IS NULL;
+  SELECT id INTO v_caio FROM agents WHERE nome LIKE 'Caio%' AND tenant_id IS NULL;
+  SELECT id INTO v_bia  FROM agents WHERE nome LIKE 'Bia%'  AND tenant_id IS NULL;
+  SELECT id INTO v_edu  FROM agents WHERE nome LIKE 'Edu%'  AND tenant_id IS NULL;
 
-  SELECT * INTO r FROM criar_campanha_de_modelo('resgate-multicanal','Com agentes','{whatsapp,email}');
+  SELECT * INTO r FROM criar_campanha_de_modelo('00000000-0000-0000-0000-0000000000aa','resgate-multicanal','Com agentes','{whatsapp,email}');
 
   PERFORM atribuir_agente(r.campaign_id, v_ana);
   PERFORM atribuir_agente(r.campaign_id, v_edu);
@@ -156,8 +156,28 @@ BEGIN
     PERFORM ag.confere('agente não atende canal que não é o dele', true);
   END;
 
-  -- Agente desligado.
-  UPDATE agents SET ativo = false WHERE id = v_edu;
+  -- Agente do catálogo é copiado para o tenant no primeiro uso: o cliente pode
+  -- ajustar a persona dele sem mexer no catálogo, e o catálogo não muda a
+  -- persona de ninguém. Mesma regra dos modelos de campanha.
+  PERFORM ag.confere('agente do catálogo é copiado para o tenant',
+    (SELECT a.tenant_id IS NOT NULL FROM campaign_agents ca JOIN agents a ON a.id = ca.agent_id
+      WHERE ca.campaign_id = r.campaign_id AND ca.canal = 'email'));
+  PERFORM ag.confere('a cópia mantém as instruções do catálogo',
+    (SELECT c.instrucoes = o.instrucoes
+       FROM campaign_agents ca JOIN agents c ON c.id = ca.agent_id
+       JOIN agents o ON o.id = v_edu
+      WHERE ca.campaign_id = r.campaign_id AND ca.canal = 'email'));
+  PERFORM ag.confere('o catálogo continua sem tenant',
+    (SELECT tenant_id IS NULL FROM agents WHERE id = v_edu));
+  PERFORM ag.confere('usar o mesmo agente de novo não cria outra cópia',
+    (SELECT count(*) = 1 FROM agents
+      WHERE tenant_id IS NOT NULL AND nome = (SELECT nome FROM agents WHERE id = v_edu)));
+
+  -- Agente do tenant desligado.
+  SELECT ca.agent_id INTO v_copia FROM campaign_agents ca
+   WHERE ca.campaign_id = r.campaign_id AND ca.canal = 'email';
+  UPDATE agents SET ativo = false WHERE id = v_copia;
+
   BEGIN
     PERFORM atribuir_agente(r.campaign_id, v_edu);
     PERFORM ag.confere('agente inativo é recusado', false, 'foi aceito');
@@ -166,14 +186,14 @@ BEGIN
   END;
   PERFORM ag.confere('agente inativo some do canal',
     (agente_do_canal(r.campaign_id,'email')).id IS NULL);
-  UPDATE agents SET ativo = true WHERE id = v_edu;
+  UPDATE agents SET ativo = true WHERE id = v_copia;
 END;
 $$;
 
 DO $$
 DECLARE r record;
 BEGIN
-  SELECT * INTO r FROM criar_campanha_de_modelo('resgate-whatsapp','Sem agente ainda');
+  SELECT * INTO r FROM criar_campanha_de_modelo('00000000-0000-0000-0000-0000000000aa','resgate-whatsapp','Sem agente ainda');
   PERFORM ag.confere('campanha funciona sem agente atribuído',
     (agente_do_canal(r.campaign_id,'whatsapp')).id IS NULL);
 END;

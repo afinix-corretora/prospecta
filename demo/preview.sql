@@ -47,14 +47,14 @@ $$;
 CREATE TABLE p.ids (chave text PRIMARY KEY, campanha uuid, versao uuid);
 
 DO $$
-DECLARE r record;
+DECLARE r record; v_tenant uuid := current_setting('app.tenant')::uuid;
 BEGIN
   SELECT * INTO r FROM criar_campanha_de_modelo(
-    'resgate-multicanal', 'Resgate 2024', '{whatsapp,email}');
+    v_tenant, 'resgate-multicanal', 'Resgate 2024', '{whatsapp,email}');
   INSERT INTO p.ids VALUES ('resgate', r.campaign_id, r.flow_version_id);
 
   SELECT * INTO r FROM criar_campanha_de_modelo(
-    'prospeccao-fria', 'Lista fria SP', '{whatsapp}');
+    v_tenant, 'prospeccao-fria', 'Lista fria SP', '{whatsapp}');
   INSERT INTO p.ids VALUES ('fria', r.campaign_id, r.flow_version_id);
 END;
 $$;

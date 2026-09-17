@@ -36,6 +36,25 @@ novo_banco() {
   for m in "$RAIZ"/supabase/migrations/*.sql; do
     psql -q -v ON_ERROR_STOP=1 -d "$nome" -f "$m"
   done
+  # Papéis que o Supabase provê e o Postgres local não, e um tenant padrão
+  # para as fixtures não repetirem tenant_id em cada INSERT.
+  psql -q -v ON_ERROR_STOP=1 -d "$nome" <<SQL
+DO \$\$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname='anon') THEN CREATE ROLE anon NOLOGIN; END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname='authenticated') THEN CREATE ROLE authenticated NOLOGIN; END IF;
+END \$\$;
+GRANT USAGE ON SCHEMA public TO anon, authenticated;
+GRANT ALL ON ALL TABLES IN SCHEMA public TO authenticated;
+-- Como no Supabase: anon tem o privilégio de SELECT, e quem nega é o RLS.
+-- Se o privilégio faltasse, o teste passaria por "permission denied" e não
+-- provaria nada sobre as políticas.
+GRANT SELECT ON ALL TABLES IN SCHEMA public TO anon;
+GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO authenticated;
+GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA public TO authenticated;
+INSERT INTO tenants (id, nome, slug)
+VALUES ('00000000-0000-0000-0000-0000000000aa','Afinix Corretora','afinix');
+ALTER DATABASE $nome SET app.tenant = '00000000-0000-0000-0000-0000000000aa';
+SQL
   echo "$nome"
 }
 
@@ -57,6 +76,7 @@ rodar agendador   "$RAIZ/tests/agendador.sql"
 rodar despacho    "$RAIZ/tests/despacho.sql"
 rodar modelos     "$RAIZ/tests/modelos.sql"
 rodar agentes     "$RAIZ/tests/agentes.sql"
+rodar tenants     "$RAIZ/tests/tenants.sql"
 
 # ---------------------------------------------------------------------------
 # Adapters de canal — TypeScript, sem rede (fetch injetado).
