@@ -132,6 +132,30 @@ dar certo. Nenhum teste tinha pego, porque cada adiamento isolado estava correto
 **Consequência:** `proximo_horario_de_pool(canal, tipo)` é a fonte dessa resposta, e o cenário
 passou de 105 horas com 36 adiamentos perdidos para 5 dias com zero.
 
+### D16 — Agente é dono da conversa; motor é dono da cadência
+Cada canal de uma campanha pode ter um agente de IA como persona de resposta. O motor decide
+quando tocar e por onde; quando a pessoa responde, o enrollment encerra (invariante 4) e o agente
+assume a conversa dali.
+*Justificativa:* o agente não acelera passo, não troca canal e não reescreve cadência. Se fizesse,
+haveria dois donos do mesmo estado — e o inventário da Fase 0 mostrou o custo disso no legado, onde
+`nina-orchestrator` e os motores de disparo disputavam o mesmo lead.
+**Consequência:** `agents` tem canal obrigatório, e `campaign_agents` tem chave primária
+`(campaign_id, canal)` — uma persona por canal por campanha. Nenhuma tabela do motor
+(`enrollments`, `messages`, `flow_steps`) referencia agente; há teste que verifica isso.
+Agente de Instagram não atende WhatsApp: janela de resposta, tom e tamanho de mensagem são
+diferentes, e o trigger recusa.
+
+### D17 — Provedor de IA é catálogo, não enum
+`ai_provider_catalog` guarda, por provedor, os campos que ele precisa. A tela de configuração se
+monta a partir disso — escolher OpenAI mostra API key, organização e base URL; escolher Anthropic
+mostra API key e base URL; e nenhum código de UI conhece provedor nenhum.
+*Justificativa:* provedor novo é uma linha no catálogo, não um deploy de front.
+**Consequência crítica:** o catálogo marca quais campos são segredo, e um trigger em
+`ai_credentials` **recusa** gravar qualquer um deles em `config`. Não existe coluna para a chave —
+só `chave_secret_id` apontando para o Vault. A anti-regra "nunca colocar secret fora do Vault"
+deixa de depender de disciplina e passa a ser verificada pelo banco, com teste.
+Lista de modelos é sugestão, não enum: catálogo de modelo muda toda semana e lista fixa envelhece.
+
 ---
 
 ## Decisões adiadas (não decidir agora)

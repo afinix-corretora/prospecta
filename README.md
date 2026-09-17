@@ -152,6 +152,23 @@ em nenhuma campanha já criada — há teste para isso.
 Recusa na criação, em vez de descobrir em produção: canal que o modelo não conhece, modelo inativo,
 e combinação de canais que deixaria a cadência sem nenhum passo.
 
+## Agentes e provedores de IA
+
+`agents` é a persona de resposta de **um** canal. `campaign_agents` amarra um agente por canal
+habilitado da campanha — chave primária `(campaign_id, canal)`, porque dois agentes no mesmo
+WhatsApp da mesma campanha seriam duas pessoas respondendo o mesmo contato.
+
+A fronteira (D16): o motor é dono da cadência, o agente é dono da conversa. Quando a pessoa
+responde, o enrollment encerra e o agente assume. Agente não acelera passo nem troca canal —
+há teste verificando que nenhuma tabela do motor referencia agente.
+
+`ai_provider_catalog` descreve, por provedor, os campos que ele precisa. A tela de configuração se
+monta a partir disso e não conhece provedor nenhum; provedor novo é uma linha no catálogo.
+
+**O segredo é verificado pelo banco.** O catálogo marca quais campos são segredo, e um trigger
+recusa gravar qualquer um deles em `config`. Não existe coluna para a chave — só `chave_secret_id`
+apontando para o Vault. A anti-regra deixou de depender de disciplina.
+
 ## Console de operação
 
 `demo/gerar.sh` cria duas campanhas **a partir dos modelos**, roda o motor sobre sete contatos,

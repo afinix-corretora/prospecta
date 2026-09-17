@@ -59,6 +59,18 @@ BEGIN
 END;
 $$;
 
+-- Cada canal ganha sua persona de resposta.
+DO $$
+DECLARE v_resgate uuid; v_fria uuid;
+BEGIN
+  SELECT campanha INTO v_resgate FROM p.ids WHERE chave = 'resgate';
+  SELECT campanha INTO v_fria    FROM p.ids WHERE chave = 'fria';
+  PERFORM atribuir_agente(v_resgate, (SELECT id FROM agents WHERE nome LIKE 'Ana%'));
+  PERFORM atribuir_agente(v_resgate, (SELECT id FROM agents WHERE nome LIKE 'Edu%'));
+  PERFORM atribuir_agente(v_fria,    (SELECT id FROM agents WHERE nome LIKE 'Caio%'));
+END;
+$$;
+
 -- Pool: morno e frio separados por schema, não por disciplina (D4).
 INSERT INTO sender_accounts (id, canal, identificador, provedor, tipo_permitido, quota_diaria) VALUES
   ('dd000000-0000-0000-0000-000000000001','whatsapp','+55 11 99000-0001','meta_cloud','morna',200),
@@ -312,6 +324,17 @@ SELECT jsonb_pretty(jsonb_build_object(
         FROM jsonb_array_elements(t.passos) s)
     ) ORDER BY ordem), '[]'::jsonb) FROM campaign_templates t WHERE ativo),
 
+  'provedores', (SELECT coalesce(jsonb_agg(jsonb_build_object(
+      'slug', slug, 'nome', nome, 'descricao', descricao,
+      'campos', campos, 'modelos', modelos_sugeridos, 'docs', docs_url
+    ) ORDER BY ordem), '[]'::jsonb) FROM ai_provider_catalog),
+
+  'agentes', (SELECT coalesce(jsonb_agg(jsonb_build_object(
+      'nome', nome, 'canal', canal, 'papel', papel, 'descricao', descricao,
+      'instrucoes', instrucoes, 'escalar', escalar_quando,
+      'limite', limite_trocas, 'pronto', pronto
+    ) ORDER BY canal, nome), '[]'::jsonb) FROM agents WHERE ativo),
+
   'campanhas', (SELECT coalesce(jsonb_agg(jsonb_build_object(
       'nome', c.nome, 'tipo', c.tipo, 'objetivo', c.objetivo,
       'modelo', c.template_slug, 'ativa', c.ativa,
@@ -329,6 +352,9 @@ SELECT jsonb_pretty(jsonb_build_object(
                       WHERE e.campaign_id = c.id AND e.motivo_encerramento = 'fim_dos_passos'),
       'suprimidos', (SELECT count(*) FROM enrollments e
                       WHERE e.campaign_id = c.id AND e.motivo_encerramento = 'supressao'),
+      'agentes', (SELECT coalesce(jsonb_object_agg(ca.canal, a.nome), '{}'::jsonb)
+                   FROM campaign_agents ca JOIN agents a ON a.id = ca.agent_id
+                  WHERE ca.campaign_id = c.id),
       'passos', (SELECT count(*) FROM flow_steps fs
                   WHERE fs.flow_version_id = (SELECT e2.flow_version_id FROM enrollments e2
                                                WHERE e2.campaign_id = c.id LIMIT 1))
