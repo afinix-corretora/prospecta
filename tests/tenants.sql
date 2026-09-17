@@ -87,8 +87,6 @@ BEGIN;
     (SELECT count(*) = 1 FROM contact_identities WHERE valor_norm = '5511999990000'));
   SELECT tn.confere('dono da A enxerga a credencial de IA da A',
     (SELECT count(*) = 1 FROM ai_credentials));
-  SELECT tn.confere('tenant_atual resolve para a A',
-    tenant_atual() = 'aaaaaaaa-0000-0000-0000-00000000000a'::uuid);
 COMMIT;
 
 BEGIN;
@@ -299,6 +297,109 @@ SELECT tn.confere('toda tabela com tenant_id tem índice por tenant',
          SELECT 1 FROM pg_indexes i
           WHERE i.schemaname = 'public' AND i.tablename = c.table_name
             AND i.indexdef LIKE '%tenant_id%')));
+
+-- ---------------------------------------------------------------------------
+-- Superfície exposta: o que o PostgREST publica
+-- ---------------------------------------------------------------------------
+--
+-- Toda função em `public` vira `/rest/v1/rpc/<nome>`. As auxiliares de RLS e o
+-- motor não são API — e `criar_tenant` chamável por anônimo era escrita no
+-- banco sem login.
+
+SELECT tn.confere('auxiliares de RLS não são chamáveis por anon nem authenticated',
+  NOT EXISTS (
+    SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+     WHERE n.nspname = 'public'
+       AND p.proname IN ('usuario_atual','pertence_ao_tenant','tem_papel',
+                         'pode_operar','pode_administrar','tenant_atual','tenant_padrao')
+       AND (has_function_privilege('anon', p.oid, 'EXECUTE')
+         OR has_function_privilege('authenticated', p.oid, 'EXECUTE'))),
+  (SELECT string_agg(p.proname, ', ') FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+    WHERE n.nspname='public' AND p.proname IN ('usuario_atual','pertence_ao_tenant','tem_papel',
+      'pode_operar','pode_administrar','tenant_atual','tenant_padrao')
+      AND has_function_privilege('authenticated', p.oid, 'EXECUTE')));
+
+SELECT tn.confere('o motor não é API: worker só por service_role',
+  NOT EXISTS (
+    SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+     WHERE n.nspname = 'public'
+       AND p.proname IN ('processar_vencidos','reivindicar_pendentes','proximos_vencidos',
+                         'registrar_resultado_envio','registrar_evento_provedor',
+                         'reservar_envio','registrar_falha_remetente','encerrar_enrollment')
+       AND (has_function_privilege('anon', p.oid, 'EXECUTE')
+         OR has_function_privilege('authenticated', p.oid, 'EXECUTE'))));
+
+SELECT tn.confere('anon não chama absolutamente nada em public',
+  NOT EXISTS (
+    SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+     WHERE n.nspname = 'public' AND p.prokind = 'f'
+       AND has_function_privilege('anon', p.oid, 'EXECUTE')),
+  (SELECT string_agg(p.proname, ', ') FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+    WHERE n.nspname='public' AND has_function_privilege('anon', p.oid, 'EXECUTE')));
+
+SELECT tn.confere('criar_tenant sem dono explícito não existe mais para a API',
+  NOT EXISTS (
+    SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+     WHERE n.nspname = 'public' AND p.proname = 'criar_tenant'
+       AND p.pronargs = 3
+       AND has_function_privilege('authenticated', p.oid, 'EXECUTE')));
+
+SELECT tn.confere('a forma self-service existe e é a única aberta ao usuário logado',
+  (SELECT count(*) = 1 FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+    WHERE n.nspname = 'public' AND p.proname = 'criar_tenant'
+      AND has_function_privilege('authenticated', p.oid, 'EXECUTE')
+      AND p.pronargs = 2));
+
+-- Sem JWT não há dono possível: a forma self-service recusa em vez de
+-- inventar um.
+DO $$
+BEGIN
+  PERFORM criar_tenant('Sem Dono', 'sem-dono');
+  PERFORM tn.confere('criar_tenant sem autenticação é recusado', false, 'criou');
+EXCEPTION WHEN others THEN
+  PERFORM tn.confere('criar_tenant sem autenticação é recusado (42501)',
+    SQLSTATE = '42501', SQLSTATE || ': ' || SQLERRM);
+END;
+$$;
+
+-- Com JWT, o tenant nasce do usuário logado e ele já é dono.
+DO $$
+DECLARE v_id uuid; v_papel papel_tenant;
+BEGIN
+  PERFORM set_config('request.jwt.claims','{"sub":"55555555-cccc-0000-0000-00000000000c"}', true);
+  v_id := criar_tenant('Corretora C', 'corretora-c');
+  SELECT papel INTO v_papel FROM tenant_users
+   WHERE tenant_id = v_id AND user_id = '55555555-cccc-0000-0000-00000000000c';
+  PERFORM tn.confere('quem cria o tenant nasce dono dele', v_papel = 'dono',
+    coalesce(v_papel::text, 'sem vínculo'));
+END;
+$$;
+
+-- O Supabase concede EXECUTE nominalmente a anon/authenticated em toda função
+-- nova de `public`. Se o default privilege voltar, a próxima função vira
+-- endpoint sozinha — e nenhuma asserção acima pegaria, porque elas olham as
+-- funções que existem hoje.
+SELECT tn.confere('função nova não nasce como endpoint',
+  NOT EXISTS (
+    SELECT 1 FROM pg_default_acl d
+      JOIN pg_namespace n ON n.oid = d.defaclnamespace,
+      unnest(d.defaclacl) AS ace
+     WHERE n.nspname = 'public' AND d.defaclobjtype = 'f'
+       AND (ace::text LIKE 'anon=%' OR ace::text LIKE 'authenticated=%')),
+  (SELECT string_agg(ace::text, ', ') FROM pg_default_acl d
+     JOIN pg_namespace n ON n.oid = d.defaclnamespace, unnest(d.defaclacl) AS ace
+    WHERE n.nspname='public' AND d.defaclobjtype='f'));
+
+SELECT tn.confere('toda função de public tem search_path fixo',
+  NOT EXISTS (
+    SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+     WHERE n.nspname = 'public'
+       AND NOT EXISTS (SELECT 1 FROM unnest(coalesce(p.proconfig,'{}')) c
+                        WHERE c LIKE 'search_path=%')),
+  (SELECT string_agg(p.proname, ', ') FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+    WHERE n.nspname='public'
+      AND NOT EXISTS (SELECT 1 FROM unnest(coalesce(p.proconfig,'{}')) c
+                       WHERE c LIKE 'search_path=%')));
 
 \echo ''
 \echo '============= ISOLAMENTO ENTRE TENANTS ============='

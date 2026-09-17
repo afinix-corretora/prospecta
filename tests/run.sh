@@ -50,10 +50,15 @@ GRANT ALL ON ALL TABLES IN SCHEMA public TO authenticated;
 -- provaria nada sobre as políticas.
 GRANT SELECT ON ALL TABLES IN SCHEMA public TO anon;
 GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO authenticated;
-GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA public TO authenticated;
+-- Sem GRANT EXECUTE em massa: a migration de endurecimento decide, nominalmente,
+-- o que `authenticated` pode chamar. Conceder tudo aqui faria o teste rodar
+-- numa superfície mais larga que a de produção.
 INSERT INTO tenants (id, nome, slug)
 VALUES ('00000000-0000-0000-0000-0000000000aa','Afinix Corretora','afinix');
 ALTER DATABASE $nome SET app.tenant = '00000000-0000-0000-0000-0000000000aa';
+-- As engrenagens do motor moram em \`privado\` (não publicada pelo PostgREST).
+-- Os testes as chamam direto, como o faria um psql de manutenção.
+ALTER DATABASE $nome SET search_path = public, privado;
 SQL
   echo "$nome"
 }
@@ -158,7 +163,9 @@ done
 RESTOS=$(psql -tA -d "$BANCO_DOWN" -c "
   SELECT (SELECT count(*) FROM pg_tables WHERE schemaname = 'public')
        + (SELECT count(*) FROM pg_type t JOIN pg_namespace n ON n.oid = t.typnamespace
-           WHERE n.nspname = 'public' AND t.typtype = 'e');")
+           WHERE n.nspname = 'public' AND t.typtype = 'e')
+       -- Schema criado por migration também é resto: 'privado' tem que sumir.
+       + (SELECT count(*) FROM pg_namespace WHERE nspname = 'privado');")
 
 if [ "$RESTOS" -eq 0 ]; then
   echo "PASS  migrations revertem sem deixar tabela nem tipo para trás"

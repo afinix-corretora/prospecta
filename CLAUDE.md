@@ -84,6 +84,9 @@ e elas têm teste automatizado obrigatório.**
 - **Nunca** criar tabela de domínio sem `tenant_id`, nem chave estrangeira entre tabelas de domínio
   que não seja composta `(tenant_id, id)`. RLS não alcança o worker, que roda com service key.
 - **Nunca** deixar tenant implícito em assinatura de função. É como bug entre clientes acontece.
+- **Nunca** criar função em `public` que não seja API de verdade. `public` é publicado pelo PostgREST;
+  RLS, gatilhos e motor moram em `privado`. Função nova não nasce com EXECUTE — conceder é decisão.
+- **Nunca** adicionar `privado` aos *Exposed schemas* do projeto. É o que separa motor de endpoint.
 
 ---
 
@@ -123,7 +126,13 @@ e elas têm teste automatizado obrigatório.**
 > domínio, chaves estrangeiras compostas `(tenant_id, id)` e RLS por papel. `tests/tenants.sql`
 > entra na pele de dois clientes diferentes e confere o SQLSTATE de cada recusa.
 >
+> O schema está **aplicado no projeto `hucuwjvihqgftdjpnych`** (12 migrations), conferido por
+> digest estrutural contra o banco de teste — colunas, constraints, índices, políticas, corpos de
+> função e a grade de privilégios batem byte a byte.
+>
 > Toda mudança de schema roda `tests/run.sh` antes do commit. Teste vermelho é bloqueio, não aviso.
+> Toda mudança aplicada no projeto roda `get_advisors` depois: o suite não enxerga o que só existe
+> no Supabase (default privileges, superfície do PostgREST) — foi assim que D19 apareceu.
 > `demo/gerar.sh` roda o motor num cenário completo e `ui/console.html` mostra o resultado — foi
 > assim que D15 apareceu, um erro que teste unitário nenhum pegava.
 

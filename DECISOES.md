@@ -177,6 +177,25 @@ buracos diferentes; nenhuma confia na de cima.
 - Teste de negação confere SQLSTATE, não só que deu erro: `42501` (RLS), `23503` (chave composta),
   `23001` (gatilho agente/campanha). "Levantou exceção" também é o que um typo faz.
 
+### D19 — `public` é API; o motor mora em `privado`
+O PostgREST publica toda função de `public` como `/rest/v1/rpc/<nome>`. Ficam em `public` apenas as
+10 funções que alguém de fora chama de verdade; RLS, gatilhos e engrenagens do motor vão para o
+schema `privado`, que não está em *Exposed schemas*.
+*Justificativa:* a alternativa — revogar EXECUTE e manter tudo em `public` — **não funciona**:
+expressão de política RLS e corpo de função de gatilho passam pela checagem de EXECUTE do papel que
+está escrevendo, então revogar de `PUBLIC` derruba o RLS e os gatilhos. Testado, não deduzido.
+**Consequências:**
+- `anon` não executa nada em `public`. O default privilege que o Supabase instala foi revogado, então
+  função nova não vira endpoint por esquecimento — virar API é decisão explícita.
+- `criar_tenant` virou duas: a self-service (dois argumentos, dono é sempre quem está logado) e a
+  administrativa (três argumentos, só `service_role`). A forma antiga, `SECURITY DEFINER` com
+  `p_dono` e aberta a `anon`, deixava qualquer visitante criar tenant em nome de um uuid arbitrário.
+- Toda função tem `search_path` fixo: sem isso, `SECURITY DEFINER` é escalada de privilégio.
+**De onde veio:** do `get_advisors` do projeto real, não do suite. O Postgres de teste não tem os
+default privileges do Supabase — o suite passava com o buraco aberto. Ficou uma asserção que pega a
+regressão (`pg_default_acl` sem `anon`/`authenticated`), mas o advisor continua sendo a checagem que
+enxerga o que só existe no projeto.
+
 ---
 
 ## Decisões adiadas (não decidir agora)

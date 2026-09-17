@@ -194,7 +194,32 @@ opt-out dado a um não é um fato do outro. `esta_suprimido()` recebe o tenant c
 sistema e todo cliente enxerga. Usar um agente do catálogo **copia** a linha para o tenant na
 primeira atribuição, então editar a persona não mexe no catálogo nem nos outros clientes.
 
-`tests/tenants.sql` é o que sustenta a afirmação "pode ser vendido": 32 asserções que entram na pele
+### A superfície que o PostgREST publica
+
+O Supabase transforma **toda** função de `public` em `/rest/v1/rpc/<nome>`, e toda função nasce
+com EXECUTE para `PUBLIC` — mais os grants nominais a `anon` e `authenticated` que o projeto instala
+por `ALTER DEFAULT PRIVILEGES`. Sem cuidado, cada engrenagem do motor vira endpoint aberto.
+
+A separação é por schema, porque schema é o que o PostgREST enxerga:
+
+| | Conteúdo | Quem chama |
+|---|---|---|
+| `public` | tabelas e as 10 funções que são API de verdade | worker (`service_role`) e UI (`authenticated`), nominalmente |
+| `privado` | RLS, gatilhos e as engrenagens do motor | ninguém de fora — não há endpoint |
+
+`anon` não executa **nada** em `public`. Função nova também não nasce aberta: o default privilege
+foi revogado, então virar API é decisão explícita, não esquecimento.
+
+`criar_tenant` tem duas formas. A de dois argumentos é o cadastro self-service e o dono é sempre
+`usuario_atual()` — não há como dizer de quem é o tenant. A de três argumentos é administrativa
+e só `service_role` alcança. Antes disso havia uma forma só, `SECURITY DEFINER`, com `p_dono` e
+aberta a `anon`: qualquer visitante criava tenant em nome de um uuid qualquer.
+
+> Isso não veio de teste local — veio do `get_advisors` do projeto real. O Postgres de teste não
+> tem os default privileges do Supabase, então o suite passava com o buraco aberto. Schema certo e
+> projeto seguro são duas verificações diferentes.
+
+`tests/tenants.sql` é o que sustenta a afirmação "pode ser vendido": 40 asserções que entram na pele
 de usuários de dois clientes diferentes. Os testes de negação conferem o **SQLSTATE**, não só que
 deu erro — `42501` é o RLS recusando, `23503` é a chave composta, `23001` é o gatilho de coerência
 entre agente e campanha. Um teste que só olha "levantou exceção" também passa com um typo no nome
