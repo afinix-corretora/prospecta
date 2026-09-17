@@ -42,8 +42,8 @@ INSERT INTO flow_steps (flow_version_id, ordem, canal, atraso_horas, template) V
   ('d5000000-0000-0000-0000-000000000001',1,'whatsapp',0,'Oi {{nome}}'),
   ('d5000000-0000-0000-0000-000000000001',2,'whatsapp',48,'Retomando, {{nome}}');
 
-INSERT INTO sender_accounts (id, canal, identificador, tipo_permitido, quota_diaria)
-VALUES ('d7000000-0000-0000-0000-000000000001','whatsapp','instancia-a','morna',100);
+INSERT INTO sender_accounts (id, canal, identificador, provedor, tipo_permitido, quota_diaria)
+VALUES ('d7000000-0000-0000-0000-000000000001','whatsapp','instancia-a','evolution','morna',100);
 
 SELECT inscrever('d1000000-0000-0000-0000-000000000001','d3000000-0000-0000-0000-000000000001',
                  'd5000000-0000-0000-0000-000000000001', now() - interval '1 minute');
@@ -224,6 +224,93 @@ BEGIN
 
   PERFORM d.confere('D7: clique vindo do provedor não encerra',
     (SELECT status = 'encerrado' FROM enrollments WHERE id = v_enr) = false);
+END;
+$$;
+
+-- ---------------------------------------------------------------------------
+-- Culpa do destino não penaliza o remetente
+-- ---------------------------------------------------------------------------
+
+DO $$
+DECLARE
+  v_contato uuid; v_enr uuid; v_msg uuid; v_ident uuid;
+  v_falhas_antes integer; v_falhas_depois integer;
+BEGIN
+  v_contato := gen_random_uuid();
+  INSERT INTO contacts (id, nome, origem) VALUES (v_contato,'Elis','planilha');
+  INSERT INTO contact_identities (contact_id, canal, valor, valor_norm, origem)
+  VALUES (v_contato,'whatsapp','+5514900050','5514900050','planilha')
+  RETURNING id INTO v_ident;
+
+  v_enr := inscrever(v_contato,'d3000000-0000-0000-0000-000000000001',
+                     'd5000000-0000-0000-0000-000000000001', now() - interval '1 minute');
+  PERFORM processar_vencidos(100,'real');
+  SELECT id INTO v_msg FROM messages WHERE enrollment_id = v_enr;
+
+  SELECT falhas_consecutivas INTO v_falhas_antes
+    FROM sender_accounts WHERE id = 'd7000000-0000-0000-0000-000000000001';
+
+  PERFORM registrar_resultado_envio(v_msg, false, NULL, 'not a WhatsApp user', 'destino');
+
+  SELECT falhas_consecutivas INTO v_falhas_depois
+    FROM sender_accounts WHERE id = 'd7000000-0000-0000-0000-000000000001';
+
+  PERFORM d.confere('culpa do destino NÃO penaliza o remetente',
+    v_falhas_depois = v_falhas_antes,
+    format('antes=%s depois=%s', v_falhas_antes, v_falhas_depois));
+
+  PERFORM d.confere('culpa do destino invalida a identidade',
+    (SELECT valida = false FROM contact_identities WHERE id = v_ident));
+
+  PERFORM d.confere('D3: identidade inválida vira fato na outbox',
+    EXISTS (SELECT 1 FROM outbox
+             WHERE contact_id = v_contato AND fato = 'identidade_invalida'));
+
+  PERFORM d.confere('culpa do destino gera evento rejeitado, não falha genérica',
+    EXISTS (SELECT 1 FROM message_events
+             WHERE message_id = v_msg AND tipo = 'rejeitado'
+               AND payload ->> 'culpa' = 'destino'));
+
+  PERFORM d.confere('D3: fato da outbox carrega autoria',
+    (SELECT autoria = 'motor-prospeccao' FROM outbox
+      WHERE contact_id = v_contato AND fato = 'identidade_invalida'));
+END;
+$$;
+
+DO $$
+DECLARE v_contato uuid; v_enr uuid; v_msg uuid; v_falhas_antes integer;
+BEGIN
+  v_contato := gen_random_uuid();
+  INSERT INTO contacts (id, nome, origem) VALUES (v_contato,'Fabio','planilha');
+  INSERT INTO contact_identities (contact_id, canal, valor, valor_norm, origem)
+  VALUES (v_contato,'whatsapp','+5514900051','5514900051','planilha');
+  v_enr := inscrever(v_contato,'d3000000-0000-0000-0000-000000000001',
+                     'd5000000-0000-0000-0000-000000000001', now() - interval '1 minute');
+  PERFORM processar_vencidos(100,'real');
+  SELECT id INTO v_msg FROM messages WHERE enrollment_id = v_enr;
+
+  SELECT falhas_consecutivas INTO v_falhas_antes
+    FROM sender_accounts WHERE id = 'd7000000-0000-0000-0000-000000000001';
+  PERFORM registrar_resultado_envio(v_msg, false, NULL, 'timeout', 'transitorio');
+
+  PERFORM d.confere('culpa transitória penaliza o remetente (provedor fora do ar conta)',
+    (SELECT falhas_consecutivas = v_falhas_antes + 1 FROM sender_accounts
+      WHERE id = 'd7000000-0000-0000-0000-000000000001'));
+  PERFORM d.confere('culpa transitória não invalida a identidade',
+    (SELECT ci.valida FROM messages m
+       JOIN contact_identities ci ON ci.id = m.contact_identity_id
+      WHERE m.id = v_msg));
+END;
+$$;
+
+DO $$
+DECLARE v_msg uuid;
+BEGIN
+  SELECT id INTO v_msg FROM messages LIMIT 1;
+  PERFORM registrar_resultado_envio(v_msg, false, NULL, 'x', 'culpa_inventada');
+  PERFORM d.confere('culpa fora do vocabulário é recusada', false, 'foi aceita');
+EXCEPTION WHEN others THEN
+  PERFORM d.confere('culpa fora do vocabulário é recusada', true);
 END;
 $$;
 

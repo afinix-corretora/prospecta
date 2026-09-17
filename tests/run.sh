@@ -64,6 +64,11 @@ echo "→ adapters de canal (TypeScript)"
 node --experimental-strip-types --test "$RAIZ/tests/adapters.test.ts" \
   | grep -E "^# (tests|pass|fail)|^not ok"
 
+echo ""
+echo "→ motor: despachante e webhooks (TypeScript)"
+node --experimental-strip-types --test "$RAIZ/tests/motor.test.ts" \
+  | grep -E "^# (tests|pass|fail)|^not ok"
+
 # ---------------------------------------------------------------------------
 # Concorrência: o agendador precisa de SKIP LOCKED de verdade, não só no texto
 # da função. Duas sessões simultâneas têm que pegar lotes disjuntos.

@@ -14,6 +14,8 @@ Mapa de `status` legado → modelo novo em [`MAPA-STATUS.md`](MAPA-STATUS.md).
 supabase/migrations/   schema, incremental
 supabase/down/         reversão de cada migration
 adapters/              ChannelAdapter por provedor (TypeScript, sem I/O de runtime)
+motor/                 despachante e webhooks — lógica pura, banco atrás de uma porta
+supabase/functions/    edge functions: só fiação, a única camada sem teste
 backfill/              ferramentas da migração de dados (fora do schema de runtime)
 tests/                 suite — um banco descartável por arquivo
 ```
@@ -109,6 +111,28 @@ Três regras que valem para qualquer adapter novo:
   pool sem motivo.
 
 Rodam com `node --experimental-strip-types --test tests/adapters.test.ts`, ou junto da suite.
+
+## O worker
+
+`motor-worker` é chamado por cron e faz uma passada: `processar_vencidos` e depois
+`despachar`. `canal-webhook/<provedor>` recebe o retorno do provedor, normaliza pelo adapter e
+grava eventos.
+
+As duas edge functions são finas de propósito. Toda decisão vive em `motor/`, que fala com o banco
+por uma porta (`motor/porta.ts`) e por isso é testável sem Supabase, ou no SQL, que é testado
+direto. A implementação da porta sobre o supabase-js é a **única camada sem teste automatizado** —
+não dá para exercitá-la fora do Supabase, então ela não decide nada.
+
+O modo do worker é `simulado` por padrão. Durante a Fase 3 nenhuma chamada precisa se lembrar de
+pedir shadow mode, e ligar o envio real é uma mudança explícita no agendamento do cron.
+
+Duas coisas que o despachante garante e que o legado não garantia:
+
+- **Uma mensagem que explode não derruba o lote.** Cada uma é tratada isolada, e a falha vira
+  resultado registrado — não exceção que sobe e deixa as outras presas até o lease vencer.
+- **A culpa da falha chega ao banco.** Culpa do destino invalida a identidade e vira fato na
+  `outbox` (D3); culpa do remetente e falha transitória penalizam a conta. Sem essa distinção,
+  uma lista suja abriria o circuito de remetentes saudáveis — o oposto da invariante 3.
 
 ## Convenção
 

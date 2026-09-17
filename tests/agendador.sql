@@ -83,9 +83,9 @@ INSERT INTO flow_steps (id, flow_version_id, ordem, canal, atraso_horas, templat
   ('b6000000-0000-0000-0000-000000000001','b5000000-0000-0000-0000-000000000001',1,'whatsapp',0,'Oi {{nome}} de {{cidade}}'),
   ('b6000000-0000-0000-0000-000000000002','b5000000-0000-0000-0000-000000000001',2,'email',48,'Assunto para {{nome}}');
 
-INSERT INTO sender_accounts (id, canal, identificador, tipo_permitido, quota_diaria) VALUES
-  ('b7000000-0000-0000-0000-000000000001','whatsapp','5513988801','morna',100),
-  ('b7000000-0000-0000-0000-000000000002','email','morno@ex.com','morna',100);
+INSERT INTO sender_accounts (id, canal, identificador, provedor, tipo_permitido, quota_diaria) VALUES
+  ('b7000000-0000-0000-0000-000000000001','whatsapp','5513988801','evolution','morna',100),
+  ('b7000000-0000-0000-0000-000000000002','email','morno@ex.com','smtp','morna',100);
 -- De propósito: nenhum remetente de campanha fria.
 
 -- ---------------------------------------------------------------------------
@@ -287,8 +287,8 @@ DO $$
 DECLARE v_contato uuid; v_campanha uuid; v_criadas integer; v_adiadas integer;
 BEGIN
   -- Remetente com quota 2 e três contatos vencidos: dois passam, um adia.
-  INSERT INTO sender_accounts (id, canal, identificador, tipo_permitido, quota_diaria)
-  VALUES ('b7000000-0000-0000-0000-000000000003','sms','5513977701','fria',2);
+  INSERT INTO sender_accounts (id, canal, identificador, provedor, tipo_permitido, quota_diaria)
+  VALUES ('b7000000-0000-0000-0000-000000000003','sms','5513977701','comtele','fria',2);
 
   INSERT INTO campaigns (id, nome, tipo, base_legal, canais_habilitados)
   VALUES ('b3000000-0000-0000-0000-000000000005','Fria SMS','fria','prospeccao','{sms}');

@@ -82,12 +82,12 @@ INSERT INTO flow_steps (id, flow_version_id, ordem, canal, atraso_horas, templat
   ('fc000000-0000-0000-0000-000000000001','fb000000-0000-0000-0000-000000000001',1,'whatsapp',0,'Oi {{nome}}'),
   ('fc000000-0000-0000-0000-000000000002','fb000000-0000-0000-0000-000000000001',2,'email',48,'Assunto: retomando');
 
-INSERT INTO sender_accounts (id, canal, identificador, tipo_permitido, quota_diaria) VALUES
-  ('5a000000-0000-0000-0000-000000000001','whatsapp','5511988880001','morna',100),
-  ('5a000000-0000-0000-0000-000000000002','whatsapp','5511988880002','fria',3),
-  ('5a000000-0000-0000-0000-000000000003','email','prospec@dominio-frio.com','fria',50),
-  ('5a000000-0000-0000-0000-000000000004','whatsapp','5511988880004','morna',1),
-  ('5a000000-0000-0000-0000-000000000005','email','resgate@dominio-morno.com','morna',50);
+INSERT INTO sender_accounts (id, canal, identificador, provedor, tipo_permitido, quota_diaria) VALUES
+  ('5a000000-0000-0000-0000-000000000001','whatsapp','5511988880001','evolution','morna',100),
+  ('5a000000-0000-0000-0000-000000000002','whatsapp','5511988880002','evolution','fria',3),
+  ('5a000000-0000-0000-0000-000000000003','email','prospec@dominio-frio.com','smtp','fria',50),
+  ('5a000000-0000-0000-0000-000000000004','whatsapp','5511988880004','evolution','morna',1),
+  ('5a000000-0000-0000-0000-000000000005','email','resgate@dominio-morno.com','smtp','morna',50);
 
 INSERT INTO enrollments (id, contact_id, campaign_id, flow_version_id, next_run_at) VALUES
   ('e0000000-0000-0000-0000-000000000001','11111111-1111-1111-1111-111111111111','c1000000-0000-0000-0000-000000000001','fb000000-0000-0000-0000-000000000001', now() - interval '1 minute'),

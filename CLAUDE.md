@@ -109,8 +109,12 @@ e elas têm teste automatizado obrigatório.**
 > despacho em SQL (`reivindicar_pendentes`, `registrar_resultado_envio`,
 > `registrar_evento_provedor`). E-mail e Instagram ainda não têm adapter, e o registro declara isso.
 >
+> O worker existe (`supabase/functions/motor-worker`), roda em `simulado` por padrão, e com ele a
+> **Fase 3 está completa de ponta a ponta**: agendador, roteador, adapters e despacho rodam sem
+> enviar nada.
+>
 > Falta da Fase 2: o backfill em si, que depende de acesso aos dados do projeto legado
-> `gtivnngoeccqbvfjiyne`.
+> `gtivnngoeccqbvfjiyne` — e com ele a comparação contra o Disparador.
 >
 > Toda mudança de schema roda `tests/run.sh` antes do commit. Teste vermelho é bloqueio, não aviso.
 
