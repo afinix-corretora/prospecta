@@ -16,6 +16,8 @@ supabase/down/         reversão de cada migration
 adapters/              ChannelAdapter por provedor (TypeScript, sem I/O de runtime)
 motor/                 despachante e webhooks — lógica pura, banco atrás de uma porta
 supabase/functions/    edge functions: só fiação, a única camada sem teste
+demo/                  cenário de demonstração: roda o motor e exporta o que ele decidiu
+ui/                    console de operação (protótipo), alimentado pela saída do demo
 backfill/              ferramentas da migração de dados (fora do schema de runtime)
 tests/                 suite — um banco descartável por arquivo
 ```
@@ -133,6 +135,22 @@ Duas coisas que o despachante garante e que o legado não garantia:
 - **A culpa da falha chega ao banco.** Culpa do destino invalida a identidade e vira fato na
   `outbox` (D3); culpa do remetente e falha transitória penalizam a conta. Sem essa distinção,
   uma lista suja abriria o circuito de remetentes saudáveis — o oposto da invariante 3.
+
+## Console de operação
+
+`demo/gerar.sh` roda o motor num cenário com duas campanhas e sete contatos, avança o relógio de
+evento em evento e exporta tudo que ele decidiu para `demo/preview.json`. `ui/console.html` lê esse
+arquivo e reproduz as horas simuladas numa régua temporal.
+
+Não é mockup: os números, as mensagens e as decisões são do motor real. O provedor é simulado
+dentro do `demo/preview.sql` — em produção quem responde é o adapter.
+
+A régua é o ponto. O que distingue este motor de um disparador é que o estado vive no contato e a
+execução acontece ao longo do tempo; um painel de totais não mostra isso, e é justamente aí que
+mora a pergunta de operação quando algo dá errado — o que o motor decidiu, e quando.
+
+É protótipo de tela, não o produto: não cria campanha, não edita flow, não sobe planilha e não tem
+autenticação.
 
 ## Convenção
 
