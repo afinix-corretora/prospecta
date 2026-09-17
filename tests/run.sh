@@ -55,6 +55,7 @@ rodar invariantes "$RAIZ/tests/invariantes.sql"
 rodar mapa_status "$RAIZ/tests/mapa_status.sql" "$RAIZ/backfill/mapa_status.sql"
 rodar agendador   "$RAIZ/tests/agendador.sql"
 rodar despacho    "$RAIZ/tests/despacho.sql"
+rodar modelos     "$RAIZ/tests/modelos.sql"
 
 # ---------------------------------------------------------------------------
 # Adapters de canal — TypeScript, sem rede (fetch injetado).

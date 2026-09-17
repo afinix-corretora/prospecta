@@ -43,31 +43,21 @@ $$;
 -- Cenário
 -- ---------------------------------------------------------------------------
 
-INSERT INTO campaigns (id, nome, tipo, base_legal, canais_habilitados) VALUES
-  ('aa000000-0000-0000-0000-000000000001','Resgate 2024','morna',
-   'legitimo interesse - base propria com opt-in','{whatsapp,email}'),
-  ('aa000000-0000-0000-0000-000000000002','Lista fria SP','fria',
-   'legitimo interesse - prospeccao B2B','{whatsapp}');
+-- As campanhas nascem de modelos do catálogo, como no hub.
+CREATE TABLE p.ids (chave text PRIMARY KEY, campanha uuid, versao uuid);
 
-INSERT INTO flows (id, nome) VALUES
-  ('bb000000-0000-0000-0000-000000000001','Cadência de resgate'),
-  ('bb000000-0000-0000-0000-000000000002','Cadência fria');
+DO $$
+DECLARE r record;
+BEGIN
+  SELECT * INTO r FROM criar_campanha_de_modelo(
+    'resgate-multicanal', 'Resgate 2024', '{whatsapp,email}');
+  INSERT INTO p.ids VALUES ('resgate', r.campaign_id, r.flow_version_id);
 
-INSERT INTO flow_versions (id, flow_id, versao) VALUES
-  ('cc000000-0000-0000-0000-000000000001','bb000000-0000-0000-0000-000000000001',1),
-  ('cc000000-0000-0000-0000-000000000002','bb000000-0000-0000-0000-000000000002',1);
-
-INSERT INTO flow_steps (flow_version_id, ordem, canal, atraso_horas, template) VALUES
-  ('cc000000-0000-0000-0000-000000000001',1,'whatsapp', 0,
-   'Oi {{nome}}, aqui é da Afinix. Você chegou a olhar o plano que conversamos?'),
-  ('cc000000-0000-0000-0000-000000000001',2,'email',   48,
-   '{{nome}}, separei duas opções que cabem no que você falou.'),
-  ('cc000000-0000-0000-0000-000000000001',3,'whatsapp',72,
-   '{{nome}}, ainda faz sentido retomar? Se não, é só me dizer.'),
-  ('cc000000-0000-0000-0000-000000000002',1,'whatsapp', 0,
-   'Olá {{nome}}, trabalho com plano de saúde empresarial em {{cidade}}.'),
-  ('cc000000-0000-0000-0000-000000000002',2,'whatsapp',96,
-   '{{nome}}, consigo fazer uma cotação sem compromisso. Faz sentido?');
+  SELECT * INTO r FROM criar_campanha_de_modelo(
+    'prospeccao-fria', 'Lista fria SP', '{whatsapp}');
+  INSERT INTO p.ids VALUES ('fria', r.campaign_id, r.flow_version_id);
+END;
+$$;
 
 -- Pool: morno e frio separados por schema, não por disciplina (D4).
 INSERT INTO sender_accounts (id, canal, identificador, provedor, tipo_permitido, quota_diaria) VALUES
@@ -108,26 +98,27 @@ VALUES ('e1000000-0000-0000-0000-000000000006','opt-out registrado na campanha a
 -- ---------------------------------------------------------------------------
 
 DO $$
-DECLARE r record; v_id uuid;
+DECLARE r record; v_id uuid; v_camp uuid; v_ver uuid;
 BEGIN
   FOR r IN
     SELECT * FROM (VALUES
-      ('e1000000-0000-0000-0000-000000000001'::uuid,'Marina Alves','aa000000-0000-0000-0000-000000000001'::uuid,'cc000000-0000-0000-0000-000000000001'::uuid),
-      ('e1000000-0000-0000-0000-000000000002','Otávio Lima','aa000000-0000-0000-0000-000000000001','cc000000-0000-0000-0000-000000000001'),
-      ('e1000000-0000-0000-0000-000000000003','Paula Ribeiro','aa000000-0000-0000-0000-000000000001','cc000000-0000-0000-0000-000000000001'),
-      ('e1000000-0000-0000-0000-000000000004','Rui Nogueira','aa000000-0000-0000-0000-000000000001','cc000000-0000-0000-0000-000000000001'),
-      ('e1000000-0000-0000-0000-000000000006','Tulio Barros','aa000000-0000-0000-0000-000000000001','cc000000-0000-0000-0000-000000000001'),
-      ('e1000000-0000-0000-0000-000000000005','Sônia Prado','aa000000-0000-0000-0000-000000000002','cc000000-0000-0000-0000-000000000002'),
-      ('e1000000-0000-0000-0000-000000000007','Vera Castro','aa000000-0000-0000-0000-000000000002','cc000000-0000-0000-0000-000000000002')
-    ) AS v(contato, nome, campanha, versao)
+      ('e1000000-0000-0000-0000-000000000001'::uuid,'Marina Alves','resgate'),
+      ('e1000000-0000-0000-0000-000000000002','Otávio Lima','resgate'),
+      ('e1000000-0000-0000-0000-000000000003','Paula Ribeiro','resgate'),
+      ('e1000000-0000-0000-0000-000000000004','Rui Nogueira','resgate'),
+      ('e1000000-0000-0000-0000-000000000006','Tulio Barros','resgate'),
+      ('e1000000-0000-0000-0000-000000000005','Sônia Prado','fria'),
+      ('e1000000-0000-0000-0000-000000000007','Vera Castro','fria')
+    ) AS v(contato, nome, chave)
   LOOP
-    v_id := inscrever(r.contato, r.campanha, r.versao, now());
+    SELECT campanha, versao INTO v_camp, v_ver FROM p.ids WHERE chave = r.chave;
+    v_id := inscrever(r.contato, v_camp, v_ver, now());
     IF v_id IS NULL THEN
       PERFORM p.registrar('motor', r.nome, 'inscricao_recusada',
         'já estava na supressão — nem chega a criar estado');
     ELSE
       PERFORM p.registrar('motor', r.nome, 'inscrito',
-        (SELECT nome FROM campaigns WHERE id = r.campanha));
+        (SELECT nome FROM campaigns WHERE id = v_camp));
     END IF;
   END LOOP;
 END;
@@ -310,5 +301,36 @@ SELECT jsonb_pretty(jsonb_build_object(
       'contato', c.nome, 'fato', o.fato, 'autoria', o.autoria
     )), '[]'::jsonb) FROM outbox o JOIN contacts c ON c.id = o.contact_id),
 
-  'horas_simuladas', (SELECT (extract(epoch from decorrido)/3600)::int FROM p.relogio)
+  'horas_simuladas', (SELECT (extract(epoch from decorrido)/3600)::int FROM p.relogio),
+
+  'modelos', (SELECT coalesce(jsonb_agg(jsonb_build_object(
+      'slug', slug, 'nome', nome, 'descricao', descricao, 'objetivo', objetivo,
+      'tipo', tipo, 'canais', canais, 'passos', jsonb_array_length(passos),
+      'base_legal', base_legal,
+      'cadencia', (SELECT jsonb_agg(jsonb_build_object(
+          'canal', s ->> 'canal', 'atraso', (s ->> 'atraso_horas')::int))
+        FROM jsonb_array_elements(t.passos) s)
+    ) ORDER BY ordem), '[]'::jsonb) FROM campaign_templates t WHERE ativo),
+
+  'campanhas', (SELECT coalesce(jsonb_agg(jsonb_build_object(
+      'nome', c.nome, 'tipo', c.tipo, 'objetivo', c.objetivo,
+      'modelo', c.template_slug, 'ativa', c.ativa,
+      'canais', c.canais_habilitados,
+      'inscritos', (SELECT count(*) FROM enrollments e WHERE e.campaign_id = c.id),
+      'em_cadencia', (SELECT count(*) FROM enrollments e
+                       WHERE e.campaign_id = c.id AND e.status = 'ativo'),
+      'enviadas', (SELECT count(*) FROM messages m JOIN enrollments e ON e.id = m.enrollment_id
+                    WHERE e.campaign_id = c.id AND m.status IN ('enviado','simulado')),
+      'falhas', (SELECT count(*) FROM messages m JOIN enrollments e ON e.id = m.enrollment_id
+                  WHERE e.campaign_id = c.id AND m.status = 'falha'),
+      'respostas', (SELECT count(*) FROM enrollments e
+                     WHERE e.campaign_id = c.id AND e.motivo_encerramento = 'resposta'),
+      'concluidas', (SELECT count(*) FROM enrollments e
+                      WHERE e.campaign_id = c.id AND e.motivo_encerramento = 'fim_dos_passos'),
+      'suprimidos', (SELECT count(*) FROM enrollments e
+                      WHERE e.campaign_id = c.id AND e.motivo_encerramento = 'supressao'),
+      'passos', (SELECT count(*) FROM flow_steps fs
+                  WHERE fs.flow_version_id = (SELECT e2.flow_version_id FROM enrollments e2
+                                               WHERE e2.campaign_id = c.id LIMIT 1))
+    ) ORDER BY c.nome), '[]'::jsonb) FROM campaigns c)
 ));

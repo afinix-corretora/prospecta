@@ -122,7 +122,7 @@
             "ator": "provedor",
             "canal": "whatsapp",
             "contato": "Marina Alves",
-            "detalhe": "PROV-11aa3b6e",
+            "detalhe": "PROV-03b91b23",
             "momento": 0,
             "remetente": "+55 11 99000-0001"
         },
@@ -131,7 +131,7 @@
             "ator": "provedor",
             "canal": "whatsapp",
             "contato": "Otávio Lima",
-            "detalhe": "PROV-4210ecc9",
+            "detalhe": "PROV-7c396905",
             "momento": 0,
             "remetente": "+55 11 99000-0001"
         },
@@ -140,7 +140,7 @@
             "ator": "provedor",
             "canal": "whatsapp",
             "contato": "Paula Ribeiro",
-            "detalhe": "PROV-66945b00",
+            "detalhe": "PROV-d29a826a",
             "momento": 0,
             "remetente": "+55 11 99000-0001"
         },
@@ -149,7 +149,7 @@
             "ator": "provedor",
             "canal": "whatsapp",
             "contato": "Rui Nogueira",
-            "detalhe": "PROV-c121c9e8",
+            "detalhe": "PROV-d7fa478a",
             "momento": 0,
             "remetente": "+55 11 99000-0001"
         },
@@ -158,7 +158,7 @@
             "ator": "provedor",
             "canal": "whatsapp",
             "contato": "Sônia Prado",
-            "detalhe": "PROV-7951c49b",
+            "detalhe": "PROV-218309f4",
             "momento": 0,
             "remetente": "+55 11 98000-0009"
         },
@@ -221,7 +221,7 @@
             "ator": "provedor",
             "canal": "email",
             "contato": "Marina Alves",
-            "detalhe": "PROV-d35d1358",
+            "detalhe": "PROV-81aad2a6",
             "momento": 48,
             "remetente": "resgate@afinix-relaciona.com.br"
         },
@@ -230,7 +230,7 @@
             "ator": "provedor",
             "canal": "email",
             "contato": "Otávio Lima",
-            "detalhe": "PROV-f659eb14",
+            "detalhe": "PROV-b78db47e",
             "momento": 48,
             "remetente": "resgate@afinix-relaciona.com.br"
         },
@@ -239,7 +239,7 @@
             "ator": "provedor",
             "canal": "email",
             "contato": "Rui Nogueira",
-            "detalhe": "PROV-15ae8f0a",
+            "detalhe": "PROV-b495ff95",
             "momento": 48,
             "remetente": "resgate@afinix-relaciona.com.br"
         },
@@ -302,7 +302,7 @@
             "ator": "provedor",
             "canal": "whatsapp",
             "contato": "Sônia Prado",
-            "detalhe": "PROV-d9f20d17",
+            "detalhe": "PROV-f7ff5d02",
             "momento": 96,
             "remetente": "+55 11 98000-0009"
         },
@@ -356,7 +356,7 @@
             "ator": "provedor",
             "canal": "whatsapp",
             "contato": "Marina Alves",
-            "detalhe": "PROV-8b7be441",
+            "detalhe": "PROV-c53216bc",
             "momento": 120,
             "remetente": "+55 11 99000-0001"
         },
@@ -365,7 +365,7 @@
             "ator": "provedor",
             "canal": "whatsapp",
             "contato": "Rui Nogueira",
-            "detalhe": "PROV-9320f2aa",
+            "detalhe": "PROV-075972b8",
             "momento": 120,
             "remetente": "+55 11 99000-0001"
         }
@@ -377,47 +377,267 @@
             "contato": "Vera Castro"
         }
     ],
+    "modelos": [
+        {
+            "nome": "Resgate por WhatsApp",
+            "slug": "resgate-whatsapp",
+            "tipo": "morna",
+            "canais": [
+                "whatsapp"
+            ],
+            "passos": 3,
+            "cadencia": [
+                {
+                    "canal": "whatsapp",
+                    "atraso": 0
+                },
+                {
+                    "canal": "whatsapp",
+                    "atraso": 48
+                },
+                {
+                    "canal": "whatsapp",
+                    "atraso": 96
+                }
+            ],
+            "objetivo": "Reabrir conversa com oportunidade parada",
+            "descricao": "Três toques no WhatsApp para quem já conversou com a corretora e esfriou.",
+            "base_legal": "legítimo interesse — base própria com relacionamento prévio"
+        },
+        {
+            "nome": "Resgate multicanal",
+            "slug": "resgate-multicanal",
+            "tipo": "morna",
+            "canais": [
+                "whatsapp",
+                "email",
+                "sms"
+            ],
+            "passos": 4,
+            "cadencia": [
+                {
+                    "canal": "whatsapp",
+                    "atraso": 0
+                },
+                {
+                    "canal": "email",
+                    "atraso": 48
+                },
+                {
+                    "canal": "whatsapp",
+                    "atraso": 72
+                },
+                {
+                    "canal": "sms",
+                    "atraso": 120
+                }
+            ],
+            "objetivo": "Reabrir oportunidade usando todos os endereços conhecidos",
+            "descricao": "WhatsApp, e-mail e SMS alternados. Quem não responde num canal recebe no outro.",
+            "base_legal": "legítimo interesse — base própria com relacionamento prévio"
+        },
+        {
+            "nome": "Resgate por Direct",
+            "slug": "resgate-direct",
+            "tipo": "morna",
+            "canais": [
+                "instagram"
+            ],
+            "passos": 2,
+            "cadencia": [
+                {
+                    "canal": "instagram",
+                    "atraso": 0
+                },
+                {
+                    "canal": "instagram",
+                    "atraso": 12
+                }
+            ],
+            "objetivo": "Retomar conversa iniciada pelo próprio contato no Instagram",
+            "descricao": "Instagram para quem já falou com a corretora por lá. Só dentro da janela de 24h.",
+            "base_legal": "resposta em janela de 24h — contato iniciado pelo cliente"
+        },
+        {
+            "nome": "Renovação de apólice",
+            "slug": "renovacao-apolice",
+            "tipo": "morna",
+            "canais": [
+                "whatsapp",
+                "sms"
+            ],
+            "passos": 3,
+            "cadencia": [
+                {
+                    "canal": "whatsapp",
+                    "atraso": 0
+                },
+                {
+                    "canal": "whatsapp",
+                    "atraso": 168
+                },
+                {
+                    "canal": "sms",
+                    "atraso": 336
+                }
+            ],
+            "objetivo": "Reter cliente antes do vencimento",
+            "descricao": "Aviso de vencimento em WhatsApp e SMS, começando 45 dias antes.",
+            "base_legal": "execução de contrato — cliente ativo"
+        },
+        {
+            "nome": "Reengajamento",
+            "slug": "reengajamento",
+            "tipo": "morna",
+            "canais": [
+                "whatsapp",
+                "email"
+            ],
+            "passos": 2,
+            "cadencia": [
+                {
+                    "canal": "whatsapp",
+                    "atraso": 0
+                },
+                {
+                    "canal": "email",
+                    "atraso": 72
+                }
+            ],
+            "objetivo": "Recuperar conversa que morreu no meio",
+            "descricao": "Para quem respondeu, esfriou e nunca fechou. Retoma de onde a conversa parou.",
+            "base_legal": "legítimo interesse — contato respondeu anteriormente"
+        },
+        {
+            "nome": "Prospecção fria — WhatsApp",
+            "slug": "prospeccao-fria",
+            "tipo": "fria",
+            "canais": [
+                "whatsapp"
+            ],
+            "passos": 2,
+            "cadencia": [
+                {
+                    "canal": "whatsapp",
+                    "atraso": 0
+                },
+                {
+                    "canal": "whatsapp",
+                    "atraso": 96
+                }
+            ],
+            "objetivo": "Abrir conversa com quem nunca falou com a corretora",
+            "descricao": "Dois toques em lista fria, com chip separado e volume baixo por dia.",
+            "base_legal": "legítimo interesse — prospecção B2B"
+        },
+        {
+            "nome": "Prospecção fria — multicanal",
+            "slug": "prospeccao-fria-multicanal",
+            "tipo": "fria",
+            "canais": [
+                "whatsapp",
+                "email"
+            ],
+            "passos": 3,
+            "cadencia": [
+                {
+                    "canal": "email",
+                    "atraso": 0
+                },
+                {
+                    "canal": "whatsapp",
+                    "atraso": 72
+                },
+                {
+                    "canal": "email",
+                    "atraso": 168
+                }
+            ],
+            "objetivo": "Abrir conversa em lista fria sem arriscar o domínio da operação",
+            "descricao": "WhatsApp e e-mail em domínio separado do institucional. Pool frio isolado.",
+            "base_legal": "legítimo interesse — prospecção B2B"
+        }
+    ],
+    "campanhas": [
+        {
+            "nome": "Lista fria SP",
+            "tipo": "fria",
+            "ativa": true,
+            "canais": [
+                "whatsapp"
+            ],
+            "falhas": 1,
+            "modelo": "prospeccao-fria",
+            "passos": 2,
+            "enviadas": 2,
+            "objetivo": "Abrir conversa com quem nunca falou com a corretora",
+            "inscritos": 2,
+            "respostas": 0,
+            "concluidas": 2,
+            "suprimidos": 0,
+            "em_cadencia": 0
+        },
+        {
+            "nome": "Resgate 2024",
+            "tipo": "morna",
+            "ativa": true,
+            "canais": [
+                "whatsapp",
+                "email"
+            ],
+            "falhas": 0,
+            "modelo": "resgate-multicanal",
+            "passos": 3,
+            "enviadas": 9,
+            "objetivo": "Reabrir oportunidade usando todos os endereços conhecidos",
+            "inscritos": 4,
+            "respostas": 1,
+            "concluidas": 2,
+            "suprimidos": 1,
+            "em_cadencia": 0
+        }
+    ],
     "mensagens": [
         {
             "canal": "whatsapp",
             "status": "enviado",
             "contato": "Marina Alves",
-            "conteudo": "Oi Marina Alves, aqui é da Afinix. Você chegou a olhar o plano que conversamos?",
+            "conteudo": "Oi Marina Alves, aqui é da Afinix. Podemos retomar aquela cotação?",
             "remetente": "+55 11 99000-0001"
         },
         {
             "canal": "whatsapp",
             "status": "enviado",
             "contato": "Otávio Lima",
-            "conteudo": "Oi Otávio Lima, aqui é da Afinix. Você chegou a olhar o plano que conversamos?",
+            "conteudo": "Oi Otávio Lima, aqui é da Afinix. Podemos retomar aquela cotação?",
             "remetente": "+55 11 99000-0001"
         },
         {
             "canal": "whatsapp",
             "status": "enviado",
             "contato": "Paula Ribeiro",
-            "conteudo": "Oi Paula Ribeiro, aqui é da Afinix. Você chegou a olhar o plano que conversamos?",
+            "conteudo": "Oi Paula Ribeiro, aqui é da Afinix. Podemos retomar aquela cotação?",
             "remetente": "+55 11 99000-0001"
         },
         {
             "canal": "whatsapp",
             "status": "enviado",
             "contato": "Rui Nogueira",
-            "conteudo": "Oi Rui Nogueira, aqui é da Afinix. Você chegou a olhar o plano que conversamos?",
+            "conteudo": "Oi Rui Nogueira, aqui é da Afinix. Podemos retomar aquela cotação?",
             "remetente": "+55 11 99000-0001"
         },
         {
             "canal": "whatsapp",
             "status": "enviado",
             "contato": "Sônia Prado",
-            "conteudo": "Olá Sônia Prado, trabalho com plano de saúde empresarial em São Paulo.",
+            "conteudo": "Olá Sônia Prado, trabalho com plano de saúde empresarial em São Paulo. Faz sentido conversarmos?",
             "remetente": "+55 11 98000-0009"
         },
         {
             "canal": "whatsapp",
             "status": "falha",
             "contato": "Vera Castro",
-            "conteudo": "Olá Vera Castro, trabalho com plano de saúde empresarial em Osasco.",
+            "conteudo": "Olá Vera Castro, trabalho com plano de saúde empresarial em Osasco. Faz sentido conversarmos?",
             "remetente": "+55 11 98000-0009"
         },
         {
@@ -445,21 +665,21 @@
             "canal": "whatsapp",
             "status": "enviado",
             "contato": "Sônia Prado",
-            "conteudo": "Sônia Prado, consigo fazer uma cotação sem compromisso. Faz sentido?",
+            "conteudo": "Sônia Prado, consigo fazer uma cotação sem compromisso. Quer que eu envie?",
             "remetente": "+55 11 98000-0009"
         },
         {
             "canal": "whatsapp",
             "status": "enviado",
             "contato": "Marina Alves",
-            "conteudo": "Marina Alves, ainda faz sentido retomar? Se não, é só me dizer.",
+            "conteudo": "Marina Alves, te mandei um e-mail com as opções. Prefere que eu resuma por aqui?",
             "remetente": "+55 11 99000-0001"
         },
         {
             "canal": "whatsapp",
             "status": "enviado",
             "contato": "Rui Nogueira",
-            "conteudo": "Rui Nogueira, ainda faz sentido retomar? Se não, é só me dizer.",
+            "conteudo": "Rui Nogueira, te mandei um e-mail com as opções. Prefere que eu resuma por aqui?",
             "remetente": "+55 11 99000-0001"
         }
     ],

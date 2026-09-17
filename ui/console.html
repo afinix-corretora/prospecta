@@ -216,103 +216,246 @@ input[type=range]::-moz-range-thumb{width:13px;height:13px;border-radius:99px;ba
   .lane .rail2{grid-column:1/-1}
 }
 @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+
+/* ---------- hub ---------- */
+.hubhead{display:flex;align-items:flex-end;gap:16px;flex-wrap:wrap;margin-bottom:2px}
+.hubhead h1{font-size:23px;font-weight:700;letter-spacing:-.025em}
+.hubhead p{margin:3px 0 0;color:var(--ink-2);font-size:13px;max-width:62ch}
+.cta{margin-left:auto;display:inline-flex;align-items:center;gap:8px;background:var(--accent);
+  color:var(--accent-ink);border-radius:9px;padding:9px 15px;font-size:13.5px;font-weight:600}
+.cta:hover{filter:brightness(1.08)}
+.cta svg{width:15px;height:15px;stroke:currentColor;fill:none;stroke-width:2.2}
+
+.sec{display:flex;align-items:baseline;gap:10px;margin:8px 0 -6px}
+.sec h2{font-size:14px;font-weight:600;letter-spacing:-.005em}
+.sec span{font-size:12px;color:var(--ink-3)}
+
+.grade{display:grid;grid-template-columns:repeat(auto-fill,minmax(264px,1fr));gap:12px}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:15px;
+  display:flex;flex-direction:column;gap:11px;text-align:left;width:100%;
+  transition:border-color .16s ease, transform .16s ease}
+.card:hover{border-color:var(--accent);transform:translateY(-1px)}
+.cardtop{display:flex;align-items:flex-start;gap:9px}
+.cardtop b{font-size:14px;font-weight:600;letter-spacing:-.01em;line-height:1.3}
+.cardtop p{margin:3px 0 0;font-size:12px;color:var(--ink-2);line-height:1.45}
+.tipo{font-size:10px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;
+  padding:2.5px 7px;border-radius:6px;white-space:nowrap;flex:none}
+.tipo.morna{background:var(--accent-soft);color:var(--accent)}
+.tipo.fria{background:var(--warn-soft);color:var(--warn)}
+
+/* prévia de cadência dentro do card */
+.cad{display:flex;align-items:center;gap:0;padding:9px 0 4px}
+.cad .p{display:flex;flex-direction:column;align-items:center;gap:4px;flex:none}
+.cad .p i{width:22px;height:22px;border-radius:7px;display:grid;place-items:center;
+  color:#fff;font-size:10px;font-weight:700}
+.cad .p i.whatsapp{background:var(--wa)} .cad .p i.email{background:var(--mail)}
+.cad .p i.sms{background:var(--sms)} .cad .p i.instagram{background:#B84A7D}
+.cad .p span{font-size:9.5px;color:var(--ink-3);font-weight:600}
+.cad .lig{flex:1;height:2px;background:var(--surface-3);min-width:12px;position:relative}
+.cad .lig b{position:absolute;top:-16px;left:50%;transform:translateX(-50%);font-size:9.5px;
+  color:var(--ink-3);font-weight:600;white-space:nowrap;background:var(--surface);padding:0 3px}
+.cardfoot{display:flex;align-items:center;gap:8px;padding-top:3px;border-top:1px solid var(--line);
+  margin-top:auto;font-size:11.5px;color:var(--ink-3)}
+.cardfoot .usar{margin-left:auto;color:var(--accent);font-weight:600}
+
+/* card de campanha */
+.camp{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:15px;
+  display:flex;flex-direction:column;gap:12px;text-align:left;width:100%;
+  transition:border-color .16s ease}
+.camp:hover{border-color:var(--accent)}
+.campnum{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+.campnum div{display:flex;flex-direction:column;gap:1px}
+.campnum b{font-family:Archivo;font-size:17px;font-weight:700;letter-spacing:-.02em;line-height:1.1}
+.campnum span{font-size:10px;color:var(--ink-3);text-transform:uppercase;letter-spacing:.06em;font-weight:600}
+.chips{display:flex;gap:5px;flex-wrap:wrap}
+.chip{font-size:10.5px;font-weight:600;padding:2px 7px;border-radius:6px;
+  background:var(--surface-2);color:var(--ink-2)}
+.live{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:600;color:var(--ok)}
+.live i{width:6px;height:6px;border-radius:99px;background:var(--ok)}
+.live.off{color:var(--ink-3)} .live.off i{background:var(--ink-3)}
+
+/* ---------- assistente ---------- */
+.modal{position:fixed;inset:0;background:rgba(6,18,17,.5);display:none;z-index:70;
+  padding:24px 16px;overflow-y:auto}
+.modal[data-open="true"]{display:block}
+.box{background:var(--surface);border:1px solid var(--line);border-radius:14px;
+  max-width:720px;margin:0 auto;box-shadow:var(--shadow);overflow:hidden}
+.bhead{padding:17px 20px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:12px}
+.bhead h3{font-size:16px;font-weight:600;letter-spacing:-.015em}
+.bhead p{margin:2px 0 0;font-size:12px;color:var(--ink-2)}
+.passos{display:flex;gap:6px;margin-left:auto;flex:none}
+.passos i{width:22px;height:5px;border-radius:99px;background:var(--surface-3);display:block}
+.passos i.on{background:var(--accent)}
+.bbody{padding:18px 20px}
+.bfoot{padding:14px 20px;border-top:1px solid var(--line);display:flex;gap:9px;align-items:center}
+.bfoot .obs{font-size:11.5px;color:var(--ink-3);max-width:40ch}
+.btn{border:1px solid var(--line);border-radius:9px;padding:8px 14px;font-size:13px;
+  font-weight:600;color:var(--ink-2)}
+.btn:hover{border-color:var(--line-strong);color:var(--ink)}
+.btn.prim{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.btn.prim:hover{filter:brightness(1.08)}
+.btn[disabled]{opacity:.45;cursor:not-allowed}
+
+.opts{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:10px}
+.opt{border:1.5px solid var(--line);border-radius:10px;padding:12px;text-align:left;
+  display:flex;flex-direction:column;gap:6px;transition:border-color .15s ease}
+.opt:hover{border-color:var(--line-strong)}
+.opt[aria-pressed="true"]{border-color:var(--accent);background:var(--accent-soft)}
+.opt b{font-size:13px;font-weight:600;display:flex;align-items:center;gap:7px}
+.opt b i{width:20px;height:20px;border-radius:6px;display:grid;place-items:center;
+  color:#fff;font-size:9.5px;font-weight:700;flex:none}
+.opt p{margin:0;font-size:11.5px;color:var(--ink-2);line-height:1.45}
+.opt[data-off="true"]{opacity:.62;cursor:not-allowed}
+.opt .breve{font-size:10px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;
+  color:var(--warn);background:var(--warn-soft);padding:1.5px 6px;border-radius:5px;margin-left:auto}
+.campo{display:flex;flex-direction:column;gap:6px;margin-bottom:14px}
+.campo label{font-size:11.5px;font-weight:600;color:var(--ink-2);letter-spacing:.02em}
+.campo input{border:1.5px solid var(--line);border-radius:9px;padding:9px 11px;font:inherit;
+  font-size:14px;background:var(--surface);color:var(--ink)}
+.campo input:focus{outline:none;border-color:var(--accent)}
+.resumo{background:var(--surface-2);border-radius:10px;padding:14px}
+.resumo h4{font-size:12px;font-weight:600;margin:0 0 9px;color:var(--ink-2);
+  text-transform:uppercase;letter-spacing:.07em}
+.rlinha{display:flex;gap:10px;align-items:flex-start;padding:7px 0;border-bottom:1px solid var(--line)}
+.rlinha:last-child{border-bottom:none}
+.rlinha i{width:22px;height:22px;border-radius:7px;display:grid;place-items:center;color:#fff;
+  font-size:9.5px;font-weight:700;flex:none}
+.rlinha i.whatsapp{background:var(--wa)} .rlinha i.email{background:var(--mail)}
+.rlinha i.sms{background:var(--sms)} .rlinha i.instagram{background:#B84A7D}
+.rlinha div{min-width:0}
+.rlinha b{display:block;font-size:11px;color:var(--ink-3);font-weight:600;margin-bottom:2px}
+.rlinha p{margin:0;font-size:12.5px;line-height:1.45}
+
+.voltar{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;color:var(--ink-2);
+  padding:5px 9px;border-radius:7px;font-weight:500}
+.voltar:hover{background:var(--surface-2);color:var(--ink)}
+
+@media (max-width:900px){
+  .campnum{grid-template-columns:repeat(2,1fr)}
+  .hubhead .cta{margin-left:0}
+}
 </style>
+
 
 <div class="shell">
   <aside class="rail">
     <div class="brand"><b>Prospecta</b><span>Motor de cadência</span></div>
     <nav class="nav" id="nav">
-      <button aria-current="true" data-v="operacao">Operação</button>
-      <button data-v="pool">Remetentes</button>
-      <button data-v="supressao">Supressão</button>
+      <button aria-current="true" data-v="hub">Hub de campanhas</button>
+      <button data-v="campanha">Operação</button>
     </nav>
     <div class="railfoot">
-      <div>Simulação de <b class="mono" id="foot-horas">105</b> h<br>sobre o motor real</div>
-      <div id="foot-msg">9 mensagens decididas</div>
+      <div>Simulação de <b class="mono" id="foot-horas">120</b> h<br>sobre o motor real</div>
+      <div id="foot-msg"></div>
     </div>
   </aside>
 
   <div class="main">
-    <header class="top">
-      <div class="toprow">
-        <div>
-          <h1>Resgate 2024 · Lista fria SP</h1>
-          <p>Duas campanhas em cadência — base própria e lista fria, pools separados</p>
+    <!-- ================= HUB ================= -->
+    <div id="v-hub">
+      <div class="wrap">
+        <div class="hubhead">
+          <div>
+            <h1>Hub de campanhas</h1>
+            <p>Escolha um modelo pronto ou monte a sua. Cada campanha carrega base legal,
+               canais habilitados e pool de remetentes próprios.</p>
+          </div>
+          <button class="cta" id="abrir-wizard">
+            <svg viewBox="0 0 24 24" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+            Criar campanha
+          </button>
         </div>
-        <div class="modes">
-          <span class="pill shadow"><i class="dot"></i>Shadow mode</span>
-          <button class="themeswap" id="theme">Tema</button>
-        </div>
+
+        <section class="kpis" id="hub-kpis"></section>
+
+        <div class="sec"><h2>Campanhas</h2><span id="hub-nc"></span></div>
+        <section class="grade" id="hub-campanhas"></section>
+
+        <div class="sec"><h2>Modelos prontos</h2>
+          <span>cadência, base legal e canais já definidos — é só escolher</span></div>
+        <section class="grade" id="hub-modelos"></section>
       </div>
-      <div class="scrub">
-        <div class="clock"><b class="mono" id="hora">105</b><span>h de cadência</span></div>
-        <div class="track">
-          <div class="ticks" id="ticks"></div>
-          <input type="range" id="t" min="0" max="105" value="105" step="1" aria-label="Hora da cadência">
+    </div>
+
+    <!-- ================= CAMPANHA ================= -->
+    <div id="v-campanha" hidden>
+      <header class="top">
+        <div class="toprow">
+          <div>
+            <button class="voltar" id="voltar">← Hub de campanhas</button>
+            <h1 id="camp-nome">Resgate 2024</h1>
+            <p id="camp-sub">—</p>
+          </div>
+          <div class="modes">
+            <span class="pill shadow"><i class="dot"></i>Shadow mode</span>
+            <button class="themeswap" id="theme">Tema</button>
+          </div>
         </div>
-        <div class="play">
-          <button id="rew">Início</button>
-          <button class="go" id="run">Reproduzir</button>
+        <div class="scrub">
+          <div class="clock"><b class="mono" id="hora">120</b><span>h de cadência</span></div>
+          <div class="track">
+            <div class="ticks" id="ticks"></div>
+            <input type="range" id="t" min="0" max="120" value="120" step="1" aria-label="Hora da cadência">
+          </div>
+          <div class="play">
+            <button id="rew">Início</button>
+            <button class="go" id="run">Reproduzir</button>
+          </div>
         </div>
-      </div>
-    </header>
+      </header>
 
-    <div class="wrap">
-      <section class="kpis" id="kpis"></section>
-
-      <div class="cols">
-        <div style="display:flex;flex-direction:column;gap:20px;min-width:0">
-          <section class="panel">
-            <div class="phead"><h2>Cadência por contato</h2>
-              <span class="hint">clique para ver as mensagens</span></div>
-            <div id="lanes"></div>
-            <div class="legend">
-              <span><i style="background:var(--wa)"></i>WhatsApp</span>
-              <span><i style="background:var(--mail)"></i>E-mail</span>
-              <span><i style="background:var(--ok)"></i>Respondeu</span>
-              <span><i style="background:var(--warn)"></i>Clique</span>
-              <span><i style="background:var(--crit)"></i>Rejeitado</span>
-              <span><i style="background:var(--surface-3);border:1px solid var(--line-strong)"></i>Passo pulado</span>
-            </div>
-          </section>
-
-          <section class="panel">
-            <div class="phead"><h2>Linha do tempo</h2><span class="hint" id="nev"></span></div>
-            <div class="log" id="log"></div>
-          </section>
+      <div class="wrap">
+        <section class="kpis" id="kpis"></section>
+        <div class="cols">
+          <div style="display:flex;flex-direction:column;gap:20px;min-width:0">
+            <section class="panel">
+              <div class="phead"><h2>Cadência por contato</h2>
+                <span class="hint">clique para ver as mensagens</span></div>
+              <div id="lanes"></div>
+              <div class="legend">
+                <span><i style="background:var(--wa)"></i>WhatsApp</span>
+                <span><i style="background:var(--mail)"></i>E-mail</span>
+                <span><i style="background:var(--ok)"></i>Respondeu</span>
+                <span><i style="background:var(--warn)"></i>Clique</span>
+                <span><i style="background:var(--crit)"></i>Rejeitado</span>
+                <span><i style="background:var(--surface-3);border:1px solid var(--line-strong)"></i>Passo pulado</span>
+              </div>
+            </section>
+            <section class="panel">
+              <div class="phead"><h2>Linha do tempo</h2><span class="hint" id="nev"></span></div>
+              <div class="log" id="log"></div>
+            </section>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:20px;min-width:0">
+            <section class="panel">
+              <div class="phead"><h2>Pool de remetentes</h2></div>
+              <div class="pool" id="pool"></div>
+            </section>
+            <section class="panel">
+              <div class="phead"><h2>Supressão</h2><span class="hint">global e imutável</span></div>
+              <div class="list" id="sup"></div>
+            </section>
+            <section class="panel">
+              <div class="phead"><h2>Writeback pendente</h2><span class="hint">outbox → CRM</span></div>
+              <div class="list" id="out"></div>
+            </section>
+          </div>
         </div>
-
-        <div style="display:flex;flex-direction:column;gap:20px;min-width:0">
-          <section class="panel">
-            <div class="phead"><h2>Pool de remetentes</h2></div>
-            <div class="pool" id="pool"></div>
-          </section>
-
-          <section class="panel">
-            <div class="phead"><h2>Supressão</h2><span class="hint">global e imutável</span></div>
-            <div class="list" id="sup"></div>
-          </section>
-
-          <section class="panel">
-            <div class="phead"><h2>Writeback pendente</h2><span class="hint">outbox → CRM</span></div>
-            <div class="list" id="out"></div>
-          </section>
+        <div class="note">
+          <b>O que esta simulação encontrou — e já corrigiu</b>
+          <p>Na primeira rodada, o chip frio esgotou a quota de 2/dia na terceira hora e o motor passou
+          a adiar Sônia Prado de 15 em 15 minutos até o fim — 36 adiamentos que não tinham como dar
+          certo, porque a quota só vira no dia seguinte. Não enviar estava certo; reperguntar tão cedo,
+          não. O agendador agora espera o pool poder ter vaga: a virada da janela diária quando a quota
+          acabou, o fim do prazo quando o circuito está aberto. Nesta rodada, zero adiamentos perdidos
+          e todas as cadências completam em cinco dias.</p>
         </div>
-      </div>
-
-      <div class="note">
-        <b>O que esta simulação encontrou — e já corrigiu</b>
-        <p>Na primeira rodada, o chip frio esgotou a quota de 2/dia na terceira hora e o motor passou a
-        adiar Sônia Prado de 15 em 15 minutos até o fim — 36 adiamentos que não tinham como dar certo,
-        porque a quota só vira no dia seguinte. Não enviar estava certo; reperguntar tão cedo, não.
-        O agendador agora espera o pool poder ter vaga: a virada da janela diária quando a quota acabou,
-        o fim do prazo quando o circuito está aberto. Nesta rodada, zero adiamentos perdidos e todas as
-        cadências completam em cinco dias.</p>
       </div>
     </div>
   </div>
 </div>
 
+<!-- drawer de contato -->
 <div class="drawer" id="drawer"><div class="sheet">
   <div class="shead">
     <div style="min-width:0"><h3 id="dnome">—</h3><p id="dsub">—</p></div>
@@ -321,26 +464,283 @@ input[type=range]::-moz-range-thumb{width:13px;height:13px;border-radius:99px;ba
   <div class="sbody" id="dbody"></div>
 </div></div>
 
-<script>
-const D = {"linha":[{"acao":"inscrito","ator":"motor","canal":null,"contato":"Marina Alves","detalhe":"Resgate 2024","momento":0,"remetente":null,"n":1,"ate":0},{"acao":"inscrito","ator":"motor","canal":null,"contato":"Otávio Lima","detalhe":"Resgate 2024","momento":0,"remetente":null,"n":1,"ate":0},{"acao":"inscrito","ator":"motor","canal":null,"contato":"Paula Ribeiro","detalhe":"Resgate 2024","momento":0,"remetente":null,"n":1,"ate":0},{"acao":"inscrito","ator":"motor","canal":null,"contato":"Rui Nogueira","detalhe":"Resgate 2024","momento":0,"remetente":null,"n":1,"ate":0},{"acao":"inscricao_recusada","ator":"motor","canal":null,"contato":"Tulio Barros","detalhe":"já estava na supressão — nem chega a criar estado","momento":0,"remetente":null,"n":1,"ate":0},{"acao":"inscrito","ator":"motor","canal":null,"contato":"Sônia Prado","detalhe":"Lista fria SP","momento":0,"remetente":null,"n":1,"ate":0},{"acao":"inscrito","ator":"motor","canal":null,"contato":"Vera Castro","detalhe":"Lista fria SP","momento":0,"remetente":null,"n":1,"ate":0},{"acao":"mensagem_criada","ator":"motor","canal":"whatsapp","contato":"Marina Alves","detalhe":"1","momento":0,"remetente":"+55 11 99000-0001","n":1,"ate":0},{"acao":"mensagem_criada","ator":"motor","canal":"whatsapp","contato":"Otávio Lima","detalhe":"1","momento":0,"remetente":"+55 11 99000-0001","n":1,"ate":0},{"acao":"mensagem_criada","ator":"motor","canal":"whatsapp","contato":"Paula Ribeiro","detalhe":"1","momento":0,"remetente":"+55 11 99000-0001","n":1,"ate":0},{"acao":"mensagem_criada","ator":"motor","canal":"whatsapp","contato":"Rui Nogueira","detalhe":"1","momento":0,"remetente":"+55 11 99000-0001","n":1,"ate":0},{"acao":"mensagem_criada","ator":"motor","canal":"whatsapp","contato":"Sônia Prado","detalhe":"1","momento":0,"remetente":"+55 11 98000-0009","n":1,"ate":0},{"acao":"mensagem_criada","ator":"motor","canal":"whatsapp","contato":"Vera Castro","detalhe":"1","momento":0,"remetente":"+55 11 98000-0009","n":1,"ate":0},{"acao":"entregue_ao_provedor","ator":"provedor","canal":"whatsapp","contato":"Marina Alves","detalhe":"PROV-11aa3b6e","momento":0,"remetente":"+55 11 99000-0001","n":1,"ate":0},{"acao":"entregue_ao_provedor","ator":"provedor","canal":"whatsapp","contato":"Otávio Lima","detalhe":"PROV-4210ecc9","momento":0,"remetente":"+55 11 99000-0001","n":1,"ate":0},{"acao":"entregue_ao_provedor","ator":"provedor","canal":"whatsapp","contato":"Paula Ribeiro","detalhe":"PROV-66945b00","momento":0,"remetente":"+55 11 99000-0001","n":1,"ate":0},{"acao":"entregue_ao_provedor","ator":"provedor","canal":"whatsapp","contato":"Rui Nogueira","detalhe":"PROV-c121c9e8","momento":0,"remetente":"+55 11 99000-0001","n":1,"ate":0},{"acao":"entregue_ao_provedor","ator":"provedor","canal":"whatsapp","contato":"Sônia Prado","detalhe":"PROV-7951c49b","momento":0,"remetente":"+55 11 98000-0009","n":1,"ate":0},{"acao":"rejeitado","ator":"provedor","canal":"whatsapp","contato":"Vera Castro","detalhe":"número não existe no WhatsApp","momento":0,"remetente":"+55 11 98000-0009","n":1,"ate":0},{"acao":"novo_dia","ator":"operador","canal":null,"contato":null,"detalhe":"dia 3 da cadência — quotas diárias renovadas","momento":48,"remetente":null,"n":1,"ate":48},{"acao":"mensagem_criada","ator":"motor","canal":"whatsapp","contato":"Marina Alves","detalhe":"2","momento":48,"remetente":"+55 11 99000-0001","n":1,"ate":48},{"acao":"mensagem_criada","ator":"motor","canal":"whatsapp","contato":"Otávio Lima","detalhe":"2","momento":48,"remetente":"+55 11 99000-0001","n":1,"ate":48},{"acao":"passo_pulado_sem_identidade","ator":"motor","canal":"whatsapp","contato":"Paula Ribeiro","detalhe":"email","momento":48,"remetente":"+55 11 99000-0001","n":1,"ate":48},{"acao":"mensagem_criada","ator":"motor","canal":"whatsapp","contato":"Rui Nogueira","detalhe":"2","momento":48,"remetente":"+55 11 99000-0001","n":1,"ate":48},{"acao":"entregue_ao_provedor","ator":"provedor","canal":"email","contato":"Marina Alves","detalhe":"PROV-d35d1358","momento":48,"remetente":"resgate@afinix-relaciona.com.br","n":1,"ate":48},{"acao":"entregue_ao_provedor","ator":"provedor","canal":"email","contato":"Otávio Lima","detalhe":"PROV-f659eb14","momento":48,"remetente":"resgate@afinix-relaciona.com.br","n":1,"ate":48},{"acao":"entregue_ao_provedor","ator":"provedor","canal":"email","contato":"Rui Nogueira","detalhe":"PROV-15ae8f0a","momento":48,"remetente":"resgate@afinix-relaciona.com.br","n":1,"ate":48},{"acao":"respondeu","ator":"pessoa","canal":"whatsapp","contato":"Otávio Lima","detalhe":"oi, pode me mandar os valores?","momento":48,"remetente":null,"n":1,"ate":48},{"acao":"suprimida","ator":"operador","canal":null,"contato":"Paula Ribeiro","detalhe":"pediu remoção por telefone; entra na lista global","momento":48,"remetente":null,"n":1,"ate":48},{"acao":"encerrado_supressao","ator":"motor","canal":"whatsapp","contato":"Paula Ribeiro","detalhe":"contato suprimido","momento":48,"remetente":"+55 11 99000-0001","n":1,"ate":48},{"acao":"novo_dia","ator":"operador","canal":null,"contato":null,"detalhe":"dia 5 da cadência — quotas diárias renovadas","momento":96,"remetente":null,"n":1,"ate":96},{"acao":"mensagem_criada","ator":"motor","canal":"whatsapp","contato":"Sônia Prado","detalhe":"2","momento":96,"remetente":"+55 11 98000-0009","n":1,"ate":96},{"acao":"passo_pulado_sem_identidade","ator":"motor","canal":"whatsapp","contato":"Vera Castro","detalhe":"whatsapp","momento":96,"remetente":"+55 11 98000-0009","n":1,"ate":96},{"acao":"entregue_ao_provedor","ator":"provedor","canal":"whatsapp","contato":"Sônia Prado","detalhe":"PROV-d9f20d17","momento":96,"remetente":"+55 11 98000-0009","n":1,"ate":96},{"acao":"clicou","ator":"pessoa","canal":"email","contato":"Marina Alves","detalhe":"abriu o link do e-mail — engajamento, não resposta","momento":96,"remetente":null,"n":1,"ate":96},{"acao":"encerrado_fim","ator":"motor","canal":"whatsapp","contato":"Vera Castro","detalhe":"","momento":96,"remetente":"+55 11 98000-0009","n":1,"ate":96},{"acao":"novo_dia","ator":"operador","canal":null,"contato":null,"detalhe":"dia 6 da cadência — quotas diárias renovadas","momento":120,"remetente":null,"n":1,"ate":120},{"acao":"mensagem_criada","ator":"motor","canal":"whatsapp","contato":"Marina Alves","detalhe":"3","momento":120,"remetente":"+55 11 99000-0001","n":1,"ate":120},{"acao":"mensagem_criada","ator":"motor","canal":"whatsapp","contato":"Rui Nogueira","detalhe":"3","momento":120,"remetente":"+55 11 99000-0001","n":1,"ate":120},{"acao":"entregue_ao_provedor","ator":"provedor","canal":"whatsapp","contato":"Marina Alves","detalhe":"PROV-8b7be441","momento":120,"remetente":"+55 11 99000-0001","n":1,"ate":120},{"acao":"entregue_ao_provedor","ator":"provedor","canal":"whatsapp","contato":"Rui Nogueira","detalhe":"PROV-9320f2aa","momento":120,"remetente":"+55 11 99000-0001","n":1,"ate":120}],"enrollments":[{"passo":3,"motivo":"fim_dos_passos","status":"encerrado","contato":"Marina Alves","campanha":"Resgate 2024"},{"passo":2,"motivo":"resposta","status":"encerrado","contato":"Otávio Lima","campanha":"Resgate 2024"},{"passo":2,"motivo":"supressao","status":"encerrado","contato":"Paula Ribeiro","campanha":"Resgate 2024"},{"passo":3,"motivo":"fim_dos_passos","status":"encerrado","contato":"Rui Nogueira","campanha":"Resgate 2024"},{"passo":2,"motivo":"fim_dos_passos","status":"encerrado","contato":"Sônia Prado","campanha":"Lista fria SP"},{"passo":2,"motivo":"fim_dos_passos","status":"encerrado","contato":"Vera Castro","campanha":"Lista fria SP"}],"mensagens":[{"canal":"whatsapp","status":"enviado","contato":"Marina Alves","conteudo":"Oi Marina Alves, aqui é da Afinix. Você chegou a olhar o plano que conversamos?","remetente":"+55 11 99000-0001"},{"canal":"whatsapp","status":"enviado","contato":"Otávio Lima","conteudo":"Oi Otávio Lima, aqui é da Afinix. Você chegou a olhar o plano que conversamos?","remetente":"+55 11 99000-0001"},{"canal":"whatsapp","status":"enviado","contato":"Paula Ribeiro","conteudo":"Oi Paula Ribeiro, aqui é da Afinix. Você chegou a olhar o plano que conversamos?","remetente":"+55 11 99000-0001"},{"canal":"whatsapp","status":"enviado","contato":"Rui Nogueira","conteudo":"Oi Rui Nogueira, aqui é da Afinix. Você chegou a olhar o plano que conversamos?","remetente":"+55 11 99000-0001"},{"canal":"whatsapp","status":"enviado","contato":"Sônia Prado","conteudo":"Olá Sônia Prado, trabalho com plano de saúde empresarial em São Paulo.","remetente":"+55 11 98000-0009"},{"canal":"whatsapp","status":"falha","contato":"Vera Castro","conteudo":"Olá Vera Castro, trabalho com plano de saúde empresarial em Osasco.","remetente":"+55 11 98000-0009"},{"canal":"email","status":"enviado","contato":"Marina Alves","conteudo":"Marina Alves, separei duas opções que cabem no que você falou.","remetente":"resgate@afinix-relaciona.com.br"},{"canal":"email","status":"enviado","contato":"Otávio Lima","conteudo":"Otávio Lima, separei duas opções que cabem no que você falou.","remetente":"resgate@afinix-relaciona.com.br"},{"canal":"email","status":"enviado","contato":"Rui Nogueira","conteudo":"Rui Nogueira, separei duas opções que cabem no que você falou.","remetente":"resgate@afinix-relaciona.com.br"},{"canal":"whatsapp","status":"enviado","contato":"Sônia Prado","conteudo":"Sônia Prado, consigo fazer uma cotação sem compromisso. Faz sentido?","remetente":"+55 11 98000-0009"},{"canal":"whatsapp","status":"enviado","contato":"Marina Alves","conteudo":"Marina Alves, ainda faz sentido retomar? Se não, é só me dizer.","remetente":"+55 11 99000-0001"},{"canal":"whatsapp","status":"enviado","contato":"Rui Nogueira","conteudo":"Rui Nogueira, ainda faz sentido retomar? Se não, é só me dizer.","remetente":"+55 11 99000-0001"}],"remetentes":[{"tipo":"fria","canal":"whatsapp","quota":2,"saude":100.0,"usado":1,"estado":"ativo","identificador":"+55 11 98000-0009"},{"tipo":"morna","canal":"whatsapp","quota":200,"saude":100.0,"usado":2,"estado":"ativo","identificador":"+55 11 99000-0001"},{"tipo":"morna","canal":"email","quota":300,"saude":100.0,"usado":3,"estado":"ativo","identificador":"resgate@afinix-relaciona.com.br"}],"supressao":[{"motivo":"opt-out registrado na campanha anterior","contato":"Tulio Barros"},{"motivo":"pediu remoção por telefone","contato":"Paula Ribeiro"}],"outbox":[{"fato":"identidade_invalida","autoria":"motor-prospeccao","contato":"Vera Castro"}],"horas":120};
+<!-- assistente de criação -->
+<div class="modal" id="wizard"><div class="box">
+  <div class="bhead">
+    <div><h3 id="w-titulo">Escolha um modelo</h3><p id="w-sub">Cada modelo já traz cadência, base legal e canais.</p></div>
+    <div class="passos"><i class="on" id="wp1"></i><i id="wp2"></i><i id="wp3"></i></div>
+  </div>
+  <div class="bbody" id="w-corpo"></div>
+  <div class="bfoot">
+    <button class="btn" id="w-cancel">Cancelar</button>
+    <span class="obs" id="w-obs"></span>
+    <button class="btn" id="w-voltar" style="margin-left:auto" hidden>Voltar</button>
+    <button class="btn prim" id="w-next" disabled>Continuar</button>
+  </div>
+</div></div>
 
-const PESSOAS = [...new Set(D.linha.map(e=>e.contato).filter(Boolean))];
+<script>
+const D = {"linha":[{"acao":"inscrito","ator":"motor","canal":null,"contato":"Marina Alves","detalhe":"Resgate 2024","momento":0,"remetente":null,"n":1},{"acao":"inscrito","ator":"motor","canal":null,"contato":"Otávio Lima","detalhe":"Resgate 2024","momento":0,"remetente":null,"n":1},{"acao":"inscrito","ator":"motor","canal":null,"contato":"Paula Ribeiro","detalhe":"Resgate 2024","momento":0,"remetente":null,"n":1},{"acao":"inscrito","ator":"motor","canal":null,"contato":"Rui Nogueira","detalhe":"Resgate 2024","momento":0,"remetente":null,"n":1},{"acao":"inscricao_recusada","ator":"motor","canal":null,"contato":"Tulio Barros","detalhe":"já estava na supressão — nem chega a criar estado","momento":0,"remetente":null,"n":1},{"acao":"inscrito","ator":"motor","canal":null,"contato":"Sônia Prado","detalhe":"Lista fria SP","momento":0,"remetente":null,"n":1},{"acao":"inscrito","ator":"motor","canal":null,"contato":"Vera Castro","detalhe":"Lista fria SP","momento":0,"remetente":null,"n":1},{"acao":"mensagem_criada","ator":"motor","canal":"whatsapp","contato":"Marina Alves","detalhe":"1","momento":0,"remetente":"+55 11 99000-0001","n":1},{"acao":"mensagem_criada","ator":"motor","canal":"whatsapp","contato":"Otávio Lima","detalhe":"1","momento":0,"remetente":"+55 11 99000-0001","n":1},{"acao":"mensagem_criada","ator":"motor","canal":"whatsapp","contato":"Paula Ribeiro","detalhe":"1","momento":0,"remetente":"+55 11 99000-0001","n":1},{"acao":"mensagem_criada","ator":"motor","canal":"whatsapp","contato":"Rui Nogueira","detalhe":"1","momento":0,"remetente":"+55 11 99000-0001","n":1},{"acao":"mensagem_criada","ator":"motor","canal":"whatsapp","contato":"Sônia Prado","detalhe":"1","momento":0,"remetente":"+55 11 98000-0009","n":1},{"acao":"mensagem_criada","ator":"motor","canal":"whatsapp","contato":"Vera Castro","detalhe":"1","momento":0,"remetente":"+55 11 98000-0009","n":1},{"acao":"entregue_ao_provedor","ator":"provedor","canal":"whatsapp","contato":"Marina Alves","detalhe":"PROV-03b91b23","momento":0,"remetente":"+55 11 99000-0001","n":1},{"acao":"entregue_ao_provedor","ator":"provedor","canal":"whatsapp","contato":"Otávio Lima","detalhe":"PROV-7c396905","momento":0,"remetente":"+55 11 99000-0001","n":1},{"acao":"entregue_ao_provedor","ator":"provedor","canal":"whatsapp","contato":"Paula Ribeiro","detalhe":"PROV-d29a826a","momento":0,"remetente":"+55 11 99000-0001","n":1},{"acao":"entregue_ao_provedor","ator":"provedor","canal":"whatsapp","contato":"Rui Nogueira","detalhe":"PROV-d7fa478a","momento":0,"remetente":"+55 11 99000-0001","n":1},{"acao":"entregue_ao_provedor","ator":"provedor","canal":"whatsapp","contato":"Sônia Prado","detalhe":"PROV-218309f4","momento":0,"remetente":"+55 11 98000-0009","n":1},{"acao":"rejeitado","ator":"provedor","canal":"whatsapp","contato":"Vera Castro","detalhe":"número não existe no WhatsApp","momento":0,"remetente":"+55 11 98000-0009","n":1},{"acao":"novo_dia","ator":"operador","canal":null,"contato":null,"detalhe":"dia 3 da cadência — quotas diárias renovadas","momento":48,"remetente":null,"n":1},{"acao":"mensagem_criada","ator":"motor","canal":"whatsapp","contato":"Marina Alves","detalhe":"2","momento":48,"remetente":"+55 11 99000-0001","n":1},{"acao":"mensagem_criada","ator":"motor","canal":"whatsapp","contato":"Otávio Lima","detalhe":"2","momento":48,"remetente":"+55 11 99000-0001","n":1},{"acao":"passo_pulado_sem_identidade","ator":"motor","canal":"whatsapp","contato":"Paula Ribeiro","detalhe":"email","momento":48,"remetente":"+55 11 99000-0001","n":1},{"acao":"mensagem_criada","ator":"motor","canal":"whatsapp","contato":"Rui Nogueira","detalhe":"2","momento":48,"remetente":"+55 11 99000-0001","n":1},{"acao":"entregue_ao_provedor","ator":"provedor","canal":"email","contato":"Marina Alves","detalhe":"PROV-81aad2a6","momento":48,"remetente":"resgate@afinix-relaciona.com.br","n":1},{"acao":"entregue_ao_provedor","ator":"provedor","canal":"email","contato":"Otávio Lima","detalhe":"PROV-b78db47e","momento":48,"remetente":"resgate@afinix-relaciona.com.br","n":1},{"acao":"entregue_ao_provedor","ator":"provedor","canal":"email","contato":"Rui Nogueira","detalhe":"PROV-b495ff95","momento":48,"remetente":"resgate@afinix-relaciona.com.br","n":1},{"acao":"respondeu","ator":"pessoa","canal":"whatsapp","contato":"Otávio Lima","detalhe":"oi, pode me mandar os valores?","momento":48,"remetente":null,"n":1},{"acao":"suprimida","ator":"operador","canal":null,"contato":"Paula Ribeiro","detalhe":"pediu remoção por telefone; entra na lista global","momento":48,"remetente":null,"n":1},{"acao":"encerrado_supressao","ator":"motor","canal":"whatsapp","contato":"Paula Ribeiro","detalhe":"contato suprimido","momento":48,"remetente":"+55 11 99000-0001","n":1},{"acao":"novo_dia","ator":"operador","canal":null,"contato":null,"detalhe":"dia 5 da cadência — quotas diárias renovadas","momento":96,"remetente":null,"n":1},{"acao":"mensagem_criada","ator":"motor","canal":"whatsapp","contato":"Sônia Prado","detalhe":"2","momento":96,"remetente":"+55 11 98000-0009","n":1},{"acao":"passo_pulado_sem_identidade","ator":"motor","canal":"whatsapp","contato":"Vera Castro","detalhe":"whatsapp","momento":96,"remetente":"+55 11 98000-0009","n":1},{"acao":"entregue_ao_provedor","ator":"provedor","canal":"whatsapp","contato":"Sônia Prado","detalhe":"PROV-f7ff5d02","momento":96,"remetente":"+55 11 98000-0009","n":1},{"acao":"clicou","ator":"pessoa","canal":"email","contato":"Marina Alves","detalhe":"abriu o link do e-mail — engajamento, não resposta","momento":96,"remetente":null,"n":1},{"acao":"encerrado_fim","ator":"motor","canal":"whatsapp","contato":"Vera Castro","detalhe":"","momento":96,"remetente":"+55 11 98000-0009","n":1},{"acao":"novo_dia","ator":"operador","canal":null,"contato":null,"detalhe":"dia 6 da cadência — quotas diárias renovadas","momento":120,"remetente":null,"n":1},{"acao":"mensagem_criada","ator":"motor","canal":"whatsapp","contato":"Marina Alves","detalhe":"3","momento":120,"remetente":"+55 11 99000-0001","n":1},{"acao":"mensagem_criada","ator":"motor","canal":"whatsapp","contato":"Rui Nogueira","detalhe":"3","momento":120,"remetente":"+55 11 99000-0001","n":1},{"acao":"entregue_ao_provedor","ator":"provedor","canal":"whatsapp","contato":"Marina Alves","detalhe":"PROV-c53216bc","momento":120,"remetente":"+55 11 99000-0001","n":1},{"acao":"entregue_ao_provedor","ator":"provedor","canal":"whatsapp","contato":"Rui Nogueira","detalhe":"PROV-075972b8","momento":120,"remetente":"+55 11 99000-0001","n":1}],"enrollments":[{"passo":3,"motivo":"fim_dos_passos","status":"encerrado","contato":"Marina Alves","campanha":"Resgate 2024"},{"passo":2,"motivo":"resposta","status":"encerrado","contato":"Otávio Lima","campanha":"Resgate 2024"},{"passo":2,"motivo":"supressao","status":"encerrado","contato":"Paula Ribeiro","campanha":"Resgate 2024"},{"passo":3,"motivo":"fim_dos_passos","status":"encerrado","contato":"Rui Nogueira","campanha":"Resgate 2024"},{"passo":2,"motivo":"fim_dos_passos","status":"encerrado","contato":"Sônia Prado","campanha":"Lista fria SP"},{"passo":2,"motivo":"fim_dos_passos","status":"encerrado","contato":"Vera Castro","campanha":"Lista fria SP"}],"mensagens":[{"canal":"whatsapp","status":"enviado","contato":"Marina Alves","conteudo":"Oi Marina Alves, aqui é da Afinix. Podemos retomar aquela cotação?","remetente":"+55 11 99000-0001"},{"canal":"whatsapp","status":"enviado","contato":"Otávio Lima","conteudo":"Oi Otávio Lima, aqui é da Afinix. Podemos retomar aquela cotação?","remetente":"+55 11 99000-0001"},{"canal":"whatsapp","status":"enviado","contato":"Paula Ribeiro","conteudo":"Oi Paula Ribeiro, aqui é da Afinix. Podemos retomar aquela cotação?","remetente":"+55 11 99000-0001"},{"canal":"whatsapp","status":"enviado","contato":"Rui Nogueira","conteudo":"Oi Rui Nogueira, aqui é da Afinix. Podemos retomar aquela cotação?","remetente":"+55 11 99000-0001"},{"canal":"whatsapp","status":"enviado","contato":"Sônia Prado","conteudo":"Olá Sônia Prado, trabalho com plano de saúde empresarial em São Paulo. Faz sentido conversarmos?","remetente":"+55 11 98000-0009"},{"canal":"whatsapp","status":"falha","contato":"Vera Castro","conteudo":"Olá Vera Castro, trabalho com plano de saúde empresarial em Osasco. Faz sentido conversarmos?","remetente":"+55 11 98000-0009"},{"canal":"email","status":"enviado","contato":"Marina Alves","conteudo":"Marina Alves, separei duas opções que cabem no que você falou.","remetente":"resgate@afinix-relaciona.com.br"},{"canal":"email","status":"enviado","contato":"Otávio Lima","conteudo":"Otávio Lima, separei duas opções que cabem no que você falou.","remetente":"resgate@afinix-relaciona.com.br"},{"canal":"email","status":"enviado","contato":"Rui Nogueira","conteudo":"Rui Nogueira, separei duas opções que cabem no que você falou.","remetente":"resgate@afinix-relaciona.com.br"},{"canal":"whatsapp","status":"enviado","contato":"Sônia Prado","conteudo":"Sônia Prado, consigo fazer uma cotação sem compromisso. Quer que eu envie?","remetente":"+55 11 98000-0009"},{"canal":"whatsapp","status":"enviado","contato":"Marina Alves","conteudo":"Marina Alves, te mandei um e-mail com as opções. Prefere que eu resuma por aqui?","remetente":"+55 11 99000-0001"},{"canal":"whatsapp","status":"enviado","contato":"Rui Nogueira","conteudo":"Rui Nogueira, te mandei um e-mail com as opções. Prefere que eu resuma por aqui?","remetente":"+55 11 99000-0001"}],"remetentes":[{"tipo":"fria","canal":"whatsapp","quota":2,"saude":100.0,"usado":1,"estado":"ativo","identificador":"+55 11 98000-0009"},{"tipo":"morna","canal":"whatsapp","quota":200,"saude":100.0,"usado":2,"estado":"ativo","identificador":"+55 11 99000-0001"},{"tipo":"morna","canal":"email","quota":300,"saude":100.0,"usado":3,"estado":"ativo","identificador":"resgate@afinix-relaciona.com.br"}],"supressao":[{"motivo":"opt-out registrado na campanha anterior","contato":"Tulio Barros"},{"motivo":"pediu remoção por telefone","contato":"Paula Ribeiro"}],"outbox":[{"fato":"identidade_invalida","autoria":"motor-prospeccao","contato":"Vera Castro"}],"horas":120,"modelos":[{"nome":"Resgate por WhatsApp","slug":"resgate-whatsapp","tipo":"morna","canais":["whatsapp"],"passos":3,"cadencia":[{"canal":"whatsapp","atraso":0},{"canal":"whatsapp","atraso":48},{"canal":"whatsapp","atraso":96}],"objetivo":"Reabrir conversa com oportunidade parada","descricao":"Três toques no WhatsApp para quem já conversou com a corretora e esfriou.","base_legal":"legítimo interesse — base própria com relacionamento prévio"},{"nome":"Resgate multicanal","slug":"resgate-multicanal","tipo":"morna","canais":["whatsapp","email","sms"],"passos":4,"cadencia":[{"canal":"whatsapp","atraso":0},{"canal":"email","atraso":48},{"canal":"whatsapp","atraso":72},{"canal":"sms","atraso":120}],"objetivo":"Reabrir oportunidade usando todos os endereços conhecidos","descricao":"WhatsApp, e-mail e SMS alternados. Quem não responde num canal recebe no outro.","base_legal":"legítimo interesse — base própria com relacionamento prévio"},{"nome":"Resgate por Direct","slug":"resgate-direct","tipo":"morna","canais":["instagram"],"passos":2,"cadencia":[{"canal":"instagram","atraso":0},{"canal":"instagram","atraso":12}],"objetivo":"Retomar conversa iniciada pelo próprio contato no Instagram","descricao":"Instagram para quem já falou com a corretora por lá. Só dentro da janela de 24h.","base_legal":"resposta em janela de 24h — contato iniciado pelo cliente"},{"nome":"Renovação de apólice","slug":"renovacao-apolice","tipo":"morna","canais":["whatsapp","sms"],"passos":3,"cadencia":[{"canal":"whatsapp","atraso":0},{"canal":"whatsapp","atraso":168},{"canal":"sms","atraso":336}],"objetivo":"Reter cliente antes do vencimento","descricao":"Aviso de vencimento em WhatsApp e SMS, começando 45 dias antes.","base_legal":"execução de contrato — cliente ativo"},{"nome":"Reengajamento","slug":"reengajamento","tipo":"morna","canais":["whatsapp","email"],"passos":2,"cadencia":[{"canal":"whatsapp","atraso":0},{"canal":"email","atraso":72}],"objetivo":"Recuperar conversa que morreu no meio","descricao":"Para quem respondeu, esfriou e nunca fechou. Retoma de onde a conversa parou.","base_legal":"legítimo interesse — contato respondeu anteriormente"},{"nome":"Prospecção fria — WhatsApp","slug":"prospeccao-fria","tipo":"fria","canais":["whatsapp"],"passos":2,"cadencia":[{"canal":"whatsapp","atraso":0},{"canal":"whatsapp","atraso":96}],"objetivo":"Abrir conversa com quem nunca falou com a corretora","descricao":"Dois toques em lista fria, com chip separado e volume baixo por dia.","base_legal":"legítimo interesse — prospecção B2B"},{"nome":"Prospecção fria — multicanal","slug":"prospeccao-fria-multicanal","tipo":"fria","canais":["whatsapp","email"],"passos":3,"cadencia":[{"canal":"email","atraso":0},{"canal":"whatsapp","atraso":72},{"canal":"email","atraso":168}],"objetivo":"Abrir conversa em lista fria sem arriscar o domínio da operação","descricao":"WhatsApp e e-mail em domínio separado do institucional. Pool frio isolado.","base_legal":"legítimo interesse — prospecção B2B"}],"campanhas":[{"nome":"Lista fria SP","tipo":"fria","ativa":true,"canais":["whatsapp"],"falhas":1,"modelo":"prospeccao-fria","passos":2,"enviadas":2,"objetivo":"Abrir conversa com quem nunca falou com a corretora","inscritos":2,"respostas":0,"concluidas":2,"suprimidos":0,"em_cadencia":0},{"nome":"Resgate 2024","tipo":"morna","ativa":true,"canais":["whatsapp","email"],"falhas":0,"modelo":"resgate-multicanal","passos":3,"enviadas":9,"objetivo":"Reabrir oportunidade usando todos os endereços conhecidos","inscritos":4,"respostas":1,"concluidas":2,"suprimidos":1,"em_cadencia":0}]};
+const HORAS = D.horas;
+const CANAL_CLS = {whatsapp:'wa',email:'email',sms:'sms',instagram:'insta'};
+const SIGLA = {whatsapp:'WA',email:'@',sms:'SMS',instagram:'IG',rcs:'RCS'};
+const NOME_CANAL = {whatsapp:'WhatsApp',email:'E-mail',sms:'SMS',instagram:'Instagram Direct',rcs:'RCS'};
+
+/* Canais do assistente. A disponibilidade é fato do código, não enfeite:
+   adapters/registro.ts diz quais provedores existem hoje. */
+const CANAIS = [
+  {id:'whatsapp', prov:'meta_cloud', nome:'WhatsApp — API oficial',
+   desc:'Meta Cloud API. Para base própria com opt-in.', ok:true},
+  {id:'whatsapp', prov:'evolution', nome:'WhatsApp — não oficial',
+   desc:'Evolution API self-hosted. Chips com quota baixa, para lista fria.', ok:true},
+  {id:'sms', prov:'comtele', nome:'SMS', desc:'Comtele. Bom para último toque.', ok:true},
+  {id:'email', prov:'smtp', nome:'E-mail',
+   desc:'Depende do warm-up de domínio, em andamento.', ok:false},
+  {id:'instagram', prov:'instagram_oficial', nome:'Instagram Direct',
+   desc:'Só dentro da janela de 24h, para quem iniciou o contato.', ok:false},
+  {id:'rcs', prov:'rcs', nome:'RCS',
+   desc:'Exige agente verificado junto às operadoras.', ok:false},
+];
+
+const MODELO_PASSOS = {"resgate-whatsapp":[{"canal":"whatsapp","atraso_horas":0,"template":"Oi {{nome}}, aqui é da Afinix. Você chegou a olhar o plano que conversamos?"},{"canal":"whatsapp","atraso_horas":48,"template":"{{nome}}, consegui uma condição melhor que a da nossa conversa. Quer ver?"},{"canal":"whatsapp","atraso_horas":96,"template":"{{nome}}, ainda faz sentido retomar? Se não, é só me dizer que eu paro por aqui."}],"resgate-multicanal":[{"canal":"whatsapp","atraso_horas":0,"template":"Oi {{nome}}, aqui é da Afinix. Podemos retomar aquela cotação?"},{"canal":"email","atraso_horas":48,"template":"{{nome}}, separei duas opções que cabem no que você falou."},{"canal":"whatsapp","atraso_horas":72,"template":"{{nome}}, te mandei um e-mail com as opções. Prefere que eu resuma por aqui?"},{"canal":"sms","atraso_horas":120,"template":"Afinix: {{nome}}, sua cotação continua válida. Responda SIM para retomar."}],"resgate-direct":[{"canal":"instagram","atraso_horas":0,"template":"Oi {{nome}}! Vi que você perguntou sobre plano de saúde. Posso te ajudar?"},{"canal":"instagram","atraso_horas":12,"template":"{{nome}}, consigo montar uma simulação rápida se você me disser a idade e a cidade."}],"renovacao-apolice":[{"canal":"whatsapp","atraso_horas":0,"template":"{{nome}}, sua apólice vence em breve. Quer que eu revise as condições antes da renovação?"},{"canal":"whatsapp","atraso_horas":168,"template":"{{nome}}, comparei seu plano com o que está no mercado hoje. Te mando?"},{"canal":"sms","atraso_horas":336,"template":"Afinix: {{nome}}, sua apólice vence em 15 dias. Responda SIM para falar com seu corretor."}],"reengajamento":[{"canal":"whatsapp","atraso_horas":0,"template":"{{nome}}, ficamos de continuar aquela conversa. Ainda quer que eu monte a proposta?"},{"canal":"email","atraso_horas":72,"template":"{{nome}}, deixo aqui o resumo do que conversamos, caso queira retomar."}],"prospeccao-fria":[{"canal":"whatsapp","atraso_horas":0,"template":"Olá {{nome}}, trabalho com plano de saúde empresarial em {{cidade}}. Faz sentido conversarmos?"},{"canal":"whatsapp","atraso_horas":96,"template":"{{nome}}, consigo fazer uma cotação sem compromisso. Quer que eu envie?"}],"prospeccao-fria-multicanal":[{"canal":"email","atraso_horas":0,"template":"{{nome}}, ajudo empresas de {{cidade}} a reduzir o custo do plano de saúde. Posso mandar um comparativo?"},{"canal":"whatsapp","atraso_horas":72,"template":"Olá {{nome}}, te mandei um e-mail sobre plano empresarial. Prefere falar por aqui?"},{"canal":"email","atraso_horas":168,"template":"{{nome}}, último toque. Se não for o momento, é só ignorar este e-mail."}]};
+
+/* ============================ HUB ============================ */
+
+function pintarHub(){
+  const cs = D.campanhas;
+  const ativas = cs.filter(c=>c.ativa).length;
+  const env = cs.reduce((n,c)=>n+c.enviadas,0);
+  const resp = cs.reduce((n,c)=>n+c.respostas,0);
+  const fal = cs.reduce((n,c)=>n+c.falhas,0);
+  const taxa = env? Math.round((resp/env)*100) : 0;
+
+  document.getElementById('hub-kpis').innerHTML = [
+    ['Campanhas ativas', ativas, `${cs.length - ativas} pausada(s)`],
+    ['Volume de envio', env, 'mensagens decididas'],
+    ['Resgates', resp, `${taxa}% de quem recebeu`],
+    ['Falhas', fal, fal? 'com culpa registrada' : 'nenhuma até aqui'],
+    ['Blacklist', D.supressao.length, 'nunca recebem nada'],
+  ].map(([k,v,s])=>`<div class="kpi"><span>${k}</span><b class="mono">${v}</b><em>${s}</em></div>`).join('');
+
+  document.getElementById('hub-nc').textContent = `${cs.length} em operação`;
+  document.getElementById('hub-campanhas').innerHTML = cs.map(c=>`
+    <button class="camp" data-camp="${c.nome}">
+      <div class="cardtop">
+        <div style="min-width:0">
+          <b>${c.nome}</b>
+          <p>${c.objetivo||''}</p>
+        </div>
+        <span class="tipo ${c.tipo}">${c.tipo}</span>
+      </div>
+      <div class="chips">${c.canais.map(x=>`<span class="chip">${NOME_CANAL[x]||x}</span>`).join('')}
+        <span class="chip">${c.passos} passos</span></div>
+      <div class="campnum">
+        <div><b class="mono">${c.inscritos}</b><span>inscritos</span></div>
+        <div><b class="mono">${c.enviadas}</b><span>enviadas</span></div>
+        <div><b class="mono">${c.respostas}</b><span>respostas</span></div>
+        <div><b class="mono">${c.suprimidos}</b><span>opt-out</span></div>
+      </div>
+      <div class="cardfoot">
+        <span class="live ${c.em_cadencia?'':'off'}"><i></i>${c.em_cadencia? c.em_cadencia+' em cadência' : 'nenhum em cadência'}</span>
+        <span class="usar">Abrir →</span>
+      </div>
+    </button>`).join('');
+
+  document.getElementById('hub-modelos').innerHTML = D.modelos.map(m=>`
+    <button class="card" data-modelo="${m.slug}">
+      <div class="cardtop">
+        <div style="min-width:0"><b>${m.nome}</b><p>${m.descricao}</p></div>
+        <span class="tipo ${m.tipo}">${m.tipo}</span>
+      </div>
+      ${previaCadencia(m.cadencia)}
+      <div class="cardfoot">
+        <span>${m.passos} passos · ${m.canais.map(c=>NOME_CANAL[c]||c).join(' · ')}</span>
+        <span class="usar">Usar →</span>
+      </div>
+    </button>`).join('');
+}
+
+function previaCadencia(cad){
+  if(!cad || !cad.length) return '';
+  return `<div class="cad">` + cad.map((p,i)=>{
+    const lig = i? `<span class="lig">${p.atraso? `<b>${horas(p.atraso)}</b>`:''}</span>` : '';
+    return `${lig}<span class="p"><i class="${p.canal}">${SIGLA[p.canal]||'?'}</i></span>`;
+  }).join('') + `</div>`;
+}
+function horas(h){ return h>=24? `${Math.round(h/24)}d` : `${h}h`; }
+
+/* ============================ ASSISTENTE ============================ */
+
+const W = {passo:1, modelo:null, canais:[], nome:''};
+const wizard = document.getElementById('wizard');
+
+function abrirWizard(slug){
+  W.passo = slug? 2 : 1;
+  W.modelo = slug? D.modelos.find(m=>m.slug===slug) : null;
+  W.canais = W.modelo? W.modelo.canais.slice() : [];
+  W.nome = W.modelo? W.modelo.nome : '';
+  wizard.dataset.open='true';
+  pintarWizard();
+}
+
+function pintarWizard(){
+  const corpo = document.getElementById('w-corpo');
+  const tit = document.getElementById('w-titulo');
+  const sub = document.getElementById('w-sub');
+  const obs = document.getElementById('w-obs');
+  const next = document.getElementById('w-next');
+  const voltar = document.getElementById('w-voltar');
+  [1,2,3].forEach(n=>document.getElementById('wp'+n).classList.toggle('on', W.passo>=n));
+  voltar.hidden = W.passo===1;
+
+  if(W.passo===1){
+    tit.textContent='Escolha um modelo';
+    sub.textContent='Cada modelo já traz cadência, base legal e canais.';
+    obs.textContent='';
+    next.textContent='Continuar'; next.disabled = !W.modelo;
+    corpo.innerHTML = `<div class="opts">` + D.modelos.map(m=>`
+      <button class="opt" data-slug="${m.slug}" aria-pressed="${W.modelo?.slug===m.slug}">
+        <b>${m.nome}<span class="tipo ${m.tipo}" style="margin-left:auto">${m.tipo}</span></b>
+        <p>${m.descricao}</p>
+        <p style="color:var(--ink-3)">${m.passos} passos · ${m.canais.map(c=>NOME_CANAL[c]).join(', ')}</p>
+      </button>`).join('') + `</div>`;
+  }
+
+  if(W.passo===2){
+    tit.textContent='Quais canais esta campanha usa?';
+    sub.textContent='Passo do modelo em canal não escolhido sai da cadência.';
+    const fora = CANAIS.filter(c=>!c.ok && W.modelo?.canais.includes(c.id));
+    obs.textContent = fora.length? `${fora.map(c=>c.nome).join(' e ')} ainda sem adapter — o passo fica de fora.` : '';
+    next.textContent='Continuar';
+    next.disabled = !W.canais.length;
+    corpo.innerHTML = `<div class="opts">` + CANAIS.map((c,i)=>{
+      const noModelo = !W.modelo || W.modelo.canais.includes(c.id);
+      const off = !c.ok || !noModelo;
+      const on = W.canais.includes(c.id) && c.ok;
+      return `<button class="opt" data-canal="${c.id}" data-i="${i}" data-off="${off}"
+        aria-pressed="${on}" ${off?'disabled':''}>
+        <b><i class="${c.id}" style="background:var(--${CANAL_CLS[c.id]==='wa'?'wa':CANAL_CLS[c.id]==='email'?'mail':CANAL_CLS[c.id]==='sms'?'sms':'ink-3'})">${SIGLA[c.id]||'?'}</i>
+          ${c.nome}${!c.ok?'<span class="breve">em breve</span>':''}</b>
+        <p>${c.desc}</p>
+        ${!noModelo?'<p style="color:var(--ink-3)">Este modelo não tem passo neste canal.</p>':''}
+      </button>`;
+    }).join('') + `</div>`;
+  }
+
+  if(W.passo===3){
+    tit.textContent='Confira e crie';
+    sub.textContent='A cadência abaixo é o que o motor vai executar.';
+    obs.textContent='';
+    next.textContent='Criar campanha'; next.disabled = !W.nome.trim();
+    const passos = cadenciaFiltrada();
+    corpo.innerHTML = `
+      <div class="campo">
+        <label for="w-nome">Nome da campanha</label>
+        <input id="w-nome" value="${W.nome.replace(/"/g,'&quot;')}" placeholder="Resgate Q4">
+      </div>
+      <div class="resumo">
+        <h4>Cadência resultante — ${passos.length} passos</h4>
+        ${passos.map((p,i)=>`
+          <div class="rlinha"><i class="${p.canal}">${SIGLA[p.canal]}</i>
+            <div><b>Passo ${i+1} · ${NOME_CANAL[p.canal]} · ${i===0?'na hora':'+'+horas(p.atraso)}</b>
+              <p>${p.template}</p></div></div>`).join('')}
+      </div>
+      <p style="margin:12px 0 0;font-size:12px;color:var(--ink-3)">
+        Tipo <b>${W.modelo.tipo}</b> · base legal: ${W.modelo.base_legal}.
+        O pool de remetentes ${W.modelo.tipo==='fria'?'frio':'morno'} é o único que esta campanha pode usar.</p>`;
+    document.getElementById('w-nome').addEventListener('input', e=>{
+      W.nome = e.target.value; next.disabled = !W.nome.trim();
+    });
+  }
+}
+
+/* Mesma regra de criar_campanha_de_modelo(): filtra por canal, renumera,
+   primeiro passo sai na hora. */
+function cadenciaFiltrada(){
+  const passosModelo = MODELO_PASSOS[W.modelo.slug] || [];
+  return passosModelo.filter(p=>W.canais.includes(p.canal))
+    .map((p,i)=>({canal:p.canal, template:p.template,
+                  atraso: i===0? 0 : (p.atraso_horas ?? 24)}));
+}
+
+document.getElementById('w-corpo').addEventListener('click', e=>{
+  const m = e.target.closest('[data-slug]');
+  if(m){ W.modelo = D.modelos.find(x=>x.slug===m.dataset.slug);
+    W.canais = W.modelo.canais.filter(c=>CANAIS.some(x=>x.id===c && x.ok));
+    W.nome = W.modelo.nome; pintarWizard(); return; }
+  const c = e.target.closest('[data-canal]');
+  if(c && c.dataset.off!=='true'){
+    const id = c.dataset.canal;
+    W.canais = W.canais.includes(id)? W.canais.filter(x=>x!==id) : [...W.canais, id];
+    pintarWizard();
+  }
+});
+
+document.getElementById('w-next').addEventListener('click', ()=>{
+  if(W.passo<3){ W.passo++; pintarWizard(); return; }
+  const p = cadenciaFiltrada();
+  document.getElementById('w-corpo').innerHTML = `
+    <div class="resumo" style="text-align:center;padding:26px">
+      <h4 style="color:var(--accent)">Pronto para criar</h4>
+      <p style="margin:0 0 6px;font-size:14px"><b>${W.nome}</b> — ${p.length} passos em
+      ${[...new Set(p.map(x=>NOME_CANAL[x.canal]))].join(', ')}.</p>
+      <p style="margin:0;font-size:12.5px;color:var(--ink-2)">
+      No banco isto é <span class="mono">criar_campanha_de_modelo('${W.modelo.slug}', '${W.nome}',
+      '{${W.canais.join(',')}}')</span> — função já implementada e testada.
+      Este protótipo não tem backend ligado, então a campanha não é gravada.</p>
+    </div>`;
+  document.getElementById('w-next').disabled = true;
+  document.getElementById('w-obs').textContent = 'Falta ligar o app ao Supabase para gravar de verdade.';
+});
+
+document.getElementById('w-voltar').addEventListener('click', ()=>{ W.passo--; pintarWizard(); });
+document.getElementById('w-cancel').addEventListener('click', ()=> wizard.dataset.open='false');
+wizard.addEventListener('click', e=>{ if(e.target===wizard) wizard.dataset.open='false'; });
+document.getElementById('abrir-wizard').addEventListener('click', ()=> abrirWizard(null));
+
+document.getElementById('hub-modelos').addEventListener('click', e=>{
+  const b = e.target.closest('[data-modelo]'); if(b) abrirWizard(b.dataset.modelo);
+});
+document.getElementById('hub-campanhas').addEventListener('click', e=>{
+  const b = e.target.closest('[data-camp]'); if(b) irPara('campanha', b.dataset.camp);
+});
+
+/* ============================ NAVEGAÇÃO ============================ */
+
+function irPara(v, campanha){
+  document.getElementById('v-hub').hidden = v!=='hub';
+  document.getElementById('v-campanha').hidden = v!=='campanha';
+  [...document.querySelectorAll('#nav button')].forEach(b=>
+    b.setAttribute('aria-current', String(b.dataset.v===v)));
+  if(v==='campanha'){
+    const c = D.campanhas.find(x=>x.nome===campanha) || D.campanhas[0];
+    document.getElementById('camp-nome').textContent = c.nome;
+    document.getElementById('camp-sub').textContent =
+      `${c.objetivo} · ${c.canais.map(x=>NOME_CANAL[x]).join(' · ')} · pool ${c.tipo}`;
+    FILTRO = c.nome;
+    pintar(+document.getElementById('t').value);
+  }
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+document.getElementById('nav').addEventListener('click', e=>{
+  const b = e.target.closest('button'); if(b) irPara(b.dataset.v);
+});
+document.getElementById('voltar').addEventListener('click', ()=> irPara('hub'));
+/* ============================ CONSOLE ============================ */
+
+let FILTRO = null;
 const CAMP = {};
 D.linha.filter(e=>e.acao==='inscrito').forEach(e=>CAMP[e.contato]=e.detalhe);
 D.enrollments.forEach(e=>CAMP[e.contato]=e.campanha);
 CAMP['Tulio Barros']='Resgate 2024';
-const HORAS = D.horas;
-const CANAL_CLS = {whatsapp:'wa',email:'email',sms:'sms'};
+const PESSOAS = [...new Set(D.linha.map(e=>e.contato).filter(Boolean))];
 
-// Estado do motor na hora T, reconstruído do que ele próprio registrou.
 function estadoEm(T){
-  const p = {}; 
+  const p = {};
   PESSOAS.forEach(n=>p[n]={nome:n,campanha:CAMP[n]||'—',status:'fora',motivo:null,
     nodes:[],msgs:0,inscrito:false});
   const sup = [{contato:'Tulio Barros',motivo:'opt-out registrado na campanha anterior',h:0}];
-  const out = [];
-  const uso = {}; D.remetentes.forEach(s=>uso[s.identificador]=0);
-  let adiados = 0;
+  const out = []; const uso = {}; D.remetentes.forEach(s=>uso[s.identificador]=0);
 
   for(const e of D.linha){
     if(e.momento>T) break;
@@ -363,18 +763,17 @@ function estadoEm(T){
       case 'suprimida': sup.push({contato:e.contato,motivo:e.detalhe,h:e.momento}); break;
       case 'encerrado_supressao': a.status='encerrado'; a.motivo='supressao'; break;
       case 'encerrado_fim': a.status='encerrado'; a.motivo='fim_dos_passos'; break;
-      case 'adiado_sem_remetente': a.status='espera'; adiados+=e.n; break;
+      case 'adiado_sem_remetente': a.status='espera'; break;
     }
     if(e.acao==='respondeu'){ a.status='encerrado'; a.motivo='resposta'; }
   }
-  return {p,sup,out,uso,adiados};
+  return {p,sup,out,uso};
 }
 
 const ST = {ativo:['ativo','Em cadência'],espera:['espera','Aguardando remetente'],
   recusado:['fora','Não inscrito'],fora:['fora','—']};
 const MOT = {resposta:['resposta','Respondeu'],supressao:['supressao','Suprimido'],
   fim_dos_passos:['fim','Cadência concluída'],cancelado_operacional:['fim','Cancelado']};
-
 function badge(a){
   if(a.status==='encerrado'){ const m=MOT[a.motivo]||['fim','Encerrado'];
     return `<span class="st ${m[0]}">${m[1]}</span>`; }
@@ -384,26 +783,26 @@ function badge(a){
 function pintar(T){
   const S = estadoEm(T);
   document.getElementById('hora').textContent = T;
+  let arr = Object.values(S.p);
+  if(FILTRO) arr = arr.filter(a=>a.campanha===FILTRO);
 
-  const arr = Object.values(S.p);
   const ativos = arr.filter(a=>a.status==='ativo'||a.status==='espera').length;
   const resp = arr.filter(a=>a.motivo==='resposta').length;
   const msgs = arr.reduce((n,a)=>n+a.msgs,0);
   const inscritos = arr.filter(a=>a.inscrito).length;
 
   document.getElementById('kpis').innerHTML = [
-    ['Inscritos',inscritos,'de 7 contatos na base'],
+    ['Inscritos',inscritos,'nesta campanha'],
     ['Em cadência',ativos,'com próximo passo agendado'],
     ['Mensagens decididas',msgs,'nenhuma enviada — shadow'],
     ['Respostas',resp,resp?'encerram o enrollment inteiro':'nenhuma ainda'],
-    ['Na supressão',S.sup.length,'nunca recebem nada'],
+    ['Na supressão',S.sup.length,'lista global'],
   ].map(([k,v,s])=>`<div class="kpi"><span>${k}</span><b class="mono">${v}</b><em>${s}</em></div>`).join('');
 
   document.getElementById('lanes').innerHTML = arr.map(a=>{
     const nodes = a.nodes.map(n=>{
-      const x = Math.min(100, (n.h/HORAS)*100);
-      if(n.tipo==='msg') return `<i class="node ${CANAL_CLS[n.canal]||'wa'}" style="left:${x}%"
-        title="${n.canal} · ${n.h}h"></i>`;
+      const x = Math.min(100,(n.h/HORAS)*100);
+      if(n.tipo==='msg') return `<i class="node ${CANAL_CLS[n.canal]||'wa'}" style="left:${x}%" title="${n.canal} · ${n.h}h"></i>`;
       if(n.tipo==='skip') return `<i class="node evt skip" style="left:${x}%" title="${n.rotulo} · ${n.h}h"></i>`;
       return `<i class="node evt ${n.tipo}" style="left:${x}%" title="${n.rotulo} · ${n.h}h"></i>`;
     }).join('');
@@ -412,7 +811,7 @@ function pintar(T){
       <span class="who"><b>${a.nome}</b><span>${a.campanha}</span></span>
       <span class="rail2"><i class="done" style="width:${ate}%"></i>${nodes}</span>
       ${badge(a)}</button>`;
-  }).join('');
+  }).join('') || '<div class="vazio">Nenhum contato nesta campanha até aqui.</div>';
 
   document.getElementById('pool').innerHTML = D.remetentes.map(s=>{
     const u = S.uso[s.identificador]||0, pct = Math.min(100,(u/s.quota)*100), cheio = u>=s.quota;
@@ -435,7 +834,9 @@ function pintar(T){
       <div><b>${o.contato}</b><p>${o.fato} · autoria motor-prospeccao</p></div></div>`).join('')
     : '<div class="vazio">Nada pendente para o CRM</div>';
 
-  const evs = D.linha.filter(e=>e.momento<=T).slice().reverse();
+  let evs = D.linha.filter(e=>e.momento<=T);
+  if(FILTRO) evs = evs.filter(e=>!e.contato || CAMP[e.contato]===FILTRO);
+  evs = evs.slice().reverse();
   document.getElementById('nev').textContent = `${evs.length} eventos`;
   const COR = {motor:'var(--accent)',provedor:'var(--mail)',pessoa:'var(--ok)',operador:'var(--warn)'};
   document.getElementById('log').innerHTML = evs.map(e=>{
@@ -454,19 +855,16 @@ function rotulo(e){
     entregue_ao_provedor:`aceito pelo provedor · ${e.detalhe}`,
     rejeitado:`rejeitado — ${e.detalhe}`,
     respondeu:`respondeu: “${e.detalhe}”`,
-    clicou:e.detalhe,
-    suprimida:e.detalhe,
+    clicou:e.detalhe, suprimida:e.detalhe, novo_dia:e.detalhe,
     encerrado_supressao:'enrollment encerrado por supressão',
     encerrado_fim:'cadência concluída',
     adiado_sem_remetente:`adiado — ${e.detalhe}`,
-    novo_dia:e.detalhe,
     passo_pulado_sem_identidade:`passo pulado — sem endereço em ${e.detalhe}`,
     passo_pulado_canal:`passo pulado — canal ${e.detalhe} não habilitado`,
   };
   return m[e.acao]||e.acao;
 }
 
-// régua: marcas nas horas em que algo aconteceu
 const COR2 = {motor:'var(--accent)',provedor:'var(--mail)',pessoa:'var(--ok)',operador:'var(--warn)'};
 document.getElementById('ticks').innerHTML = [...new Set(D.linha
   .filter(e=>e.acao!=='adiado_sem_remetente').map(e=>e.momento+'|'+e.ator))]
@@ -474,6 +872,7 @@ document.getElementById('ticks').innerHTML = [...new Set(D.linha
     return `<i class="tick" style="left:${(h/HORAS)*100}%;background:${COR2[a]||'var(--ink-3)'};opacity:.55"></i>`;}).join('');
 
 const slider = document.getElementById('t');
+slider.max = HORAS; slider.value = HORAS;
 slider.addEventListener('input', ()=>pintar(+slider.value));
 document.getElementById('rew').addEventListener('click', ()=>{slider.value=0;pintar(0);});
 
@@ -486,15 +885,13 @@ document.getElementById('run').addEventListener('click', ev=>{
     const v=+slider.value+1;
     if(v>HORAS){clearInterval(timer);timer=null;ev.target.textContent='Reproduzir';return;}
     slider.value=v; pintar(v);
-  }, 90);
+  }, 70);
 });
 
-// drawer
 const drawer=document.getElementById('drawer');
 document.getElementById('lanes').addEventListener('click', ev=>{
   const b=ev.target.closest('.lane'); if(!b) return;
-  const nome=b.dataset.p;
-  const S=estadoEm(+slider.value); const a=S.p[nome];
+  const nome=b.dataset.p; const a=estadoEm(+slider.value).p[nome];
   document.getElementById('dnome').textContent=nome;
   document.getElementById('dsub').textContent=`${a.campanha} · ${a.msgs} mensagem(ns) decidida(s)`;
   const minhas=D.mensagens.filter(m=>m.contato===nome).slice(0,a.msgs);
@@ -508,17 +905,10 @@ document.getElementById('lanes').addEventListener('click', ev=>{
 });
 document.getElementById('dclose').addEventListener('click',()=>drawer.dataset.open='false');
 drawer.addEventListener('click',e=>{if(e.target===drawer)drawer.dataset.open='false';});
-document.addEventListener('keydown',e=>{if(e.key==='Escape')drawer.dataset.open='false';});
-
-// nav (as três visões são âncoras da mesma tela)
-document.getElementById('nav').addEventListener('click',e=>{
-  const b=e.target.closest('button'); if(!b) return;
-  [...document.querySelectorAll('#nav button')].forEach(x=>x.setAttribute('aria-current',String(x===b)));
-  const alvo={operacao:'lanes',pool:'pool',supressao:'sup'}[b.dataset.v];
-  document.getElementById(alvo)?.scrollIntoView({behavior:'smooth',block:'center'});
+document.addEventListener('keydown',e=>{
+  if(e.key==='Escape'){drawer.dataset.open='false';wizard.dataset.open='false';}
 });
 
-// tema
 document.getElementById('theme').addEventListener('click',()=>{
   const r=document.documentElement;
   const escuro = r.getAttribute('data-theme')==='dark' ||
@@ -527,6 +917,7 @@ document.getElementById('theme').addEventListener('click',()=>{
 });
 
 document.getElementById('foot-horas').textContent=HORAS;
-document.getElementById('foot-msg').textContent=`${D.mensagens.length} mensagens decididas`;
+document.getElementById('foot-msg').textContent=`${D.campanhas.length} campanhas · ${D.modelos.length} modelos`;
+pintarHub();
 pintar(HORAS);
 </script>

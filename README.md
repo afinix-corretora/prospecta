@@ -136,11 +136,32 @@ Duas coisas que o despachante garante e que o legado não garantia:
   `outbox` (D3); culpa do remetente e falha transitória penalizam a conta. Sem essa distinção,
   uma lista suja abriria o circuito de remetentes saudáveis — o oposto da invariante 3.
 
+## Modelos de campanha
+
+`campaign_templates` é o catálogo do hub: sete receitas prontas (resgate por WhatsApp, resgate
+multicanal, direct no Instagram, renovação de apólice, reengajamento, prospecção fria em um ou
+dois canais), cada uma com cadência, base legal e canais que sabe usar.
+
+`criar_campanha_de_modelo(slug, nome, canais)` instancia: cria campanha, flow, versão 1 e passos.
+Os canais escolhidos filtram a cadência — passo de canal não escolhido sai, e os que restam são
+renumerados com o primeiro saindo na hora.
+
+Modelo **não** é campanha. Como `flow_versions` é imutável (D9), editar o modelo depois não mexe
+em nenhuma campanha já criada — há teste para isso.
+
+Recusa na criação, em vez de descobrir em produção: canal que o modelo não conhece, modelo inativo,
+e combinação de canais que deixaria a cadência sem nenhum passo.
+
 ## Console de operação
 
-`demo/gerar.sh` roda o motor num cenário com duas campanhas e sete contatos, avança o relógio de
-evento em evento e exporta tudo que ele decidiu para `demo/preview.json`. `ui/console.html` lê esse
-arquivo e reproduz as horas simuladas numa régua temporal.
+`demo/gerar.sh` cria duas campanhas **a partir dos modelos**, roda o motor sobre sete contatos,
+avança o relógio de evento em evento e exporta tudo que ele decidiu para `demo/preview.json`.
+`ui/console.html` lê esse arquivo.
+
+A tela tem duas partes. O **hub** é a inicial: métricas agregadas, cards das campanhas em operação,
+catálogo de modelos e o assistente de criação — que mostra quais canais têm adapter hoje e quais
+não têm, em vez de oferecer tudo e falhar depois. O **console** é o detalhe de uma campanha, com a
+régua temporal que reproduz as horas simuladas.
 
 Não é mockup: os números, as mensagens e as decisões são do motor real. O provedor é simulado
 dentro do `demo/preview.sql` — em produção quem responde é o adapter.
