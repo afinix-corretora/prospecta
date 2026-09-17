@@ -139,16 +139,30 @@ $$;
 
 CREATE FUNCTION p.avancar_relogio() RETURNS boolean
 LANGUAGE plpgsql AS $$
-DECLARE v_proximo timestamptz; v_delta interval;
+DECLARE v_proximo timestamptz; v_delta interval; v_dia_antes integer; v_dia_depois integer;
 BEGIN
   SELECT min(next_run_at) INTO v_proximo FROM enrollments
    WHERE status = 'ativo' AND next_run_at IS NOT NULL;
   IF v_proximo IS NULL THEN RETURN false; END IF;
 
   v_delta := greatest(v_proximo - now(), interval '0');
+  SELECT floor(extract(epoch from decorrido)/86400)::int INTO v_dia_antes FROM p.relogio;
+
   UPDATE enrollments SET next_run_at = next_run_at - v_delta
    WHERE status = 'ativo' AND next_run_at IS NOT NULL;
   UPDATE p.relogio SET decorrido = decorrido + v_delta;
+
+  SELECT floor(extract(epoch from decorrido)/86400)::int INTO v_dia_depois FROM p.relogio;
+
+  -- O relógio virtual anda puxando next_run_at, mas current_date é real e não
+  -- se move — então a janela de quota nunca viraria sozinha aqui. Quando o dia
+  -- simulado troca, o harness faz o que o calendário faria em produção.
+  IF v_dia_depois > v_dia_antes THEN
+    UPDATE sender_accounts SET janela = current_date - 1;
+    PERFORM p.registrar('operador', NULL, 'novo_dia',
+      format('dia %s da cadência — quotas diárias renovadas', v_dia_depois + 1));
+  END IF;
+
   RETURN true;
 END;
 $$;

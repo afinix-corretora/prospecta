@@ -122,6 +122,16 @@ depois é uma classe nova no `adapters/` e uma linha no registro — nada no mot
 *Confirmar com o time comercial se há compromisso contratual com UAZAPI que eu não enxergo pelo
 código.*
 
+### D15 — Adiamento espera a capacidade voltar, não um intervalo fixo
+Quando o pool não tem vaga, o agendador reagenda para quando a capacidade pode voltar:
+virada da janela diária se a quota esgotou, fim do prazo se o circuito está aberto, uma hora se não
+há remetente cadastrado.
+*Como apareceu:* o cenário de `demo/` mostrou um chip frio com quota de 2/dia esgotando na terceira
+hora e o motor adiando o mesmo contato de 15 em 15 minutos até o fim — 36 tentativas sem chance de
+dar certo. Nenhum teste tinha pego, porque cada adiamento isolado estava correto.
+**Consequência:** `proximo_horario_de_pool(canal, tipo)` é a fonte dessa resposta, e o cenário
+passou de 105 horas com 36 adiamentos perdidos para 5 dias com zero.
+
 ---
 
 ## Decisões adiadas (não decidir agora)

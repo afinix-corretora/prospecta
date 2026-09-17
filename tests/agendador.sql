@@ -393,6 +393,56 @@ END;
 $$;
 
 -- ---------------------------------------------------------------------------
+-- Adiamento espera o tempo certo
+-- ---------------------------------------------------------------------------
+
+DO $$
+DECLARE v_contato uuid; v_enr uuid; v_quando timestamptz;
+BEGIN
+  -- Quota esgotada: o pool só volta na virada da janela diária.
+  PERFORM a.confere('adiamento: quota esgotada espera a virada da janela',
+    proximo_horario_de_pool('sms','fria')::date = current_date + 1,
+    proximo_horario_de_pool('sms','fria')::text);
+
+  -- E o agendador usa isso em vez de 15 minutos.
+  v_contato := gen_random_uuid();
+  INSERT INTO contacts (id, nome, origem) VALUES (v_contato,'Quota cheia','planilha');
+  INSERT INTO contact_identities (contact_id, canal, valor, valor_norm, origem)
+  VALUES (v_contato,'sms','+5513955599','5513955599','planilha');
+  v_enr := inscrever(v_contato,'b3000000-0000-0000-0000-000000000005',
+                     'b5000000-0000-0000-0000-000000000002', now() - interval '1 minute');
+
+  PERFORM a.confere('adiamento: agendador adia até a janela, não 15 minutos',
+    a.acao_de(v_enr) = 'adiado_sem_remetente');
+  PERFORM a.confere('adiamento: reagendado para depois de hoje',
+    (SELECT next_run_at::date >= current_date + 1 FROM enrollments WHERE id = v_enr),
+    (SELECT next_run_at::text FROM enrollments WHERE id = v_enr));
+END;
+$$;
+
+DO $$
+DECLARE v_contato uuid; v_enr uuid;
+BEGIN
+  -- Circuito aberto: espera o circuito fechar, não a virada do dia.
+  INSERT INTO sender_accounts (id, canal, identificador, provedor, tipo_permitido, quota_diaria)
+  VALUES ('b7000000-0000-0000-0000-000000000009','instagram','@perfil','instagram_oficial','fria',50);
+  UPDATE sender_accounts
+     SET estado = 'circuito_aberto', circuito_aberto_ate = now() + interval '20 minutes'
+   WHERE id = 'b7000000-0000-0000-0000-000000000009';
+
+  PERFORM a.confere('adiamento: circuito aberto espera o circuito fechar',
+    proximo_horario_de_pool('instagram','fria') BETWEEN now() + interval '19 minutes'
+                                                    AND now() + interval '21 minutes',
+    proximo_horario_de_pool('instagram','fria')::text);
+END;
+$$;
+
+SELECT a.confere('adiamento: pool vazio tenta de novo em uma hora',
+  proximo_horario_de_pool('email','fria') BETWEEN now() + interval '59 minutes'
+                                              AND now() + interval '61 minutes',
+  proximo_horario_de_pool('email','fria')::text);
+
+-- ---------------------------------------------------------------------------
 -- Relatório
 -- ---------------------------------------------------------------------------
 

@@ -117,6 +117,8 @@ e elas têm teste automatizado obrigatório.**
 > `gtivnngoeccqbvfjiyne` — e com ele a comparação contra o Disparador.
 >
 > Toda mudança de schema roda `tests/run.sh` antes do commit. Teste vermelho é bloqueio, não aviso.
+> `demo/gerar.sh` roda o motor num cenário completo e `ui/console.html` mostra o resultado — foi
+> assim que D15 apareceu, um erro que teste unitário nenhum pegava.
 
 **Fase 0 concluída** — inventário em `INVENTARIO-FASE-0.md`: 83 edge functions e 52 tabelas
 classificadas em migra/adapta/descarta. Leitura obrigatória antes de propor qualquer migração de

@@ -122,7 +122,7 @@
             "ator": "provedor",
             "canal": "whatsapp",
             "contato": "Marina Alves",
-            "detalhe": "PROV-7e09d906",
+            "detalhe": "PROV-11aa3b6e",
             "momento": 0,
             "remetente": "+55 11 99000-0001"
         },
@@ -131,7 +131,7 @@
             "ator": "provedor",
             "canal": "whatsapp",
             "contato": "Otávio Lima",
-            "detalhe": "PROV-d2abbda7",
+            "detalhe": "PROV-4210ecc9",
             "momento": 0,
             "remetente": "+55 11 99000-0001"
         },
@@ -140,7 +140,7 @@
             "ator": "provedor",
             "canal": "whatsapp",
             "contato": "Paula Ribeiro",
-            "detalhe": "PROV-4bba8c9e",
+            "detalhe": "PROV-66945b00",
             "momento": 0,
             "remetente": "+55 11 99000-0001"
         },
@@ -149,7 +149,7 @@
             "ator": "provedor",
             "canal": "whatsapp",
             "contato": "Rui Nogueira",
-            "detalhe": "PROV-e7f819ea",
+            "detalhe": "PROV-c121c9e8",
             "momento": 0,
             "remetente": "+55 11 99000-0001"
         },
@@ -158,7 +158,7 @@
             "ator": "provedor",
             "canal": "whatsapp",
             "contato": "Sônia Prado",
-            "detalhe": "PROV-5eab03a1",
+            "detalhe": "PROV-7951c49b",
             "momento": 0,
             "remetente": "+55 11 98000-0009"
         },
@@ -170,6 +170,15 @@
             "detalhe": "número não existe no WhatsApp",
             "momento": 0,
             "remetente": "+55 11 98000-0009"
+        },
+        {
+            "acao": "novo_dia",
+            "ator": "operador",
+            "canal": null,
+            "contato": null,
+            "detalhe": "dia 3 da cadência — quotas diárias renovadas",
+            "momento": 48,
+            "remetente": null
         },
         {
             "acao": "mensagem_criada",
@@ -212,7 +221,7 @@
             "ator": "provedor",
             "canal": "email",
             "contato": "Marina Alves",
-            "detalhe": "PROV-6d9d6798",
+            "detalhe": "PROV-d35d1358",
             "momento": 48,
             "remetente": "resgate@afinix-relaciona.com.br"
         },
@@ -221,7 +230,7 @@
             "ator": "provedor",
             "canal": "email",
             "contato": "Otávio Lima",
-            "detalhe": "PROV-ac846f26",
+            "detalhe": "PROV-f659eb14",
             "momento": 48,
             "remetente": "resgate@afinix-relaciona.com.br"
         },
@@ -230,7 +239,7 @@
             "ator": "provedor",
             "canal": "email",
             "contato": "Rui Nogueira",
-            "detalhe": "PROV-42455336",
+            "detalhe": "PROV-15ae8f0a",
             "momento": 48,
             "remetente": "resgate@afinix-relaciona.com.br"
         },
@@ -262,11 +271,20 @@
             "remetente": "+55 11 99000-0001"
         },
         {
-            "acao": "adiado_sem_remetente",
+            "acao": "novo_dia",
+            "ator": "operador",
+            "canal": null,
+            "contato": null,
+            "detalhe": "dia 5 da cadência — quotas diárias renovadas",
+            "momento": 96,
+            "remetente": null
+        },
+        {
+            "acao": "mensagem_criada",
             "ator": "motor",
             "canal": "whatsapp",
             "contato": "Sônia Prado",
-            "detalhe": "whatsapp",
+            "detalhe": "2",
             "momento": 96,
             "remetente": "+55 11 98000-0009"
         },
@@ -276,6 +294,15 @@
             "canal": "whatsapp",
             "contato": "Vera Castro",
             "detalhe": "whatsapp",
+            "momento": 96,
+            "remetente": "+55 11 98000-0009"
+        },
+        {
+            "acao": "entregue_ao_provedor",
+            "ator": "provedor",
+            "canal": "whatsapp",
+            "contato": "Sônia Prado",
+            "detalhe": "PROV-d9f20d17",
             "momento": 96,
             "remetente": "+55 11 98000-0009"
         },
@@ -298,319 +325,49 @@
             "remetente": "+55 11 98000-0009"
         },
         {
-            "acao": "adiado_sem_remetente",
-            "ator": "motor",
-            "canal": "whatsapp",
-            "contato": "Sônia Prado",
-            "detalhe": "whatsapp",
-            "momento": 96,
-            "remetente": "+55 11 98000-0009"
+            "acao": "novo_dia",
+            "ator": "operador",
+            "canal": null,
+            "contato": null,
+            "detalhe": "dia 6 da cadência — quotas diárias renovadas",
+            "momento": 120,
+            "remetente": null
         },
         {
-            "acao": "adiado_sem_remetente",
+            "acao": "mensagem_criada",
             "ator": "motor",
             "canal": "whatsapp",
-            "contato": "Sônia Prado",
-            "detalhe": "whatsapp",
-            "momento": 97,
-            "remetente": "+55 11 98000-0009"
+            "contato": "Marina Alves",
+            "detalhe": "3",
+            "momento": 120,
+            "remetente": "+55 11 99000-0001"
         },
         {
-            "acao": "adiado_sem_remetente",
+            "acao": "mensagem_criada",
             "ator": "motor",
             "canal": "whatsapp",
-            "contato": "Sônia Prado",
-            "detalhe": "whatsapp",
-            "momento": 97,
-            "remetente": "+55 11 98000-0009"
+            "contato": "Rui Nogueira",
+            "detalhe": "3",
+            "momento": 120,
+            "remetente": "+55 11 99000-0001"
         },
         {
-            "acao": "adiado_sem_remetente",
-            "ator": "motor",
+            "acao": "entregue_ao_provedor",
+            "ator": "provedor",
             "canal": "whatsapp",
-            "contato": "Sônia Prado",
-            "detalhe": "whatsapp",
-            "momento": 97,
-            "remetente": "+55 11 98000-0009"
+            "contato": "Marina Alves",
+            "detalhe": "PROV-8b7be441",
+            "momento": 120,
+            "remetente": "+55 11 99000-0001"
         },
         {
-            "acao": "adiado_sem_remetente",
-            "ator": "motor",
+            "acao": "entregue_ao_provedor",
+            "ator": "provedor",
             "canal": "whatsapp",
-            "contato": "Sônia Prado",
-            "detalhe": "whatsapp",
-            "momento": 97,
-            "remetente": "+55 11 98000-0009"
-        },
-        {
-            "acao": "adiado_sem_remetente",
-            "ator": "motor",
-            "canal": "whatsapp",
-            "contato": "Sônia Prado",
-            "detalhe": "whatsapp",
-            "momento": 98,
-            "remetente": "+55 11 98000-0009"
-        },
-        {
-            "acao": "adiado_sem_remetente",
-            "ator": "motor",
-            "canal": "whatsapp",
-            "contato": "Sônia Prado",
-            "detalhe": "whatsapp",
-            "momento": 98,
-            "remetente": "+55 11 98000-0009"
-        },
-        {
-            "acao": "adiado_sem_remetente",
-            "ator": "motor",
-            "canal": "whatsapp",
-            "contato": "Sônia Prado",
-            "detalhe": "whatsapp",
-            "momento": 98,
-            "remetente": "+55 11 98000-0009"
-        },
-        {
-            "acao": "adiado_sem_remetente",
-            "ator": "motor",
-            "canal": "whatsapp",
-            "contato": "Sônia Prado",
-            "detalhe": "whatsapp",
-            "momento": 98,
-            "remetente": "+55 11 98000-0009"
-        },
-        {
-            "acao": "adiado_sem_remetente",
-            "ator": "motor",
-            "canal": "whatsapp",
-            "contato": "Sônia Prado",
-            "detalhe": "whatsapp",
-            "momento": 99,
-            "remetente": "+55 11 98000-0009"
-        },
-        {
-            "acao": "adiado_sem_remetente",
-            "ator": "motor",
-            "canal": "whatsapp",
-            "contato": "Sônia Prado",
-            "detalhe": "whatsapp",
-            "momento": 99,
-            "remetente": "+55 11 98000-0009"
-        },
-        {
-            "acao": "adiado_sem_remetente",
-            "ator": "motor",
-            "canal": "whatsapp",
-            "contato": "Sônia Prado",
-            "detalhe": "whatsapp",
-            "momento": 99,
-            "remetente": "+55 11 98000-0009"
-        },
-        {
-            "acao": "adiado_sem_remetente",
-            "ator": "motor",
-            "canal": "whatsapp",
-            "contato": "Sônia Prado",
-            "detalhe": "whatsapp",
-            "momento": 99,
-            "remetente": "+55 11 98000-0009"
-        },
-        {
-            "acao": "adiado_sem_remetente",
-            "ator": "motor",
-            "canal": "whatsapp",
-            "contato": "Sônia Prado",
-            "detalhe": "whatsapp",
-            "momento": 100,
-            "remetente": "+55 11 98000-0009"
-        },
-        {
-            "acao": "adiado_sem_remetente",
-            "ator": "motor",
-            "canal": "whatsapp",
-            "contato": "Sônia Prado",
-            "detalhe": "whatsapp",
-            "momento": 100,
-            "remetente": "+55 11 98000-0009"
-        },
-        {
-            "acao": "adiado_sem_remetente",
-            "ator": "motor",
-            "canal": "whatsapp",
-            "contato": "Sônia Prado",
-            "detalhe": "whatsapp",
-            "momento": 100,
-            "remetente": "+55 11 98000-0009"
-        },
-        {
-            "acao": "adiado_sem_remetente",
-            "ator": "motor",
-            "canal": "whatsapp",
-            "contato": "Sônia Prado",
-            "detalhe": "whatsapp",
-            "momento": 100,
-            "remetente": "+55 11 98000-0009"
-        },
-        {
-            "acao": "adiado_sem_remetente",
-            "ator": "motor",
-            "canal": "whatsapp",
-            "contato": "Sônia Prado",
-            "detalhe": "whatsapp",
-            "momento": 101,
-            "remetente": "+55 11 98000-0009"
-        },
-        {
-            "acao": "adiado_sem_remetente",
-            "ator": "motor",
-            "canal": "whatsapp",
-            "contato": "Sônia Prado",
-            "detalhe": "whatsapp",
-            "momento": 101,
-            "remetente": "+55 11 98000-0009"
-        },
-        {
-            "acao": "adiado_sem_remetente",
-            "ator": "motor",
-            "canal": "whatsapp",
-            "contato": "Sônia Prado",
-            "detalhe": "whatsapp",
-            "momento": 101,
-            "remetente": "+55 11 98000-0009"
-        },
-        {
-            "acao": "adiado_sem_remetente",
-            "ator": "motor",
-            "canal": "whatsapp",
-            "contato": "Sônia Prado",
-            "detalhe": "whatsapp",
-            "momento": 101,
-            "remetente": "+55 11 98000-0009"
-        },
-        {
-            "acao": "adiado_sem_remetente",
-            "ator": "motor",
-            "canal": "whatsapp",
-            "contato": "Sônia Prado",
-            "detalhe": "whatsapp",
-            "momento": 102,
-            "remetente": "+55 11 98000-0009"
-        },
-        {
-            "acao": "adiado_sem_remetente",
-            "ator": "motor",
-            "canal": "whatsapp",
-            "contato": "Sônia Prado",
-            "detalhe": "whatsapp",
-            "momento": 102,
-            "remetente": "+55 11 98000-0009"
-        },
-        {
-            "acao": "adiado_sem_remetente",
-            "ator": "motor",
-            "canal": "whatsapp",
-            "contato": "Sônia Prado",
-            "detalhe": "whatsapp",
-            "momento": 102,
-            "remetente": "+55 11 98000-0009"
-        },
-        {
-            "acao": "adiado_sem_remetente",
-            "ator": "motor",
-            "canal": "whatsapp",
-            "contato": "Sônia Prado",
-            "detalhe": "whatsapp",
-            "momento": 102,
-            "remetente": "+55 11 98000-0009"
-        },
-        {
-            "acao": "adiado_sem_remetente",
-            "ator": "motor",
-            "canal": "whatsapp",
-            "contato": "Sônia Prado",
-            "detalhe": "whatsapp",
-            "momento": 103,
-            "remetente": "+55 11 98000-0009"
-        },
-        {
-            "acao": "adiado_sem_remetente",
-            "ator": "motor",
-            "canal": "whatsapp",
-            "contato": "Sônia Prado",
-            "detalhe": "whatsapp",
-            "momento": 103,
-            "remetente": "+55 11 98000-0009"
-        },
-        {
-            "acao": "adiado_sem_remetente",
-            "ator": "motor",
-            "canal": "whatsapp",
-            "contato": "Sônia Prado",
-            "detalhe": "whatsapp",
-            "momento": 103,
-            "remetente": "+55 11 98000-0009"
-        },
-        {
-            "acao": "adiado_sem_remetente",
-            "ator": "motor",
-            "canal": "whatsapp",
-            "contato": "Sônia Prado",
-            "detalhe": "whatsapp",
-            "momento": 103,
-            "remetente": "+55 11 98000-0009"
-        },
-        {
-            "acao": "adiado_sem_remetente",
-            "ator": "motor",
-            "canal": "whatsapp",
-            "contato": "Sônia Prado",
-            "detalhe": "whatsapp",
-            "momento": 104,
-            "remetente": "+55 11 98000-0009"
-        },
-        {
-            "acao": "adiado_sem_remetente",
-            "ator": "motor",
-            "canal": "whatsapp",
-            "contato": "Sônia Prado",
-            "detalhe": "whatsapp",
-            "momento": 104,
-            "remetente": "+55 11 98000-0009"
-        },
-        {
-            "acao": "adiado_sem_remetente",
-            "ator": "motor",
-            "canal": "whatsapp",
-            "contato": "Sônia Prado",
-            "detalhe": "whatsapp",
-            "momento": 104,
-            "remetente": "+55 11 98000-0009"
-        },
-        {
-            "acao": "adiado_sem_remetente",
-            "ator": "motor",
-            "canal": "whatsapp",
-            "contato": "Sônia Prado",
-            "detalhe": "whatsapp",
-            "momento": 104,
-            "remetente": "+55 11 98000-0009"
-        },
-        {
-            "acao": "adiado_sem_remetente",
-            "ator": "motor",
-            "canal": "whatsapp",
-            "contato": "Sônia Prado",
-            "detalhe": "whatsapp",
-            "momento": 105,
-            "remetente": "+55 11 98000-0009"
-        },
-        {
-            "acao": "adiado_sem_remetente",
-            "ator": "motor",
-            "canal": "whatsapp",
-            "contato": "Sônia Prado",
-            "detalhe": "whatsapp",
-            "momento": 105,
-            "remetente": "+55 11 98000-0009"
+            "contato": "Rui Nogueira",
+            "detalhe": "PROV-9320f2aa",
+            "momento": 120,
+            "remetente": "+55 11 99000-0001"
         }
     ],
     "outbox": [
@@ -683,6 +440,27 @@
             "contato": "Rui Nogueira",
             "conteudo": "Rui Nogueira, separei duas opções que cabem no que você falou.",
             "remetente": "resgate@afinix-relaciona.com.br"
+        },
+        {
+            "canal": "whatsapp",
+            "status": "enviado",
+            "contato": "Sônia Prado",
+            "conteudo": "Sônia Prado, consigo fazer uma cotação sem compromisso. Faz sentido?",
+            "remetente": "+55 11 98000-0009"
+        },
+        {
+            "canal": "whatsapp",
+            "status": "enviado",
+            "contato": "Marina Alves",
+            "conteudo": "Marina Alves, ainda faz sentido retomar? Se não, é só me dizer.",
+            "remetente": "+55 11 99000-0001"
+        },
+        {
+            "canal": "whatsapp",
+            "status": "enviado",
+            "contato": "Rui Nogueira",
+            "conteudo": "Rui Nogueira, ainda faz sentido retomar? Se não, é só me dizer.",
+            "remetente": "+55 11 99000-0001"
         }
     ],
     "supressao": [
@@ -701,7 +479,7 @@
             "canal": "whatsapp",
             "quota": 2,
             "saude": 100.00,
-            "usado": 2,
+            "usado": 1,
             "estado": "ativo",
             "identificador": "+55 11 98000-0009"
         },
@@ -710,7 +488,7 @@
             "canal": "whatsapp",
             "quota": 200,
             "saude": 100.00,
-            "usado": 4,
+            "usado": 2,
             "estado": "ativo",
             "identificador": "+55 11 99000-0001"
         },
@@ -726,9 +504,9 @@
     ],
     "enrollments": [
         {
-            "passo": 2,
-            "motivo": null,
-            "status": "ativo",
+            "passo": 3,
+            "motivo": "fim_dos_passos",
+            "status": "encerrado",
             "contato": "Marina Alves",
             "campanha": "Resgate 2024"
         },
@@ -747,16 +525,16 @@
             "campanha": "Resgate 2024"
         },
         {
-            "passo": 2,
-            "motivo": null,
-            "status": "ativo",
+            "passo": 3,
+            "motivo": "fim_dos_passos",
+            "status": "encerrado",
             "contato": "Rui Nogueira",
             "campanha": "Resgate 2024"
         },
         {
-            "passo": 1,
-            "motivo": null,
-            "status": "ativo",
+            "passo": 2,
+            "motivo": "fim_dos_passos",
+            "status": "encerrado",
             "contato": "Sônia Prado",
             "campanha": "Lista fria SP"
         },
@@ -768,5 +546,5 @@
             "campanha": "Lista fria SP"
         }
     ],
-    "horas_simuladas": 105
+    "horas_simuladas": 120
 }
