@@ -72,11 +72,19 @@ END;
 $$;
 
 -- Pool: morno e frio separados por schema, não por disciplina (D4).
-INSERT INTO sender_accounts (id, canal, identificador, provedor, tipo_permitido, quota_diaria) VALUES
-  ('dd000000-0000-0000-0000-000000000001','whatsapp','+55 11 99000-0001','meta_cloud','morna',200),
-  ('dd000000-0000-0000-0000-000000000002','email','resgate@afinix-relaciona.com.br','smtp','morna',300),
+-- Duas contas da Gupshup no mesmo canal e no mesmo pool: é o caso normal, e é
+-- o que mostra que quota é por conta, não por canal.
+INSERT INTO sender_accounts
+  (id, canal, identificador, apelido, provedor, tipo_permitido, quota_diaria, config) VALUES
+  ('dd000000-0000-0000-0000-000000000001','whatsapp','+55 11 99000-0001','Comercial',
+   'gupshup','morna',200,'{"app_name":"afinix-comercial","source":"5511990000001"}'::jsonb),
+  ('dd000000-0000-0000-0000-000000000004','whatsapp','+55 11 99000-0002','Retenção',
+   'gupshup','morna',200,'{"app_name":"afinix-retencao","source":"5511990000002"}'::jsonb),
+  ('dd000000-0000-0000-0000-000000000002','email','resgate@afinix-relaciona.com.br','Domínio de relacionamento',
+   'smtp','morna',300,'{"host":"smtp.afinix-relaciona.com.br","porta":"587","usuario":"resgate"}'::jsonb),
   -- Chip frio com quota baixa de propósito: é o que faz o freio aparecer.
-  ('dd000000-0000-0000-0000-000000000003','whatsapp','+55 11 98000-0009','evolution','fria',2);
+  ('dd000000-0000-0000-0000-000000000003','whatsapp','+55 11 98000-0009','Chip frio SP',
+   'evolution','fria',2,'{"base_url":"https://evo.afinix.com.br","instancia":"fria-sp"}'::jsonb);
 
 -- Sete pessoas, cada uma mostrando uma coisa diferente.
 INSERT INTO contacts (id, nome, origem, metadados) VALUES
@@ -300,10 +308,19 @@ SELECT jsonb_pretty(jsonb_build_object(
     LEFT JOIN sender_accounts sa ON sa.id = m.sender_account_id),
 
   'remetentes', (SELECT coalesce(jsonb_agg(jsonb_build_object(
-      'identificador', identificador, 'canal', canal, 'tipo', tipo_permitido,
+      'identificador', identificador, 'apelido', apelido, 'canal', canal,
+      'provedor', provedor, 'tipo', tipo_permitido,
       'usado', enviados_na_janela, 'quota', quota_diaria,
-      'saude', health_score, 'estado', estado
+      'saude', health_score, 'estado', estado, 'config', config
     ) ORDER BY identificador), '[]'::jsonb) FROM sender_accounts),
+
+  -- O catálogo de provedores de canal: é dele que a UI monta a tela de
+  -- conectar conta, sem conhecer Gupshup nem Evolution.
+  'provedores_canal', (SELECT coalesce(jsonb_agg(jsonb_build_object(
+      'slug', slug, 'canal', canal, 'nome', nome, 'descricao', descricao,
+      'oficial', oficial, 'tem_adapter', tem_adapter,
+      'campos', campos, 'docs', docs_url
+    ) ORDER BY canal, ordem), '[]'::jsonb) FROM channel_provider_catalog WHERE ativo),
 
   'supressao', (SELECT coalesce(jsonb_agg(jsonb_build_object(
       'contato', coalesce(c.nome, s.valor_norm), 'motivo', s.motivo
@@ -329,11 +346,15 @@ SELECT jsonb_pretty(jsonb_build_object(
       'campos', campos, 'modelos', modelos_sugeridos, 'docs', docs_url
     ) ORDER BY ordem), '[]'::jsonb) FROM ai_provider_catalog),
 
+  -- Usar um agente do catálogo copia a linha para o tenant. Sem o DISTINCT ON,
+  -- o console mostraria o original e a cópia como dois agentes diferentes.
   'agentes', (SELECT coalesce(jsonb_agg(jsonb_build_object(
       'nome', nome, 'canal', canal, 'papel', papel, 'descricao', descricao,
       'instrucoes', instrucoes, 'escalar', escalar_quando,
-      'limite', limite_trocas, 'pronto', pronto
-    ) ORDER BY canal, nome), '[]'::jsonb) FROM agents WHERE ativo),
+      'limite', limite_trocas, 'pronto', tenant_id IS NULL
+    ) ORDER BY canal, nome), '[]'::jsonb)
+    FROM (SELECT DISTINCT ON (nome) * FROM agents WHERE ativo
+           ORDER BY nome, tenant_id NULLS LAST) a),
 
   'campanhas', (SELECT coalesce(jsonb_agg(jsonb_build_object(
       'nome', c.nome, 'tipo', c.tipo, 'objetivo', c.objetivo,

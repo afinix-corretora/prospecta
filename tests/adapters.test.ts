@@ -11,6 +11,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
 import type { Buscador, PedidoEnvio } from '../adapters/tipos.ts';
+import { WhatsAppGupshupAdapter } from '../adapters/whatsapp-gupshup.ts';
 import { WhatsAppEvolutionAdapter } from '../adapters/whatsapp-evolution.ts';
 import { WhatsAppMetaAdapter } from '../adapters/whatsapp-meta.ts';
 import { SmsComteleAdapter } from '../adapters/sms-comtele.ts';
@@ -293,6 +294,155 @@ test('comtele: Success false é falha mesmo com HTTP 200', async () => {
 
 test('comtele: sem webhook de entrega, nenhum evento é inventado', () => {
   assert.deepEqual(new SmsComteleAdapter().normalizeWebhook({ qualquer: 'coisa' }), []);
+});
+
+// ---------------------------------------------------------------------------
+// WhatsApp oficial via Gupshup — o caminho oficial da operação
+// ---------------------------------------------------------------------------
+
+const CRED_GUP = {
+  api_key: 'chave-gup',
+  app_name: 'afinix-comercial',
+  source: '5511990000001',
+};
+
+function pedidoGupshup(extra: Partial<PedidoEnvio> = {}): PedidoEnvio {
+  return {
+    messageId: 'm-gup', destino: '+55 11 90000-0001', conteudo: 'Oi Ana',
+    remetente: '+55 11 99000-0001', credenciais: CRED_GUP, ...extra,
+  };
+}
+
+test('gupshup envia form-urlencoded, não JSON', async () => {
+  const { buscar, chamadas } = fetchFalso(200, { status: 'submitted', messageId: 'gs-1' });
+  const r = await new WhatsAppGupshupAdapter(buscar).send(pedidoGupshup());
+
+  assert.equal(r.ok, true);
+  assert.equal(r.providerMessageId, 'gs-1');
+  const init = chamadas[0].init!;
+  assert.equal((init.headers as Record<string, string>)['Content-Type'],
+               'application/x-www-form-urlencoded');
+  assert.equal((init.headers as Record<string, string>).apikey, 'chave-gup');
+});
+
+test('gupshup manda destino e origem normalizados', async () => {
+  const { buscar, chamadas } = fetchFalso(200, { messageId: 'gs-2' });
+  await new WhatsAppGupshupAdapter(buscar).send(pedidoGupshup());
+
+  const corpo = new URLSearchParams(String(chamadas[0].init!.body));
+  assert.equal(corpo.get('destination'), '5511900000001');
+  assert.equal(corpo.get('source'), '5511990000001');
+  assert.equal(corpo.get('src.name'), 'afinix-comercial');
+  assert.equal(JSON.parse(corpo.get('message')!).text, 'Oi Ana');
+});
+
+test('cada conta da gupshup manda pela sua app, não por uma global', async () => {
+  // É o que sustenta "múltiplas contas, múltiplas APIs da Gupshup": o app vem
+  // da credencial da conta, então duas contas no mesmo processo não se
+  // confundem.
+  const a = fetchFalso(200, { messageId: 'gs-a' });
+  const b = fetchFalso(200, { messageId: 'gs-b' });
+  await new WhatsAppGupshupAdapter(a.buscar).send(pedidoGupshup());
+  await new WhatsAppGupshupAdapter(b.buscar).send(pedidoGupshup({
+    credenciais: { ...CRED_GUP, app_name: 'afinix-retencao', source: '5511990000002' },
+  }));
+
+  assert.equal(new URLSearchParams(String(a.chamadas[0].init!.body)).get('src.name'),
+               'afinix-comercial');
+  assert.equal(new URLSearchParams(String(b.chamadas[0].init!.body)).get('src.name'),
+               'afinix-retencao');
+});
+
+test('gupshup respeita base_url próprio', async () => {
+  const { buscar, chamadas } = fetchFalso(200, { messageId: 'gs-3' });
+  await new WhatsAppGupshupAdapter(buscar).send(pedidoGupshup({
+    credenciais: { ...CRED_GUP, base_url: 'https://gw.interno/wa/v1' },
+  }));
+  assert.equal(chamadas[0].url, 'https://gw.interno/wa/v1/msg');
+});
+
+test('gupshup sem app_name é culpa do remetente, não do destino', async () => {
+  const { buscar } = fetchFalso(200, {});
+  const r = await new WhatsAppGupshupAdapter(buscar).send(pedidoGupshup({
+    credenciais: { api_key: 'x' },
+  }));
+  assert.equal(r.ok, false);
+  assert.equal(r.culpa, 'remetente');
+});
+
+test('gupshup: apikey inválida derruba a conta; número ruim não', async () => {
+  const ad = new WhatsAppGupshupAdapter(fetchFalso(401, { message: 'Authentication Failed' }).buscar);
+  assert.equal((await ad.send(pedidoGupshup())).culpa, 'remetente');
+
+  const ad2 = new WhatsAppGupshupAdapter(
+    fetchFalso(400, { message: 'Number is not a valid WhatsApp user' }).buscar);
+  assert.equal((await ad2.send(pedidoGupshup())).culpa, 'destino');
+});
+
+test('gupshup: 429 é transitório, não culpa da conta', async () => {
+  const ad = new WhatsAppGupshupAdapter(fetchFalso(429, { message: 'rate limited' }).buscar);
+  assert.equal((await ad.send(pedidoGupshup())).culpa, 'transitorio');
+});
+
+test('gupshup: 200 sem messageId não conta como enviado', async () => {
+  // Sem id do provedor não há como ligar o webhook de volta à mensagem.
+  const ad = new WhatsAppGupshupAdapter(fetchFalso(200, { status: 'submitted' }).buscar);
+  const r = await ad.send(pedidoGupshup());
+  assert.equal(r.ok, false);
+  assert.equal(r.culpa, 'transitorio');
+});
+
+test('gupshup: queda de rede é transitória', async () => {
+  const ad = new WhatsAppGupshupAdapter(fetchQueExplode('ECONNRESET'));
+  const r = await ad.send(pedidoGupshup());
+  assert.equal(r.ok, false);
+  assert.equal(r.culpa, 'transitorio');
+});
+
+test('gupshup normaliza confirmação de entrega', () => {
+  const evs = new WhatsAppGupshupAdapter().normalizeWebhook({
+    type: 'message-event',
+    payload: { type: 'delivered', gsId: 'gs-1', ts: 1758000000000, destination: '5511900000001' },
+  });
+  assert.equal(evs.length, 1);
+  assert.equal(evs[0].tipo, 'entregue');
+  assert.equal(evs[0].providerMessageId, 'gs-1');
+});
+
+test('gupshup normaliza resposta pelo context', () => {
+  const evs = new WhatsAppGupshupAdapter().normalizeWebhook({
+    type: 'message',
+    payload: { type: 'text', source: '5511900000001', timestamp: 1758000000,
+               context: { gsId: 'gs-1' } },
+  });
+  assert.equal(evs.length, 1);
+  assert.equal(evs[0].tipo, 'respondido');
+  assert.equal(evs[0].providerMessageId, 'gs-1');
+});
+
+test('gupshup: mensagem sem context não vira resposta', () => {
+  // Sem o vínculo, encerrar cadência seria encerrar a da pessoa errada.
+  const evs = new WhatsAppGupshupAdapter().normalizeWebhook({
+    type: 'message',
+    payload: { type: 'text', source: '5511900000001' },
+  });
+  assert.deepEqual(evs, []);
+});
+
+test('gupshup entende epoch em segundo e em milissegundo', () => {
+  const ad = new WhatsAppGupshupAdapter();
+  const ms = ad.normalizeWebhook({ type:'message-event',
+    payload:{ type:'sent', gsId:'a', ts: 1758000000000 } })[0].ocorridoEm;
+  const seg = ad.normalizeWebhook({ type:'message',
+    payload:{ type:'text', timestamp: 1758000000, context:{ gsId:'a' } } })[0].ocorridoEm;
+  assert.equal(ms, seg);
+});
+
+test('gupshup ignora evento que não conhece', () => {
+  const ad = new WhatsAppGupshupAdapter();
+  assert.deepEqual(ad.normalizeWebhook({ type: 'user-event', payload: { type: 'opted-in' } }), []);
+  assert.deepEqual(ad.normalizeWebhook({ type: 'message-event', payload: { type: 'inventado', gsId: 'x' } }), []);
+  assert.deepEqual(ad.normalizeWebhook({}), []);
 });
 
 // ---------------------------------------------------------------------------

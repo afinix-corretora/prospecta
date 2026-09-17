@@ -1,46 +1,61 @@
 <title>Prospecta Console</title>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Anek+Latin:wght@400;500;600;700&family=Roboto:wght@400;500;700&family=Roboto+Mono:wght@400;500&display=swap">
 <style>
+/* Paleta e tipografia vindas da referência de design: Anek Latin para títulos,
+   Roboto para interface, e a dupla de acentos menta + periwinkle. O menta é o
+   que deu certo, o periwinkle é a série secundária. */
 :root{
-  --ground:#F4F7F7; --surface:#FFFFFF; --surface-2:#EAEFEF; --surface-3:#DFE7E7;
-  --line:#D2DCDC; --line-strong:#B6C4C4;
-  --ink:#0E1F1E; --ink-2:#48605E; --ink-3:#7A9190;
-  --accent:#0A6F79; --accent-ink:#FFFFFF; --accent-soft:#D6EAEC;
-  --ok:#2C7A51; --ok-soft:#DCEFE4; --warn:#9A6206; --warn-soft:#F6E9CF;
-  --crit:#A93226; --crit-soft:#F7DEDA;
-  --wa:#17855A; --mail:#35618F; --sms:#7A4E9E;
-  --shadow:0 1px 2px rgba(14,31,30,.06),0 8px 24px -12px rgba(14,31,30,.18);
-  --r:10px;
+  --ground:#FBF7FC; --surface:#FFFFFF; --surface-2:#F3EEF6; --surface-3:#E9E2EE;
+  --line:#E6DFEB; --line-strong:#CFC5D6;
+  --ink:#141419; --ink-2:#55555F; --ink-3:#8A8A97;
+  --accent:#3A3AD1; --accent-ink:#FFFFFF; --accent-soft:#E7E7FD;
+  --ok:#0E9C64; --ok-ink:#FFFFFF; --ok-soft:#D8F5E7;
+  --warn:#96650B; --warn-soft:#F8ECD3; --crit:#B43A2C; --crit-soft:#FADFDB;
+  --wa:#0E9C64; --mail:#3A3AD1; --sms:#7B4BD1; --ig:#B84A7D;
+  --blob-1:rgba(155,155,245,.24); --blob-2:rgba(77,240,169,.16);
+  --shadow:0 1px 2px rgba(20,20,25,.05),0 10px 30px -14px rgba(20,20,25,.22);
+  --r:14px; --r-sm:10px;
 }
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
-  --ground:#0A1312; --surface:#111D1C; --surface-2:#172524; --surface-3:#1E2F2E;
-  --line:#223433; --line-strong:#334847;
-  --ink:#E6EFEE; --ink-2:#A3B7B5; --ink-3:#6C8281;
-  --accent:#2FB2BD; --accent-ink:#04201F; --accent-soft:#0D3336;
-  --ok:#4FBE84; --ok-soft:#10301F; --warn:#D7A445; --warn-soft:#332611;
-  --crit:#E07C70; --crit-soft:#3A1C18;
-  --wa:#3FBE86; --mail:#6FA3DB; --sms:#B58BD8;
-  --shadow:0 1px 2px rgba(0,0,0,.4),0 10px 28px -14px rgba(0,0,0,.6);
+  --ground:#0F0F14; --surface:#1A1A21; --surface-2:#23232C; --surface-3:#2B2B36;
+  --line:#2D2D39; --line-strong:#3E3E4D;
+  --ink:#F3F1F8; --ink-2:#A8A8B7; --ink-3:#75758A;
+  --accent:#9B9BF5; --accent-ink:#141430; --accent-soft:#272747;
+  --ok:#4DF0A9; --ok-ink:#06291B; --ok-soft:#103626;
+  --warn:#E0B458; --warn-soft:#332811; --crit:#F08B7D; --crit-soft:#3A1E1A;
+  --wa:#4DF0A9; --mail:#9B9BF5; --sms:#B58BD8; --ig:#E489B4;
+  --blob-1:rgba(120,120,235,.20); --blob-2:rgba(77,240,169,.10);
+  --shadow:0 1px 2px rgba(0,0,0,.5),0 14px 34px -16px rgba(0,0,0,.7);
 }}
 :root[data-theme="dark"]{
-  --ground:#0A1312; --surface:#111D1C; --surface-2:#172524; --surface-3:#1E2F2E;
-  --line:#223433; --line-strong:#334847;
-  --ink:#E6EFEE; --ink-2:#A3B7B5; --ink-3:#6C8281;
-  --accent:#2FB2BD; --accent-ink:#04201F; --accent-soft:#0D3336;
-  --ok:#4FBE84; --ok-soft:#10301F; --warn:#D7A445; --warn-soft:#332611;
-  --crit:#E07C70; --crit-soft:#3A1C18;
-  --wa:#3FBE86; --mail:#6FA3DB; --sms:#B58BD8;
-  --shadow:0 1px 2px rgba(0,0,0,.4),0 10px 28px -14px rgba(0,0,0,.6);
+  --ground:#0F0F14; --surface:#1A1A21; --surface-2:#23232C; --surface-3:#2B2B36;
+  --line:#2D2D39; --line-strong:#3E3E4D;
+  --ink:#F3F1F8; --ink-2:#A8A8B7; --ink-3:#75758A;
+  --accent:#9B9BF5; --accent-ink:#141430; --accent-soft:#272747;
+  --ok:#4DF0A9; --ok-ink:#06291B; --ok-soft:#103626;
+  --warn:#E0B458; --warn-soft:#332811; --crit:#F08B7D; --crit-soft:#3A1E1A;
+  --wa:#4DF0A9; --mail:#9B9BF5; --sms:#B58BD8; --ig:#E489B4;
+  --blob-1:rgba(120,120,235,.20); --blob-2:rgba(77,240,169,.10);
+  --shadow:0 1px 2px rgba(0,0,0,.5),0 14px 34px -16px rgba(0,0,0,.7);
 }
 *{box-sizing:border-box}
 html,body{height:100%}
 body{margin:0;background:var(--ground);color:var(--ink);
-  font-family:"IBM Plex Sans",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+  font-family:Roboto,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
   font-size:14px;line-height:1.5;-webkit-font-smoothing:antialiased}
-h1,h2,h3{font-family:Archivo,"IBM Plex Sans",sans-serif;margin:0;text-wrap:balance}
-.mono{font-family:"IBM Plex Mono",ui-monospace,monospace;font-variant-numeric:tabular-nums}
+h1,h2,h3{font-family:"Anek Latin",Roboto,system-ui,sans-serif;margin:0;text-wrap:balance;letter-spacing:-.01em}
+h1{font-weight:600}
+.mono{font-family:"Roboto Mono",ui-monospace,monospace;font-variant-numeric:tabular-nums}
 button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
 :focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:4px}
+
+/* Blobs desfocados do fundo — a referência usa formas orgânicas atrás da
+   interface. Ficam atrás de tudo e não capturam clique. */
+body::before,body::after{content:"";position:fixed;z-index:-1;border-radius:50%;
+  filter:blur(90px);pointer-events:none}
+body::before{width:46vw;height:46vw;left:-12vw;top:-14vw;background:var(--blob-1)}
+body::after{width:38vw;height:38vw;right:-10vw;bottom:-12vw;background:var(--blob-2)}
 
 /* ---------- shell ---------- */
 .shell{display:grid;grid-template-columns:212px 1fr;min-height:100%}
@@ -48,14 +63,50 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
   padding-block:18px;display:flex;flex-direction:column;gap:22px;
   position:sticky;top:env(safe-area-inset-top,0px);align-self:start;height:100vh}
 .brand{padding-inline:18px;display:flex;flex-direction:column;gap:2px}
-.brand b{font-family:Archivo;font-size:17px;font-weight:700;letter-spacing:-.02em}
+.brand b{font-family:"Anek Latin",Roboto,system-ui,sans-serif;font-size:17px;font-weight:700;letter-spacing:-.02em}
 .brand span{font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-3);font-weight:600}
 .nav{display:flex;flex-direction:column;gap:1px;padding-inline:10px}
 .nav button{display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:8px;
   color:var(--ink-2);font-size:13.5px;text-align:left;width:100%}
 .nav button:hover{background:var(--surface-2);color:var(--ink)}
-.nav button[aria-current="true"]{background:var(--accent-soft);color:var(--accent);font-weight:600}
 .nav i{width:16px;height:16px;flex:none;display:block}
+.nav button[aria-current="true"]{background:var(--ok);color:var(--ok-ink);font-weight:600}
+.nav .grupo{display:flex;align-items:center;gap:8px;width:100%;justify-content:space-between}
+.nav .grupo .chev{width:14px;height:14px;flex:none;transition:transform .16s ease;color:var(--ink-3)}
+.nav .grupo[aria-expanded="true"] .chev{transform:rotate(90deg)}
+.nav .grupo[aria-current="true"] .chev{color:inherit}
+.sub{display:grid;grid-template-rows:0fr;transition:grid-template-rows .18s ease}
+.sub[data-aberto="true"]{grid-template-rows:1fr}
+.sub>div{overflow:hidden}
+.sub button{font-size:12.5px;padding:6px 10px 6px 22px;position:relative;color:var(--ink-3)}
+.sub button::before{content:"";position:absolute;left:12px;top:0;bottom:0;width:1.5px;
+  background:var(--line)}
+.sub button[aria-current="true"]{background:var(--surface-2);color:var(--ink);font-weight:600}
+.sub button[aria-current="true"]::before{background:var(--ok);width:2px}
+
+/* Índice de submenu: a tela que a pessoa vê ao abrir Configurações ou Canais.
+   Lista o que existe dentro, nada aberto. */
+.indice{display:grid;gap:8px;margin-top:4px}
+.item{display:flex;align-items:center;gap:14px;width:100%;text-align:left;
+  background:var(--surface);border:1px solid var(--line);border-radius:var(--r);
+  padding:15px 16px;transition:border-color .14s ease,transform .14s ease}
+.item:hover{border-color:var(--line-strong);transform:translateX(2px)}
+.item .ico{width:38px;height:38px;flex:none;border-radius:11px;display:grid;place-items:center;
+  background:var(--surface-2);color:var(--ink-2)}
+.item .ico svg{width:19px;height:19px;fill:none;stroke:currentColor;stroke-width:1.7}
+.item .txt{min-width:0;flex:1}
+.item .txt b{display:block;font-family:"Anek Latin",Roboto,system-ui,sans-serif;font-size:15px;font-weight:600;letter-spacing:-.01em}
+.item .txt p{margin:1px 0 0;font-size:12.5px;color:var(--ink-3);line-height:1.45}
+.item .cont{font-family:"Roboto Mono",ui-monospace,monospace;font-size:12px;color:var(--ink-3);flex:none}
+.item .seta{width:16px;height:16px;flex:none;color:var(--ink-3);fill:none;stroke:currentColor;stroke-width:1.8}
+
+/* Chip de variação do KPI, como na referência. */
+.delta{display:inline-flex;align-items:center;gap:3px;font-size:11px;font-weight:600;
+  padding:2px 7px;border-radius:999px;background:var(--ok-soft);color:var(--ok);
+  font-family:"Roboto Mono",ui-monospace,monospace}
+.delta.baixa{background:var(--crit-soft);color:var(--crit)}
+.delta.neutra{background:var(--surface-2);color:var(--ink-3)}
+
 .railfoot{margin-top:auto;padding-inline:18px;font-size:11.5px;color:var(--ink-3);
   display:flex;flex-direction:column;gap:8px}
 .main{min-width:0;display:flex;flex-direction:column}
@@ -77,7 +128,7 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
 
 .scrub{padding:14px 0 16px;display:flex;align-items:center;gap:16px;flex-wrap:wrap}
 .clock{display:flex;align-items:baseline;gap:7px;min-width:132px}
-.clock b{font-family:Archivo;font-size:26px;font-weight:700;letter-spacing:-.03em;line-height:1}
+.clock b{font-family:"Anek Latin",Roboto,system-ui,sans-serif;font-size:26px;font-weight:700;letter-spacing:-.03em;line-height:1}
 .clock span{font-size:11px;color:var(--ink-3);text-transform:uppercase;letter-spacing:.08em;font-weight:600}
 .track{flex:1 1 320px;min-width:200px;position:relative;padding-top:14px}
 .ticks{position:absolute;inset:0 0 auto;height:12px;pointer-events:none}
@@ -101,7 +152,7 @@ input[type=range]::-moz-range-thumb{width:13px;height:13px;border-radius:99px;ba
 .kpi{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:13px 14px}
 .kpi span{display:block;font-size:10.5px;text-transform:uppercase;letter-spacing:.09em;
   color:var(--ink-3);font-weight:600;margin-bottom:5px}
-.kpi b{font-family:Archivo;font-size:25px;font-weight:700;letter-spacing:-.03em;line-height:1.05;display:block}
+.kpi b{font-family:"Anek Latin",Roboto,system-ui,sans-serif;font-size:25px;font-weight:700;letter-spacing:-.03em;line-height:1.05;display:block}
 .kpi em{font-style:normal;font-size:11.5px;color:var(--ink-2)}
 
 .cols{display:grid;grid-template-columns:minmax(0,1.62fr) minmax(0,1fr);gap:20px;align-items:start}
@@ -265,7 +316,7 @@ input[type=range]::-moz-range-thumb{width:13px;height:13px;border-radius:99px;ba
 .camp:hover{border-color:var(--accent)}
 .campnum{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
 .campnum div{display:flex;flex-direction:column;gap:1px}
-.campnum b{font-family:Archivo;font-size:17px;font-weight:700;letter-spacing:-.02em;line-height:1.1}
+.campnum b{font-family:"Anek Latin",Roboto,system-ui,sans-serif;font-size:17px;font-weight:700;letter-spacing:-.02em;line-height:1.1}
 .campnum span{font-size:10px;color:var(--ink-3);text-transform:uppercase;letter-spacing:.06em;font-weight:600}
 .chips{display:flex;gap:5px;flex-wrap:wrap}
 .chip{font-size:10.5px;font-weight:600;padding:2px 7px;border-radius:6px;
@@ -343,8 +394,25 @@ input[type=range]::-moz-range-thumb{width:13px;height:13px;border-radius:99px;ba
     <nav class="nav" id="nav">
       <button aria-current="true" data-v="hub">Campanhas</button>
       <button data-v="campanha">Operação</button>
-      <button data-v="canais">Canais</button>
-      <button data-v="config">Configurações</button>
+
+      <button class="grupo" data-grupo="canais" data-v="canais" aria-expanded="false">
+        <span>Canais</span>
+        <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+             stroke-width="2" stroke-linecap="round"><path d="M9 6l6 6-6 6"/></svg>
+      </button>
+      <div class="sub" id="sub-canais" data-aberto="false"><div id="sub-canais-itens"></div></div>
+
+      <button class="grupo" data-grupo="config" data-v="config" aria-expanded="false">
+        <span>Configurações</span>
+        <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+             stroke-width="2" stroke-linecap="round"><path d="M9 6l6 6-6 6"/></svg>
+      </button>
+      <div class="sub" id="sub-config" data-aberto="false"><div>
+        <button data-v="config:ia">Provedores de IA</button>
+        <button data-v="config:agentes">Agentes</button>
+        <button data-v="config:modelos">Modelos de conversa</button>
+        <button data-v="config:plataformas">Plataformas de contato</button>
+      </div></div>
     </nav>
     <div class="railfoot">
       <div>Simulação de <b class="mono" id="foot-horas">120</b> h<br>sobre o motor real</div>
@@ -379,28 +447,62 @@ input[type=range]::-moz-range-thumb{width:13px;height:13px;border-radius:99px;ba
       </div>
     </div>
 
-    <!-- ================= CANAIS ================= -->
+    <!-- ================= CANAIS (índice) ================= -->
     <div id="v-canais" hidden>
       <div class="wrap">
         <div class="hubhead"><div>
           <h1>Canais</h1>
-          <p>Cada canal fala por um provedor. O que não tem adapter não aparece como opção na
-             criação de campanha — o motor recusa antes de prometer.</p>
+          <p>Cada canal tem as suas contas. Abra um canal para ver e conectar as contas dele —
+             o que não tem adapter não vira opção na criação de campanha.</p>
         </div></div>
-        <section class="grade" id="canais-lista"></section>
+        <section class="indice" id="canais-indice"></section>
       </div>
     </div>
 
-    <!-- ================= CONFIGURAÇÕES ================= -->
+    <!-- ================= CANAL (uma conta por linha) ================= -->
+    <div id="v-canal" hidden>
+      <div class="wrap">
+        <div class="hubhead"><div>
+          <button class="voltar" data-ir="canais">← Canais</button>
+          <h1 id="canal-nome">—</h1>
+          <p id="canal-sub">—</p>
+        </div></div>
+        <section class="kpis" id="canal-kpis"></section>
+
+        <div class="sec"><h2>Contas conectadas</h2><span id="canal-nc"></span></div>
+        <section class="indice" id="canal-contas"></section>
+
+        <div class="sec"><h2>Conectar outra conta</h2>
+          <span>escolha o provedor e os campos certos aparecem</span></div>
+        <section class="panel">
+          <div class="bbody" style="padding:16px">
+            <div class="opts" id="canal-provs" style="margin-bottom:16px"></div>
+            <div id="canal-form"></div>
+          </div>
+        </section>
+      </div>
+    </div>
+
+    <!-- ================= CONFIGURAÇÕES (índice) ================= -->
     <div id="v-config" hidden>
       <div class="wrap">
         <div class="hubhead"><div>
           <h1>Configurações</h1>
-          <p>Provedores de IA e os agentes que respondem em cada canal.</p>
+          <p>Cada assunto na sua própria tela. Nada abre junto.</p>
         </div></div>
+        <section class="indice" id="config-indice"></section>
+      </div>
+    </div>
 
-        <div class="sec"><h2>Provedores de IA</h2>
-          <span>escolha o provedor e os campos certos aparecem</span></div>
+    <!-- ================= CONFIG · PROVEDORES DE IA ================= -->
+    <div id="v-config:ia" hidden>
+      <div class="wrap">
+        <div class="hubhead"><div>
+          <button class="voltar" data-ir="config">← Configurações</button>
+          <h1>Provedores de IA</h1>
+          <p>Escolha o provedor e os campos certos aparecem. A chave vai para o Vault —
+             o banco recusa gravá-la em qualquer outro lugar.</p>
+        </div></div>
         <section class="panel">
           <div class="phead"><h2 id="prov-nome">—</h2>
             <span class="hint" id="prov-docs"></span></div>
@@ -409,10 +511,45 @@ input[type=range]::-moz-range-thumb{width:13px;height:13px;border-radius:99px;ba
             <div id="prov-form"></div>
           </div>
         </section>
+      </div>
+    </div>
 
-        <div class="sec"><h2>Agentes</h2>
-          <span>uma persona por canal — escolhida na criação da campanha</span></div>
+    <!-- ================= CONFIG · AGENTES ================= -->
+    <div id="v-config:agentes" hidden>
+      <div class="wrap">
+        <div class="hubhead"><div>
+          <button class="voltar" data-ir="config">← Configurações</button>
+          <h1>Agentes</h1>
+          <p>Uma persona por canal, escolhida na criação da campanha. O agente é dono da
+             conversa; o motor é dono da cadência.</p>
+        </div></div>
         <section class="grade" id="agentes-lista"></section>
+      </div>
+    </div>
+
+    <!-- ================= CONFIG · MODELOS DE CONVERSA ================= -->
+    <div id="v-config:modelos" hidden>
+      <div class="wrap">
+        <div class="hubhead"><div>
+          <button class="voltar" data-ir="config">← Configurações</button>
+          <h1>Modelos de conversa</h1>
+          <p>A receita da cadência: canais, atrasos e texto de cada passo. Instanciar cria
+             uma versão nova — editar o modelo depois não mexe em campanha já criada.</p>
+        </div></div>
+        <section class="indice" id="modelos-indice"></section>
+      </div>
+    </div>
+
+    <!-- ================= CONFIG · PLATAFORMAS DE CONTATO ================= -->
+    <div id="v-config:plataformas" hidden>
+      <div class="wrap">
+        <div class="hubhead"><div>
+          <button class="voltar" data-ir="config">← Configurações</button>
+          <h1>Plataformas de contato</h1>
+          <p>O catálogo de provedores por canal. Provedor novo é uma linha aqui mais uma
+             classe em <span class="mono">adapters/</span> — nada muda no motor.</p>
+        </div></div>
+        <section class="indice" id="plataformas-indice"></section>
       </div>
     </div>
 
@@ -519,9 +656,45 @@ input[type=range]::-moz-range-thumb{width:13px;height:13px;border-radius:99px;ba
 </div></div>
 
 <script>
-const D = {"linha":[{"acao":"inscrito","ator":"motor","canal":null,"contato":"Marina Alves","detalhe":"Resgate 2024","momento":0,"remetente":null,"n":1},{"acao":"inscrito","ator":"motor","canal":null,"contato":"Otávio Lima","detalhe":"Resgate 2024","momento":0,"remetente":null,"n":1},{"acao":"inscrito","ator":"motor","canal":null,"contato":"Paula Ribeiro","detalhe":"Resgate 2024","momento":0,"remetente":null,"n":1},{"acao":"inscrito","ator":"motor","canal":null,"contato":"Rui Nogueira","detalhe":"Resgate 2024","momento":0,"remetente":null,"n":1},{"acao":"inscricao_recusada","ator":"motor","canal":null,"contato":"Tulio Barros","detalhe":"já estava na supressão — nem chega a criar estado","momento":0,"remetente":null,"n":1},{"acao":"inscrito","ator":"motor","canal":null,"contato":"Sônia Prado","detalhe":"Lista fria SP","momento":0,"remetente":null,"n":1},{"acao":"inscrito","ator":"motor","canal":null,"contato":"Vera Castro","detalhe":"Lista fria SP","momento":0,"remetente":null,"n":1},{"acao":"mensagem_criada","ator":"motor","canal":"whatsapp","contato":"Marina Alves","detalhe":"1","momento":0,"remetente":"+55 11 99000-0001","n":1},{"acao":"mensagem_criada","ator":"motor","canal":"whatsapp","contato":"Otávio Lima","detalhe":"1","momento":0,"remetente":"+55 11 99000-0001","n":1},{"acao":"mensagem_criada","ator":"motor","canal":"whatsapp","contato":"Paula Ribeiro","detalhe":"1","momento":0,"remetente":"+55 11 99000-0001","n":1},{"acao":"mensagem_criada","ator":"motor","canal":"whatsapp","contato":"Rui Nogueira","detalhe":"1","momento":0,"remetente":"+55 11 99000-0001","n":1},{"acao":"mensagem_criada","ator":"motor","canal":"whatsapp","contato":"Sônia Prado","detalhe":"1","momento":0,"remetente":"+55 11 98000-0009","n":1},{"acao":"mensagem_criada","ator":"motor","canal":"whatsapp","contato":"Vera Castro","detalhe":"1","momento":0,"remetente":"+55 11 98000-0009","n":1},{"acao":"entregue_ao_provedor","ator":"provedor","canal":"whatsapp","contato":"Marina Alves","detalhe":"PROV-9e1d1f43","momento":0,"remetente":"+55 11 99000-0001","n":1},{"acao":"entregue_ao_provedor","ator":"provedor","canal":"whatsapp","contato":"Otávio Lima","detalhe":"PROV-a5cf3d24","momento":0,"remetente":"+55 11 99000-0001","n":1},{"acao":"entregue_ao_provedor","ator":"provedor","canal":"whatsapp","contato":"Paula Ribeiro","detalhe":"PROV-d2fe7a0c","momento":0,"remetente":"+55 11 99000-0001","n":1},{"acao":"entregue_ao_provedor","ator":"provedor","canal":"whatsapp","contato":"Rui Nogueira","detalhe":"PROV-2f34a3b8","momento":0,"remetente":"+55 11 99000-0001","n":1},{"acao":"entregue_ao_provedor","ator":"provedor","canal":"whatsapp","contato":"Sônia Prado","detalhe":"PROV-e9b69a87","momento":0,"remetente":"+55 11 98000-0009","n":1},{"acao":"rejeitado","ator":"provedor","canal":"whatsapp","contato":"Vera Castro","detalhe":"número não existe no WhatsApp","momento":0,"remetente":"+55 11 98000-0009","n":1},{"acao":"novo_dia","ator":"operador","canal":null,"contato":null,"detalhe":"dia 3 da cadência — quotas diárias renovadas","momento":48,"remetente":null,"n":1},{"acao":"mensagem_criada","ator":"motor","canal":"whatsapp","contato":"Marina Alves","detalhe":"2","momento":48,"remetente":"+55 11 99000-0001","n":1},{"acao":"mensagem_criada","ator":"motor","canal":"whatsapp","contato":"Otávio Lima","detalhe":"2","momento":48,"remetente":"+55 11 99000-0001","n":1},{"acao":"passo_pulado_sem_identidade","ator":"motor","canal":"whatsapp","contato":"Paula Ribeiro","detalhe":"email","momento":48,"remetente":"+55 11 99000-0001","n":1},{"acao":"mensagem_criada","ator":"motor","canal":"whatsapp","contato":"Rui Nogueira","detalhe":"2","momento":48,"remetente":"+55 11 99000-0001","n":1},{"acao":"entregue_ao_provedor","ator":"provedor","canal":"email","contato":"Marina Alves","detalhe":"PROV-7f08a022","momento":48,"remetente":"resgate@afinix-relaciona.com.br","n":1},{"acao":"entregue_ao_provedor","ator":"provedor","canal":"email","contato":"Otávio Lima","detalhe":"PROV-d8ed9d3b","momento":48,"remetente":"resgate@afinix-relaciona.com.br","n":1},{"acao":"entregue_ao_provedor","ator":"provedor","canal":"email","contato":"Rui Nogueira","detalhe":"PROV-105fc448","momento":48,"remetente":"resgate@afinix-relaciona.com.br","n":1},{"acao":"respondeu","ator":"pessoa","canal":"whatsapp","contato":"Otávio Lima","detalhe":"oi, pode me mandar os valores?","momento":48,"remetente":null,"n":1},{"acao":"suprimida","ator":"operador","canal":null,"contato":"Paula Ribeiro","detalhe":"pediu remoção por telefone; entra na lista global","momento":48,"remetente":null,"n":1},{"acao":"encerrado_supressao","ator":"motor","canal":"whatsapp","contato":"Paula Ribeiro","detalhe":"contato suprimido","momento":48,"remetente":"+55 11 99000-0001","n":1},{"acao":"novo_dia","ator":"operador","canal":null,"contato":null,"detalhe":"dia 5 da cadência — quotas diárias renovadas","momento":96,"remetente":null,"n":1},{"acao":"mensagem_criada","ator":"motor","canal":"whatsapp","contato":"Sônia Prado","detalhe":"2","momento":96,"remetente":"+55 11 98000-0009","n":1},{"acao":"passo_pulado_sem_identidade","ator":"motor","canal":"whatsapp","contato":"Vera Castro","detalhe":"whatsapp","momento":96,"remetente":"+55 11 98000-0009","n":1},{"acao":"entregue_ao_provedor","ator":"provedor","canal":"whatsapp","contato":"Sônia Prado","detalhe":"PROV-1af57a51","momento":96,"remetente":"+55 11 98000-0009","n":1},{"acao":"clicou","ator":"pessoa","canal":"email","contato":"Marina Alves","detalhe":"abriu o link do e-mail — engajamento, não resposta","momento":96,"remetente":null,"n":1},{"acao":"encerrado_fim","ator":"motor","canal":"whatsapp","contato":"Vera Castro","detalhe":"","momento":96,"remetente":"+55 11 98000-0009","n":1},{"acao":"novo_dia","ator":"operador","canal":null,"contato":null,"detalhe":"dia 6 da cadência — quotas diárias renovadas","momento":120,"remetente":null,"n":1},{"acao":"mensagem_criada","ator":"motor","canal":"whatsapp","contato":"Marina Alves","detalhe":"3","momento":120,"remetente":"+55 11 99000-0001","n":1},{"acao":"mensagem_criada","ator":"motor","canal":"whatsapp","contato":"Rui Nogueira","detalhe":"3","momento":120,"remetente":"+55 11 99000-0001","n":1},{"acao":"entregue_ao_provedor","ator":"provedor","canal":"whatsapp","contato":"Marina Alves","detalhe":"PROV-ed47edf9","momento":120,"remetente":"+55 11 99000-0001","n":1},{"acao":"entregue_ao_provedor","ator":"provedor","canal":"whatsapp","contato":"Rui Nogueira","detalhe":"PROV-6665c3a8","momento":120,"remetente":"+55 11 99000-0001","n":1}],"enrollments":[{"passo":3,"motivo":"fim_dos_passos","status":"encerrado","contato":"Marina Alves","campanha":"Resgate 2024"},{"passo":2,"motivo":"resposta","status":"encerrado","contato":"Otávio Lima","campanha":"Resgate 2024"},{"passo":2,"motivo":"supressao","status":"encerrado","contato":"Paula Ribeiro","campanha":"Resgate 2024"},{"passo":3,"motivo":"fim_dos_passos","status":"encerrado","contato":"Rui Nogueira","campanha":"Resgate 2024"},{"passo":2,"motivo":"fim_dos_passos","status":"encerrado","contato":"Sônia Prado","campanha":"Lista fria SP"},{"passo":2,"motivo":"fim_dos_passos","status":"encerrado","contato":"Vera Castro","campanha":"Lista fria SP"}],"mensagens":[{"canal":"whatsapp","status":"enviado","contato":"Marina Alves","conteudo":"Oi Marina Alves, aqui é da Afinix. Podemos retomar aquela cotação?","remetente":"+55 11 99000-0001"},{"canal":"whatsapp","status":"enviado","contato":"Otávio Lima","conteudo":"Oi Otávio Lima, aqui é da Afinix. Podemos retomar aquela cotação?","remetente":"+55 11 99000-0001"},{"canal":"whatsapp","status":"enviado","contato":"Paula Ribeiro","conteudo":"Oi Paula Ribeiro, aqui é da Afinix. Podemos retomar aquela cotação?","remetente":"+55 11 99000-0001"},{"canal":"whatsapp","status":"enviado","contato":"Rui Nogueira","conteudo":"Oi Rui Nogueira, aqui é da Afinix. Podemos retomar aquela cotação?","remetente":"+55 11 99000-0001"},{"canal":"whatsapp","status":"enviado","contato":"Sônia Prado","conteudo":"Olá Sônia Prado, trabalho com plano de saúde empresarial em São Paulo. Faz sentido conversarmos?","remetente":"+55 11 98000-0009"},{"canal":"whatsapp","status":"falha","contato":"Vera Castro","conteudo":"Olá Vera Castro, trabalho com plano de saúde empresarial em Osasco. Faz sentido conversarmos?","remetente":"+55 11 98000-0009"},{"canal":"email","status":"enviado","contato":"Marina Alves","conteudo":"Marina Alves, separei duas opções que cabem no que você falou.","remetente":"resgate@afinix-relaciona.com.br"},{"canal":"email","status":"enviado","contato":"Otávio Lima","conteudo":"Otávio Lima, separei duas opções que cabem no que você falou.","remetente":"resgate@afinix-relaciona.com.br"},{"canal":"email","status":"enviado","contato":"Rui Nogueira","conteudo":"Rui Nogueira, separei duas opções que cabem no que você falou.","remetente":"resgate@afinix-relaciona.com.br"},{"canal":"whatsapp","status":"enviado","contato":"Sônia Prado","conteudo":"Sônia Prado, consigo fazer uma cotação sem compromisso. Quer que eu envie?","remetente":"+55 11 98000-0009"},{"canal":"whatsapp","status":"enviado","contato":"Marina Alves","conteudo":"Marina Alves, te mandei um e-mail com as opções. Prefere que eu resuma por aqui?","remetente":"+55 11 99000-0001"},{"canal":"whatsapp","status":"enviado","contato":"Rui Nogueira","conteudo":"Rui Nogueira, te mandei um e-mail com as opções. Prefere que eu resuma por aqui?","remetente":"+55 11 99000-0001"}],"remetentes":[{"tipo":"fria","canal":"whatsapp","quota":2,"saude":100.0,"usado":1,"estado":"ativo","identificador":"+55 11 98000-0009"},{"tipo":"morna","canal":"whatsapp","quota":200,"saude":100.0,"usado":2,"estado":"ativo","identificador":"+55 11 99000-0001"},{"tipo":"morna","canal":"email","quota":300,"saude":100.0,"usado":3,"estado":"ativo","identificador":"resgate@afinix-relaciona.com.br"}],"supressao":[{"motivo":"opt-out registrado na campanha anterior","contato":"Tulio Barros"},{"motivo":"pediu remoção por telefone","contato":"Paula Ribeiro"}],"outbox":[{"fato":"identidade_invalida","autoria":"motor-prospeccao","contato":"Vera Castro"}],"horas":120,"modelos":[{"nome":"Resgate por WhatsApp","slug":"resgate-whatsapp","tipo":"morna","canais":["whatsapp"],"passos":3,"cadencia":[{"canal":"whatsapp","atraso":0},{"canal":"whatsapp","atraso":48},{"canal":"whatsapp","atraso":96}],"objetivo":"Reabrir conversa com oportunidade parada","descricao":"Três toques no WhatsApp para quem já conversou com a corretora e esfriou.","base_legal":"legítimo interesse — base própria com relacionamento prévio"},{"nome":"Resgate multicanal","slug":"resgate-multicanal","tipo":"morna","canais":["whatsapp","email","sms"],"passos":4,"cadencia":[{"canal":"whatsapp","atraso":0},{"canal":"email","atraso":48},{"canal":"whatsapp","atraso":72},{"canal":"sms","atraso":120}],"objetivo":"Reabrir oportunidade usando todos os endereços conhecidos","descricao":"WhatsApp, e-mail e SMS alternados. Quem não responde num canal recebe no outro.","base_legal":"legítimo interesse — base própria com relacionamento prévio"},{"nome":"Resgate por Direct","slug":"resgate-direct","tipo":"morna","canais":["instagram"],"passos":2,"cadencia":[{"canal":"instagram","atraso":0},{"canal":"instagram","atraso":12}],"objetivo":"Retomar conversa iniciada pelo próprio contato no Instagram","descricao":"Instagram para quem já falou com a corretora por lá. Só dentro da janela de 24h.","base_legal":"resposta em janela de 24h — contato iniciado pelo cliente"},{"nome":"Renovação de apólice","slug":"renovacao-apolice","tipo":"morna","canais":["whatsapp","sms"],"passos":3,"cadencia":[{"canal":"whatsapp","atraso":0},{"canal":"whatsapp","atraso":168},{"canal":"sms","atraso":336}],"objetivo":"Reter cliente antes do vencimento","descricao":"Aviso de vencimento em WhatsApp e SMS, começando 45 dias antes.","base_legal":"execução de contrato — cliente ativo"},{"nome":"Reengajamento","slug":"reengajamento","tipo":"morna","canais":["whatsapp","email"],"passos":2,"cadencia":[{"canal":"whatsapp","atraso":0},{"canal":"email","atraso":72}],"objetivo":"Recuperar conversa que morreu no meio","descricao":"Para quem respondeu, esfriou e nunca fechou. Retoma de onde a conversa parou.","base_legal":"legítimo interesse — contato respondeu anteriormente"},{"nome":"Prospecção fria — WhatsApp","slug":"prospeccao-fria","tipo":"fria","canais":["whatsapp"],"passos":2,"cadencia":[{"canal":"whatsapp","atraso":0},{"canal":"whatsapp","atraso":96}],"objetivo":"Abrir conversa com quem nunca falou com a corretora","descricao":"Dois toques em lista fria, com chip separado e volume baixo por dia.","base_legal":"legítimo interesse — prospecção B2B"},{"nome":"Prospecção fria — multicanal","slug":"prospeccao-fria-multicanal","tipo":"fria","canais":["whatsapp","email"],"passos":3,"cadencia":[{"canal":"email","atraso":0},{"canal":"whatsapp","atraso":72},{"canal":"email","atraso":168}],"objetivo":"Abrir conversa em lista fria sem arriscar o domínio da operação","descricao":"WhatsApp e e-mail em domínio separado do institucional. Pool frio isolado.","base_legal":"legítimo interesse — prospecção B2B"}],"campanhas":[{"nome":"Lista fria SP","tipo":"fria","ativa":true,"canais":["whatsapp"],"falhas":1,"modelo":"prospeccao-fria","passos":2,"agentes":{"whatsapp":"Caio — prospecção fria no WhatsApp"},"enviadas":2,"objetivo":"Abrir conversa com quem nunca falou com a corretora","inscritos":2,"respostas":0,"concluidas":2,"suprimidos":0,"em_cadencia":0},{"nome":"Resgate 2024","tipo":"morna","ativa":true,"canais":["whatsapp","email"],"falhas":0,"modelo":"resgate-multicanal","passos":3,"agentes":{"email":"Edu — atendimento por e-mail","whatsapp":"Ana — resgate no WhatsApp"},"enviadas":9,"objetivo":"Reabrir oportunidade usando todos os endereços conhecidos","inscritos":4,"respostas":1,"concluidas":2,"suprimidos":1,"em_cadencia":0}],"provedores":[{"docs":"https://docs.claude.com/en/api","nome":"Anthropic (Claude)","slug":"anthropic","campos":[{"tipo":"senha","ajuda":"Começa com sk-ant-","chave":"api_key","rotulo":"API key","segredo":true,"obrigatorio":true},{"tipo":"texto","ajuda":"Só para proxy ou gateway próprio","chave":"base_url","rotulo":"Base URL","segredo":false,"obrigatorio":false}],"modelos":["claude-opus-5","claude-sonnet-5","claude-haiku-4-5","claude-fable-5-1"],"descricao":"Bom em seguir instrução longa e não sair do papel — útil quando o agente tem regra de compliance."},{"docs":"https://platform.openai.com/docs","nome":"OpenAI","slug":"openai","campos":[{"tipo":"senha","ajuda":"Começa com sk-","chave":"api_key","rotulo":"API key","segredo":true,"obrigatorio":true},{"tipo":"texto","ajuda":"Só se a conta tiver mais de uma organização","chave":"organizacao","rotulo":"Organization ID","segredo":false,"obrigatorio":false},{"tipo":"texto","ajuda":"Para Azure OpenAI ou gateway próprio","chave":"base_url","rotulo":"Base URL","segredo":false,"obrigatorio":false}],"modelos":[],"descricao":"O mais conhecido. Ecossistema grande e latência baixa nos modelos menores."},{"docs":"https://ai.google.dev/docs","nome":"Google Gemini","slug":"google","campos":[{"tipo":"senha","ajuda":"Google AI Studio","chave":"api_key","rotulo":"API key","segredo":true,"obrigatorio":true},{"tipo":"texto","ajuda":"Só ao usar Vertex AI","chave":"projeto","rotulo":"Projeto (Vertex)","segredo":false,"obrigatorio":false},{"tipo":"texto","ajuda":"ex.: us-central1","chave":"regiao","rotulo":"Região (Vertex)","segredo":false,"obrigatorio":false}],"modelos":[],"descricao":"Janela de contexto grande e preço competitivo no tier rápido."},{"docs":"https://docs.perplexity.ai","nome":"Perplexity","slug":"perplexity","campos":[{"tipo":"senha","ajuda":"Começa com pplx-","chave":"api_key","rotulo":"API key","segredo":true,"obrigatorio":true}],"modelos":[],"descricao":"Responde com busca na web embutida — serve quando o agente precisa de informação atual."},{"docs":"https://api-docs.deepseek.com","nome":"DeepSeek","slug":"deepseek","campos":[{"tipo":"senha","ajuda":null,"chave":"api_key","rotulo":"API key","segredo":true,"obrigatorio":true},{"tipo":"texto","ajuda":"Padrão: https://api.deepseek.com","chave":"base_url","rotulo":"Base URL","segredo":false,"obrigatorio":false}],"modelos":[],"descricao":"Custo baixo por token. Boa opção para agente de triagem em volume alto."},{"docs":"https://openrouter.ai/docs","nome":"OpenRouter","slug":"openrouter","campos":[{"tipo":"senha","ajuda":"Começa com sk-or-","chave":"api_key","rotulo":"API key","segredo":true,"obrigatorio":true},{"tipo":"texto","ajuda":"Identifica a aplicação no ranking do OpenRouter","chave":"referer","rotulo":"HTTP-Referer","segredo":false,"obrigatorio":false}],"modelos":[],"descricao":"Um endpoint para vários provedores. Útil para testar modelo novo sem abrir conta nova."},{"docs":null,"nome":"Endpoint compatível","slug":"compativel","campos":[{"tipo":"senha","ajuda":null,"chave":"api_key","rotulo":"API key","segredo":true,"obrigatorio":true},{"tipo":"texto","ajuda":"Endereço completo, ex.: https://api.exemplo.com/v1","chave":"base_url","rotulo":"Base URL","segredo":false,"obrigatorio":true}],"modelos":[],"descricao":"Qualquer API no formato OpenAI — modelo local, vLLM, Together, Groq."}],"agentes":[{"nome":"Edu — atendimento por e-mail","canal":"email","papel":"Resposta escrita","limite":6,"pronto":true,"escalar":"Pedido de proposta formal, reclamação, dúvida sobre sinistro, ou qualquer assunto de apólice já ativa.","descricao":"Lê e responde e-mails de campanha. Formato mais longo, com espaço para explicar.","instrucoes":"Você responde e-mails recebidos em resposta às campanhas da Afinix Corretora.\n\nComo falar: português do Brasil, formal mas não empolado. E-mail comporta explicação — aqui você pode usar dois ou três parágrafos curtos, ou uma lista quando houver opções a comparar. Sempre com assunto claro e saudação com o nome da pessoa.\n\nO que fazer:\n1. Responda a pergunta que foi feita, antes de qualquer outra coisa.\n2. Se a pessoa pediu comparação, apresente as opções em lista, sem valores.\n3. Feche com um próximo passo concreto: uma ligação, um horário, um documento que você precisa.\n\nO que nunca fazer: anexar proposta, citar valor, prometer cobertura, ou responder pergunta sobre sinistro em andamento — isso é do time de atendimento, não seu.\n\nSe o e-mail for um pedido de descadastro, confirme em uma linha, informe que a remoção é imediata e não mande mais nada."},{"nome":"Ana — resgate no WhatsApp","canal":"whatsapp","papel":"Retomada de conversa","limite":8,"pronto":true,"escalar":"Pedido de proposta formal, pergunta sobre cobertura específica, reclamação, ou menção a processo ou órgão regulador.","descricao":"Responde quem reagiu a uma campanha de resgate. Reabre o assunto e marca conversa com o corretor.","instrucoes":"Você atende pelo WhatsApp da Afinix Corretora, respondendo pessoas que já conversaram com a corretora antes e voltaram a responder agora.\n\nComo falar: português do Brasil, tom de quem já conhece a pessoa. Mensagens curtas, de uma ou duas frases — no WhatsApp texto longo não é lido. Sem emoji em excesso, no máximo um. Nunca escreva em caixa alta.\n\nO que fazer, nesta ordem:\n1. Retome o assunto de onde parou, sem pedir para a pessoa repetir o que já disse.\n2. Confirme se ainda faz sentido: plano individual ou empresarial, quantas vidas, cidade.\n3. Se fizer sentido, ofereça horário para o corretor ligar. Proponha dois horários concretos.\n\nO que nunca fazer: prometer valor, prazo de carência, cobertura ou reembolso. Você não cota. Se a pessoa insistir em preço, diga que o corretor fecha o número porque depende de idade e operadora.\n\nSe a pessoa pedir para não ser mais contatada, confirme em uma frase e encerre. Não tente reverter."},{"nome":"Caio — prospecção fria no WhatsApp","canal":"whatsapp","papel":"Qualificação inicial","limite":6,"pronto":true,"escalar":"Empresa qualificada e interessada, pedido de proposta, ou qualquer pergunta jurídica sobre origem do contato.","descricao":"Primeiro contato com quem nunca falou com a corretora. Descobre se há encaixe antes de gastar tempo do corretor.","instrucoes":"Você faz o primeiro contato pelo WhatsApp com empresas que nunca falaram com a Afinix Corretora.\n\nComo falar: direto e curto. A pessoa não pediu esse contato, então cada mensagem precisa justificar a próxima. Uma pergunta por vez. Sem \"tudo bem?\" seguido de parágrafo de venda.\n\nPrimeira coisa: diga quem você é e por que está falando, em uma frase. Depois pergunte apenas se a empresa já tem plano de saúde para os funcionários.\n\nQualifica se: tem CNPJ ativo, mais de duas vidas, e demonstra interesse em ouvir proposta.\nNão qualifica se: pessoa física sozinha, já renovou há menos de dois meses, ou responde só por educação.\n\nO que nunca fazer: insistir depois de uma negativa, mandar mais de uma mensagem seguida sem resposta, prometer preço, ou dizer que é \"da operadora\". Você é de uma corretora.\n\nQualquer sinal de incômodo — \"quem passou meu número\", \"não quero\", \"para de mandar\" — confirme a remoção em uma frase e encerre. Isso vale mais que qualquer lead."},{"nome":"Rita — confirmação por SMS","canal":"sms","papel":"Confirmação curta","limite":3,"pronto":true,"escalar":"Qualquer pergunta que não caiba em uma mensagem, ou pedido de contato com pessoa.","descricao":"Trata respostas de SMS. Canal de uma linha: confirma intenção e passa para outro canal.","instrucoes":"Você trata respostas recebidas por SMS nas campanhas da Afinix Corretora.\n\nRestrição do canal, que manda em tudo: 160 caracteres. Sua resposta cabe em uma mensagem, sempre. Não existe conversa longa aqui — o SMS confirma uma intenção e move a conversa para onde ela cabe.\n\nO que fazer: se a pessoa respondeu SIM ou algo equivalente, confirme e diga que o corretor vai chamar no WhatsApp hoje. Se respondeu qualquer coisa que indique saída — SAIR, PARE, NAO — confirme a remoção em uma linha.\n\nO que nunca fazer: mandar link encurtado, pedir dado pessoal, mandar duas mensagens seguidas, ou tentar cotar. Se a pessoa fez uma pergunta que não cabe em 160 caracteres, diga que vai continuar pelo WhatsApp e pare por aqui."},{"nome":"Bia — direct do Instagram","canal":"instagram","papel":"Atendimento na janela de 24h","limite":10,"pronto":true,"escalar":"Pedido de cotação completa, dúvida sobre apólice existente, ou pedido de dado pessoal que não pode ir pelo direct.","descricao":"Responde quem chamou no direct. Trabalha só dentro da janela em que a resposta é permitida.","instrucoes":"Você responde o direct do Instagram da Afinix Corretora. Só entram aqui conversas que a própria pessoa começou.\n\nComo falar: mais leve que no WhatsApp, o Instagram é um canal informal. Frases curtas. Pode usar um emoji quando couber, nunca mais de um por mensagem.\n\nO que fazer: entenda o que a pessoa quer — cotação, dúvida sobre plano que já tem, ou informação sobre um post. Se for cotação, pergunte cidade, idade e se é para pessoa física ou empresa, uma pergunta de cada vez.\n\nRestrição de canal que não pode ser ignorada: você só pode responder dentro da janela de 24 horas desde a última mensagem da pessoa. Passou disso, não mande nada — nem \"oi, ainda está aí?\". Se a conversa precisa continuar depois, peça o WhatsApp dentro da janela.\n\nO que nunca fazer: cotar valor, falar de carência, ou pedir CPF, cartão ou qualquer dado sensível pelo direct."}]};
+const D = {"agentes": [{"canal": "email", "descricao": "Lê e responde e-mails de campanha. Formato mais longo, com espaço para explicar.", "escalar": "Pedido de proposta formal, reclamação, dúvida sobre sinistro, ou qualquer assunto de apólice já ativa.", "instrucoes": "Você responde e-mails recebidos em resposta às campanhas da Afinix Corretora.\n\nComo falar: português do Brasil, formal mas não empolado. E-mail comporta explicação — aqui você pode usar dois ou três parágrafos curtos, ou uma lista quando houver opções a comparar. Sempre com assunto claro e saudação com o nome da pessoa.\n\nO que fazer:\n1. Responda a pergunta que foi feita, antes de qualquer outra coisa.\n2. Se a pessoa pediu comparação, apresente as opções em lista, sem valores.\n3. Feche com um próximo passo concreto: uma ligação, um horário, um documento que você precisa.\n\nO que nunca fazer: anexar proposta, citar valor, prometer cobertura, ou responder pergunta sobre sinistro em andamento — isso é do time de atendimento, não seu.\n\nSe o e-mail for um pedido de descadastro, confirme em uma linha, informe que a remoção é imediata e não mande mais nada.", "limite": 6, "nome": "Edu — atendimento por e-mail", "papel": "Resposta escrita", "pronto": false}, {"canal": "whatsapp", "descricao": "Responde quem reagiu a uma campanha de resgate. Reabre o assunto e marca conversa com o corretor.", "escalar": "Pedido de proposta formal, pergunta sobre cobertura específica, reclamação, ou menção a processo ou órgão regulador.", "instrucoes": "Você atende pelo WhatsApp da Afinix Corretora, respondendo pessoas que já conversaram com a corretora antes e voltaram a responder agora.\n\nComo falar: português do Brasil, tom de quem já conhece a pessoa. Mensagens curtas, de uma ou duas frases — no WhatsApp texto longo não é lido. Sem emoji em excesso, no máximo um. Nunca escreva em caixa alta.\n\nO que fazer, nesta ordem:\n1. Retome o assunto de onde parou, sem pedir para a pessoa repetir o que já disse.\n2. Confirme se ainda faz sentido: plano individual ou empresarial, quantas vidas, cidade.\n3. Se fizer sentido, ofereça horário para o corretor ligar. Proponha dois horários concretos.\n\nO que nunca fazer: prometer valor, prazo de carência, cobertura ou reembolso. Você não cota. Se a pessoa insistir em preço, diga que o corretor fecha o número porque depende de idade e operadora.\n\nSe a pessoa pedir para não ser mais contatada, confirme em uma frase e encerre. Não tente reverter.", "limite": 8, "nome": "Ana — resgate no WhatsApp", "papel": "Retomada de conversa", "pronto": false}, {"canal": "whatsapp", "descricao": "Primeiro contato com quem nunca falou com a corretora. Descobre se há encaixe antes de gastar tempo do corretor.", "escalar": "Empresa qualificada e interessada, pedido de proposta, ou qualquer pergunta jurídica sobre origem do contato.", "instrucoes": "Você faz o primeiro contato pelo WhatsApp com empresas que nunca falaram com a Afinix Corretora.\n\nComo falar: direto e curto. A pessoa não pediu esse contato, então cada mensagem precisa justificar a próxima. Uma pergunta por vez. Sem \"tudo bem?\" seguido de parágrafo de venda.\n\nPrimeira coisa: diga quem você é e por que está falando, em uma frase. Depois pergunte apenas se a empresa já tem plano de saúde para os funcionários.\n\nQualifica se: tem CNPJ ativo, mais de duas vidas, e demonstra interesse em ouvir proposta.\nNão qualifica se: pessoa física sozinha, já renovou há menos de dois meses, ou responde só por educação.\n\nO que nunca fazer: insistir depois de uma negativa, mandar mais de uma mensagem seguida sem resposta, prometer preço, ou dizer que é \"da operadora\". Você é de uma corretora.\n\nQualquer sinal de incômodo — \"quem passou meu número\", \"não quero\", \"para de mandar\" — confirme a remoção em uma frase e encerre. Isso vale mais que qualquer lead.", "limite": 6, "nome": "Caio — prospecção fria no WhatsApp", "papel": "Qualificação inicial", "pronto": false}, {"canal": "sms", "descricao": "Trata respostas de SMS. Canal de uma linha: confirma intenção e passa para outro canal.", "escalar": "Qualquer pergunta que não caiba em uma mensagem, ou pedido de contato com pessoa.", "instrucoes": "Você trata respostas recebidas por SMS nas campanhas da Afinix Corretora.\n\nRestrição do canal, que manda em tudo: 160 caracteres. Sua resposta cabe em uma mensagem, sempre. Não existe conversa longa aqui — o SMS confirma uma intenção e move a conversa para onde ela cabe.\n\nO que fazer: se a pessoa respondeu SIM ou algo equivalente, confirme e diga que o corretor vai chamar no WhatsApp hoje. Se respondeu qualquer coisa que indique saída — SAIR, PARE, NAO — confirme a remoção em uma linha.\n\nO que nunca fazer: mandar link encurtado, pedir dado pessoal, mandar duas mensagens seguidas, ou tentar cotar. Se a pessoa fez uma pergunta que não cabe em 160 caracteres, diga que vai continuar pelo WhatsApp e pare por aqui.", "limite": 3, "nome": "Rita — confirmação por SMS", "papel": "Confirmação curta", "pronto": true}, {"canal": "instagram", "descricao": "Responde quem chamou no direct. Trabalha só dentro da janela em que a resposta é permitida.", "escalar": "Pedido de cotação completa, dúvida sobre apólice existente, ou pedido de dado pessoal que não pode ir pelo direct.", "instrucoes": "Você responde o direct do Instagram da Afinix Corretora. Só entram aqui conversas que a própria pessoa começou.\n\nComo falar: mais leve que no WhatsApp, o Instagram é um canal informal. Frases curtas. Pode usar um emoji quando couber, nunca mais de um por mensagem.\n\nO que fazer: entenda o que a pessoa quer — cotação, dúvida sobre plano que já tem, ou informação sobre um post. Se for cotação, pergunte cidade, idade e se é para pessoa física ou empresa, uma pergunta de cada vez.\n\nRestrição de canal que não pode ser ignorada: você só pode responder dentro da janela de 24 horas desde a última mensagem da pessoa. Passou disso, não mande nada — nem \"oi, ainda está aí?\". Se a conversa precisa continuar depois, peça o WhatsApp dentro da janela.\n\nO que nunca fazer: cotar valor, falar de carência, ou pedir CPF, cartão ou qualquer dado sensível pelo direct.", "limite": 10, "nome": "Bia — direct do Instagram", "papel": "Atendimento na janela de 24h", "pronto": true}], "campanhas": [{"agentes": {"whatsapp": "Caio — prospecção fria no WhatsApp"}, "ativa": true, "canais": ["whatsapp"], "concluidas": 2, "em_cadencia": 0, "enviadas": 2, "falhas": 1, "inscritos": 2, "modelo": "prospeccao-fria", "nome": "Lista fria SP", "objetivo": "Abrir conversa com quem nunca falou com a corretora", "passos": 2, "respostas": 0, "suprimidos": 0, "tipo": "fria"}, {"agentes": {"email": "Edu — atendimento por e-mail", "whatsapp": "Ana — resgate no WhatsApp"}, "ativa": true, "canais": ["whatsapp", "email"], "concluidas": 2, "em_cadencia": 0, "enviadas": 9, "falhas": 0, "inscritos": 4, "modelo": "resgate-multicanal", "nome": "Resgate 2024", "objetivo": "Reabrir oportunidade usando todos os endereços conhecidos", "passos": 3, "respostas": 1, "suprimidos": 1, "tipo": "morna"}], "enrollments": [{"campanha": "Resgate 2024", "contato": "Marina Alves", "motivo": "fim_dos_passos", "passo": 3, "status": "encerrado"}, {"campanha": "Resgate 2024", "contato": "Otávio Lima", "motivo": "resposta", "passo": 2, "status": "encerrado"}, {"campanha": "Resgate 2024", "contato": "Paula Ribeiro", "motivo": "supressao", "passo": 2, "status": "encerrado"}, {"campanha": "Resgate 2024", "contato": "Rui Nogueira", "motivo": "fim_dos_passos", "passo": 3, "status": "encerrado"}, {"campanha": "Lista fria SP", "contato": "Sônia Prado", "motivo": "fim_dos_passos", "passo": 2, "status": "encerrado"}, {"campanha": "Lista fria SP", "contato": "Vera Castro", "motivo": "fim_dos_passos", "passo": 2, "status": "encerrado"}], "horas": 120, "linha": [{"acao": "inscrito", "ator": "motor", "canal": null, "contato": "Marina Alves", "detalhe": "Resgate 2024", "momento": 0, "remetente": null}, {"acao": "inscrito", "ator": "motor", "canal": null, "contato": "Otávio Lima", "detalhe": "Resgate 2024", "momento": 0, "remetente": null}, {"acao": "inscrito", "ator": "motor", "canal": null, "contato": "Paula Ribeiro", "detalhe": "Resgate 2024", "momento": 0, "remetente": null}, {"acao": "inscrito", "ator": "motor", "canal": null, "contato": "Rui Nogueira", "detalhe": "Resgate 2024", "momento": 0, "remetente": null}, {"acao": "inscricao_recusada", "ator": "motor", "canal": null, "contato": "Tulio Barros", "detalhe": "já estava na supressão — nem chega a criar estado", "momento": 0, "remetente": null}, {"acao": "inscrito", "ator": "motor", "canal": null, "contato": "Sônia Prado", "detalhe": "Lista fria SP", "momento": 0, "remetente": null}, {"acao": "inscrito", "ator": "motor", "canal": null, "contato": "Vera Castro", "detalhe": "Lista fria SP", "momento": 0, "remetente": null}, {"acao": "mensagem_criada", "ator": "motor", "canal": "whatsapp", "contato": "Marina Alves", "detalhe": "1", "momento": 0, "remetente": "+55 11 99000-0001"}, {"acao": "mensagem_criada", "ator": "motor", "canal": "whatsapp", "contato": "Otávio Lima", "detalhe": "1", "momento": 0, "remetente": "+55 11 99000-0002"}, {"acao": "mensagem_criada", "ator": "motor", "canal": "whatsapp", "contato": "Paula Ribeiro", "detalhe": "1", "momento": 0, "remetente": "+55 11 99000-0001"}, {"acao": "mensagem_criada", "ator": "motor", "canal": "whatsapp", "contato": "Rui Nogueira", "detalhe": "1", "momento": 0, "remetente": "+55 11 99000-0002"}, {"acao": "mensagem_criada", "ator": "motor", "canal": "whatsapp", "contato": "Sônia Prado", "detalhe": "1", "momento": 0, "remetente": "+55 11 98000-0009"}, {"acao": "mensagem_criada", "ator": "motor", "canal": "whatsapp", "contato": "Vera Castro", "detalhe": "1", "momento": 0, "remetente": "+55 11 98000-0009"}, {"acao": "entregue_ao_provedor", "ator": "provedor", "canal": "whatsapp", "contato": "Marina Alves", "detalhe": "PROV-3ab9148b", "momento": 0, "remetente": "+55 11 99000-0001"}, {"acao": "entregue_ao_provedor", "ator": "provedor", "canal": "whatsapp", "contato": "Otávio Lima", "detalhe": "PROV-58010322", "momento": 0, "remetente": "+55 11 99000-0002"}, {"acao": "entregue_ao_provedor", "ator": "provedor", "canal": "whatsapp", "contato": "Paula Ribeiro", "detalhe": "PROV-fc789884", "momento": 0, "remetente": "+55 11 99000-0001"}, {"acao": "entregue_ao_provedor", "ator": "provedor", "canal": "whatsapp", "contato": "Rui Nogueira", "detalhe": "PROV-74b65076", "momento": 0, "remetente": "+55 11 99000-0002"}, {"acao": "entregue_ao_provedor", "ator": "provedor", "canal": "whatsapp", "contato": "Sônia Prado", "detalhe": "PROV-e8c15112", "momento": 0, "remetente": "+55 11 98000-0009"}, {"acao": "rejeitado", "ator": "provedor", "canal": "whatsapp", "contato": "Vera Castro", "detalhe": "número não existe no WhatsApp", "momento": 0, "remetente": "+55 11 98000-0009"}, {"acao": "novo_dia", "ator": "operador", "canal": null, "contato": null, "detalhe": "dia 3 da cadência — quotas diárias renovadas", "momento": 48, "remetente": null}, {"acao": "mensagem_criada", "ator": "motor", "canal": "whatsapp", "contato": "Marina Alves", "detalhe": "2", "momento": 48, "remetente": "+55 11 99000-0001"}, {"acao": "mensagem_criada", "ator": "motor", "canal": "whatsapp", "contato": "Otávio Lima", "detalhe": "2", "momento": 48, "remetente": "+55 11 99000-0002"}, {"acao": "passo_pulado_sem_identidade", "ator": "motor", "canal": "whatsapp", "contato": "Paula Ribeiro", "detalhe": "email", "momento": 48, "remetente": "+55 11 99000-0001"}, {"acao": "mensagem_criada", "ator": "motor", "canal": "whatsapp", "contato": "Rui Nogueira", "detalhe": "2", "momento": 48, "remetente": "+55 11 99000-0002"}, {"acao": "entregue_ao_provedor", "ator": "provedor", "canal": "email", "contato": "Marina Alves", "detalhe": "PROV-0e24e7c3", "momento": 48, "remetente": "resgate@afinix-relaciona.com.br"}, {"acao": "entregue_ao_provedor", "ator": "provedor", "canal": "email", "contato": "Otávio Lima", "detalhe": "PROV-c5d4d082", "momento": 48, "remetente": "resgate@afinix-relaciona.com.br"}, {"acao": "entregue_ao_provedor", "ator": "provedor", "canal": "email", "contato": "Rui Nogueira", "detalhe": "PROV-ac965e79", "momento": 48, "remetente": "resgate@afinix-relaciona.com.br"}, {"acao": "respondeu", "ator": "pessoa", "canal": "whatsapp", "contato": "Otávio Lima", "detalhe": "oi, pode me mandar os valores?", "momento": 48, "remetente": null}, {"acao": "suprimida", "ator": "operador", "canal": null, "contato": "Paula Ribeiro", "detalhe": "pediu remoção por telefone; entra na lista global", "momento": 48, "remetente": null}, {"acao": "encerrado_supressao", "ator": "motor", "canal": "whatsapp", "contato": "Paula Ribeiro", "detalhe": "contato suprimido", "momento": 48, "remetente": "+55 11 99000-0001"}, {"acao": "novo_dia", "ator": "operador", "canal": null, "contato": null, "detalhe": "dia 5 da cadência — quotas diárias renovadas", "momento": 96, "remetente": null}, {"acao": "mensagem_criada", "ator": "motor", "canal": "whatsapp", "contato": "Sônia Prado", "detalhe": "2", "momento": 96, "remetente": "+55 11 98000-0009"}, {"acao": "passo_pulado_sem_identidade", "ator": "motor", "canal": "whatsapp", "contato": "Vera Castro", "detalhe": "whatsapp", "momento": 96, "remetente": "+55 11 98000-0009"}, {"acao": "entregue_ao_provedor", "ator": "provedor", "canal": "whatsapp", "contato": "Sônia Prado", "detalhe": "PROV-62a9feda", "momento": 96, "remetente": "+55 11 98000-0009"}, {"acao": "clicou", "ator": "pessoa", "canal": "email", "contato": "Marina Alves", "detalhe": "abriu o link do e-mail — engajamento, não resposta", "momento": 96, "remetente": null}, {"acao": "encerrado_fim", "ator": "motor", "canal": "whatsapp", "contato": "Vera Castro", "detalhe": "", "momento": 96, "remetente": "+55 11 98000-0009"}, {"acao": "novo_dia", "ator": "operador", "canal": null, "contato": null, "detalhe": "dia 6 da cadência — quotas diárias renovadas", "momento": 120, "remetente": null}, {"acao": "mensagem_criada", "ator": "motor", "canal": "whatsapp", "contato": "Marina Alves", "detalhe": "3", "momento": 120, "remetente": "resgate@afinix-relaciona.com.br"}, {"acao": "mensagem_criada", "ator": "motor", "canal": "whatsapp", "contato": "Rui Nogueira", "detalhe": "3", "momento": 120, "remetente": "+55 11 99000-0002"}, {"acao": "entregue_ao_provedor", "ator": "provedor", "canal": "whatsapp", "contato": "Marina Alves", "detalhe": "PROV-0b441f44", "momento": 120, "remetente": "+55 11 99000-0001"}, {"acao": "entregue_ao_provedor", "ator": "provedor", "canal": "whatsapp", "contato": "Rui Nogueira", "detalhe": "PROV-e492a6a7", "momento": 120, "remetente": "+55 11 99000-0001"}], "mensagens": [{"canal": "whatsapp", "contato": "Marina Alves", "conteudo": "Oi Marina Alves, aqui é da Afinix. Podemos retomar aquela cotação?", "remetente": "+55 11 99000-0001", "status": "enviado"}, {"canal": "whatsapp", "contato": "Otávio Lima", "conteudo": "Oi Otávio Lima, aqui é da Afinix. Podemos retomar aquela cotação?", "remetente": "+55 11 99000-0002", "status": "enviado"}, {"canal": "whatsapp", "contato": "Paula Ribeiro", "conteudo": "Oi Paula Ribeiro, aqui é da Afinix. Podemos retomar aquela cotação?", "remetente": "+55 11 99000-0001", "status": "enviado"}, {"canal": "whatsapp", "contato": "Rui Nogueira", "conteudo": "Oi Rui Nogueira, aqui é da Afinix. Podemos retomar aquela cotação?", "remetente": "+55 11 99000-0002", "status": "enviado"}, {"canal": "whatsapp", "contato": "Sônia Prado", "conteudo": "Olá Sônia Prado, trabalho com plano de saúde empresarial em São Paulo. Faz sentido conversarmos?", "remetente": "+55 11 98000-0009", "status": "enviado"}, {"canal": "whatsapp", "contato": "Vera Castro", "conteudo": "Olá Vera Castro, trabalho com plano de saúde empresarial em Osasco. Faz sentido conversarmos?", "remetente": "+55 11 98000-0009", "status": "falha"}, {"canal": "email", "contato": "Marina Alves", "conteudo": "Marina Alves, separei duas opções que cabem no que você falou.", "remetente": "resgate@afinix-relaciona.com.br", "status": "enviado"}, {"canal": "email", "contato": "Otávio Lima", "conteudo": "Otávio Lima, separei duas opções que cabem no que você falou.", "remetente": "resgate@afinix-relaciona.com.br", "status": "enviado"}, {"canal": "email", "contato": "Rui Nogueira", "conteudo": "Rui Nogueira, separei duas opções que cabem no que você falou.", "remetente": "resgate@afinix-relaciona.com.br", "status": "enviado"}, {"canal": "whatsapp", "contato": "Sônia Prado", "conteudo": "Sônia Prado, consigo fazer uma cotação sem compromisso. Quer que eu envie?", "remetente": "+55 11 98000-0009", "status": "enviado"}, {"canal": "whatsapp", "contato": "Marina Alves", "conteudo": "Marina Alves, te mandei um e-mail com as opções. Prefere que eu resuma por aqui?", "remetente": "+55 11 99000-0001", "status": "enviado"}, {"canal": "whatsapp", "contato": "Rui Nogueira", "conteudo": "Rui Nogueira, te mandei um e-mail com as opções. Prefere que eu resuma por aqui?", "remetente": "+55 11 99000-0001", "status": "enviado"}], "modelos": [{"base_legal": "legítimo interesse — base própria com relacionamento prévio", "cadencia": [{"atraso": 0, "canal": "whatsapp"}, {"atraso": 48, "canal": "whatsapp"}, {"atraso": 96, "canal": "whatsapp"}], "canais": ["whatsapp"], "descricao": "Três toques no WhatsApp para quem já conversou com a corretora e esfriou.", "nome": "Resgate por WhatsApp", "objetivo": "Reabrir conversa com oportunidade parada", "passos": 3, "slug": "resgate-whatsapp", "tipo": "morna"}, {"base_legal": "legítimo interesse — base própria com relacionamento prévio", "cadencia": [{"atraso": 0, "canal": "whatsapp"}, {"atraso": 48, "canal": "email"}, {"atraso": 72, "canal": "whatsapp"}, {"atraso": 120, "canal": "sms"}], "canais": ["whatsapp", "email", "sms"], "descricao": "WhatsApp, e-mail e SMS alternados. Quem não responde num canal recebe no outro.", "nome": "Resgate multicanal", "objetivo": "Reabrir oportunidade usando todos os endereços conhecidos", "passos": 4, "slug": "resgate-multicanal", "tipo": "morna"}, {"base_legal": "resposta em janela de 24h — contato iniciado pelo cliente", "cadencia": [{"atraso": 0, "canal": "instagram"}, {"atraso": 12, "canal": "instagram"}], "canais": ["instagram"], "descricao": "Instagram para quem já falou com a corretora por lá. Só dentro da janela de 24h.", "nome": "Resgate por Direct", "objetivo": "Retomar conversa iniciada pelo próprio contato no Instagram", "passos": 2, "slug": "resgate-direct", "tipo": "morna"}, {"base_legal": "execução de contrato — cliente ativo", "cadencia": [{"atraso": 0, "canal": "whatsapp"}, {"atraso": 168, "canal": "whatsapp"}, {"atraso": 336, "canal": "sms"}], "canais": ["whatsapp", "sms"], "descricao": "Aviso de vencimento em WhatsApp e SMS, começando 45 dias antes.", "nome": "Renovação de apólice", "objetivo": "Reter cliente antes do vencimento", "passos": 3, "slug": "renovacao-apolice", "tipo": "morna"}, {"base_legal": "legítimo interesse — contato respondeu anteriormente", "cadencia": [{"atraso": 0, "canal": "whatsapp"}, {"atraso": 72, "canal": "email"}], "canais": ["whatsapp", "email"], "descricao": "Para quem respondeu, esfriou e nunca fechou. Retoma de onde a conversa parou.", "nome": "Reengajamento", "objetivo": "Recuperar conversa que morreu no meio", "passos": 2, "slug": "reengajamento", "tipo": "morna"}, {"base_legal": "legítimo interesse — prospecção B2B", "cadencia": [{"atraso": 0, "canal": "whatsapp"}, {"atraso": 96, "canal": "whatsapp"}], "canais": ["whatsapp"], "descricao": "Dois toques em lista fria, com chip separado e volume baixo por dia.", "nome": "Prospecção fria — WhatsApp", "objetivo": "Abrir conversa com quem nunca falou com a corretora", "passos": 2, "slug": "prospeccao-fria", "tipo": "fria"}, {"base_legal": "legítimo interesse — prospecção B2B", "cadencia": [{"atraso": 0, "canal": "email"}, {"atraso": 72, "canal": "whatsapp"}, {"atraso": 168, "canal": "email"}], "canais": ["whatsapp", "email"], "descricao": "WhatsApp e e-mail em domínio separado do institucional. Pool frio isolado.", "nome": "Prospecção fria — multicanal", "objetivo": "Abrir conversa em lista fria sem arriscar o domínio da operação", "passos": 3, "slug": "prospeccao-fria-multicanal", "tipo": "fria"}], "outbox": [{"autoria": "motor-prospeccao", "contato": "Vera Castro", "fato": "identidade_invalida"}], "provedores": [{"campos": [{"ajuda": "Começa com sk-ant-", "chave": "api_key", "obrigatorio": true, "rotulo": "API key", "segredo": true, "tipo": "senha"}, {"ajuda": "Só para proxy ou gateway próprio", "chave": "base_url", "obrigatorio": false, "rotulo": "Base URL", "segredo": false, "tipo": "texto"}], "descricao": "Bom em seguir instrução longa e não sair do papel — útil quando o agente tem regra de compliance.", "docs": "https://docs.claude.com/en/api", "modelos": ["claude-opus-5", "claude-sonnet-5", "claude-haiku-4-5", "claude-fable-5-1"], "nome": "Anthropic (Claude)", "slug": "anthropic"}, {"campos": [{"ajuda": "Começa com sk-", "chave": "api_key", "obrigatorio": true, "rotulo": "API key", "segredo": true, "tipo": "senha"}, {"ajuda": "Só se a conta tiver mais de uma organização", "chave": "organizacao", "obrigatorio": false, "rotulo": "Organization ID", "segredo": false, "tipo": "texto"}, {"ajuda": "Para Azure OpenAI ou gateway próprio", "chave": "base_url", "obrigatorio": false, "rotulo": "Base URL", "segredo": false, "tipo": "texto"}], "descricao": "O mais conhecido. Ecossistema grande e latência baixa nos modelos menores.", "docs": "https://platform.openai.com/docs", "modelos": [], "nome": "OpenAI", "slug": "openai"}, {"campos": [{"ajuda": "Google AI Studio", "chave": "api_key", "obrigatorio": true, "rotulo": "API key", "segredo": true, "tipo": "senha"}, {"ajuda": "Só ao usar Vertex AI", "chave": "projeto", "obrigatorio": false, "rotulo": "Projeto (Vertex)", "segredo": false, "tipo": "texto"}, {"ajuda": "ex.: us-central1", "chave": "regiao", "obrigatorio": false, "rotulo": "Região (Vertex)", "segredo": false, "tipo": "texto"}], "descricao": "Janela de contexto grande e preço competitivo no tier rápido.", "docs": "https://ai.google.dev/docs", "modelos": [], "nome": "Google Gemini", "slug": "google"}, {"campos": [{"ajuda": "Começa com pplx-", "chave": "api_key", "obrigatorio": true, "rotulo": "API key", "segredo": true, "tipo": "senha"}], "descricao": "Responde com busca na web embutida — serve quando o agente precisa de informação atual.", "docs": "https://docs.perplexity.ai", "modelos": [], "nome": "Perplexity", "slug": "perplexity"}, {"campos": [{"ajuda": null, "chave": "api_key", "obrigatorio": true, "rotulo": "API key", "segredo": true, "tipo": "senha"}, {"ajuda": "Padrão: https://api.deepseek.com", "chave": "base_url", "obrigatorio": false, "rotulo": "Base URL", "segredo": false, "tipo": "texto"}], "descricao": "Custo baixo por token. Boa opção para agente de triagem em volume alto.", "docs": "https://api-docs.deepseek.com", "modelos": [], "nome": "DeepSeek", "slug": "deepseek"}, {"campos": [{"ajuda": "Começa com sk-or-", "chave": "api_key", "obrigatorio": true, "rotulo": "API key", "segredo": true, "tipo": "senha"}, {"ajuda": "Identifica a aplicação no ranking do OpenRouter", "chave": "referer", "obrigatorio": false, "rotulo": "HTTP-Referer", "segredo": false, "tipo": "texto"}], "descricao": "Um endpoint para vários provedores. Útil para testar modelo novo sem abrir conta nova.", "docs": "https://openrouter.ai/docs", "modelos": [], "nome": "OpenRouter", "slug": "openrouter"}, {"campos": [{"ajuda": null, "chave": "api_key", "obrigatorio": true, "rotulo": "API key", "segredo": true, "tipo": "senha"}, {"ajuda": "Endereço completo, ex.: https://api.exemplo.com/v1", "chave": "base_url", "obrigatorio": true, "rotulo": "Base URL", "segredo": false, "tipo": "texto"}], "descricao": "Qualquer API no formato OpenAI — modelo local, vLLM, Together, Groq.", "docs": null, "modelos": [], "nome": "Endpoint compatível", "slug": "compativel"}], "provedores_canal": [{"campos": [{"ajuda": null, "chave": "senha", "obrigatorio": true, "rotulo": "Senha", "segredo": true, "tipo": "senha"}, {"ajuda": "Ex.: smtp.suaempresa.com.br", "chave": "host", "obrigatorio": true, "rotulo": "Servidor", "segredo": false, "tipo": "texto"}, {"ajuda": "587 com STARTTLS, 465 com TLS", "chave": "porta", "obrigatorio": true, "rotulo": "Porta", "segredo": false, "tipo": "texto"}, {"ajuda": null, "chave": "usuario", "obrigatorio": true, "rotulo": "Usuário", "segredo": false, "tipo": "texto"}], "canal": "email", "descricao": "Caixa de saída própria. Campanha fria usa domínio separado do institucional (D4).", "docs": null, "nome": "SMTP", "oficial": true, "slug": "smtp", "tem_adapter": false}, {"campos": [{"ajuda": "Gupshup → Dashboard → API key", "chave": "api_key", "obrigatorio": true, "rotulo": "API key", "segredo": true, "tipo": "senha"}, {"ajuda": "O app name cadastrado na Gupshup, não o número", "chave": "app_name", "obrigatorio": true, "rotulo": "Nome da app", "segredo": false, "tipo": "texto"}, {"ajuda": "Com DDI, só dígitos — ex.: 5511999990000", "chave": "source", "obrigatorio": true, "rotulo": "Número de origem", "segredo": false, "tipo": "texto"}, {"ajuda": "Padrão: https://api.gupshup.io/wa/api/v1", "chave": "base_url", "obrigatorio": false, "rotulo": "Base URL", "segredo": false, "tipo": "texto"}], "canal": "whatsapp", "descricao": "API oficial do WhatsApp via BSP homologado. Cada app da Gupshup é uma conta aqui, com quota e segredo próprios.", "docs": "https://docs.gupshup.io", "nome": "Gupshup (WhatsApp oficial)", "oficial": true, "slug": "gupshup", "tem_adapter": true}, {"campos": [{"ajuda": "Token permanente do app da Meta", "chave": "token", "obrigatorio": true, "rotulo": "Access token", "segredo": true, "tipo": "senha"}, {"ajuda": "Não é o número: é o ID que a Meta dá a ele", "chave": "phone_number_id", "obrigatorio": true, "rotulo": "Phone number ID", "segredo": false, "tipo": "texto"}, {"ajuda": "Conta comercial do WhatsApp", "chave": "waba_id", "obrigatorio": false, "rotulo": "WABA ID", "segredo": false, "tipo": "texto"}], "canal": "whatsapp", "descricao": "API oficial direto na Meta, sem intermediário. Alternativa à Gupshup quando a conta já é própria.", "docs": "https://developers.facebook.com/docs/whatsapp/cloud-api", "nome": "Meta Cloud API", "oficial": true, "slug": "meta_cloud", "tem_adapter": true}, {"campos": [{"ajuda": "A apikey global ou da instância", "chave": "api_key", "obrigatorio": true, "rotulo": "API key", "segredo": true, "tipo": "senha"}, {"ajuda": "Ex.: https://evo.suaempresa.com.br", "chave": "base_url", "obrigatorio": true, "rotulo": "URL da instância", "segredo": false, "tipo": "texto"}, {"ajuda": "Como está cadastrada na Evolution", "chave": "instancia", "obrigatorio": true, "rotulo": "Nome da instância", "segredo": false, "tipo": "texto"}], "canal": "whatsapp", "descricao": "Automação de WhatsApp comum, sem homologação. Serve a campanha fria; nunca ao número institucional (D4).", "docs": "https://doc.evolution-api.com", "nome": "Evolution API (não oficial)", "oficial": false, "slug": "evolution", "tem_adapter": true}, {"campos": [{"ajuda": "Comtele → Painel → Chaves de API", "chave": "api_key", "obrigatorio": true, "rotulo": "API key", "segredo": true, "tipo": "senha"}, {"ajuda": "Alfanumérico, se o contrato permitir", "chave": "remetente", "obrigatorio": false, "rotulo": "Remetente", "segredo": false, "tipo": "texto"}], "canal": "sms", "descricao": "SMS no Brasil. Remetente é alfanumérico ou short code, conforme o contrato.", "docs": "https://docs.comtele.com.br", "nome": "Comtele", "oficial": true, "slug": "comtele", "tem_adapter": true}, {"campos": [{"ajuda": "Token da página ligada ao perfil", "chave": "token", "obrigatorio": true, "rotulo": "Access token", "segredo": true, "tipo": "senha"}, {"ajuda": "ID profissional, não o @", "chave": "ig_user_id", "obrigatorio": true, "rotulo": "Instagram user ID", "segredo": false, "tipo": "texto"}], "canal": "instagram", "descricao": "Direct pela API oficial. Só responde dentro da janela de 24h aberta pela própria pessoa (D10).", "docs": "https://developers.facebook.com/docs/messenger-platform/instagram", "nome": "Instagram (Graph API)", "oficial": true, "slug": "instagram_oficial", "tem_adapter": false}], "remetentes": [{"apelido": "Chip frio SP", "canal": "whatsapp", "config": {"base_url": "https://evo.afinix.com.br", "instancia": "fria-sp"}, "estado": "ativo", "identificador": "+55 11 98000-0009", "provedor": "evolution", "quota": 2, "saude": 100.0, "tipo": "fria", "usado": 1}, {"apelido": "Comercial", "canal": "whatsapp", "config": {"app_name": "afinix-comercial", "source": "5511990000001"}, "estado": "ativo", "identificador": "+55 11 99000-0001", "provedor": "gupshup", "quota": 200, "saude": 100.0, "tipo": "morna", "usado": 2}, {"apelido": "Retenção", "canal": "whatsapp", "config": {"app_name": "afinix-retencao", "source": "5511990000002"}, "estado": "ativo", "identificador": "+55 11 99000-0002", "provedor": "gupshup", "quota": 200, "saude": 100.0, "tipo": "morna", "usado": 2}, {"apelido": "Domínio de relacionamento", "canal": "email", "config": {"host": "smtp.afinix-relaciona.com.br", "porta": "587", "usuario": "resgate"}, "estado": "ativo", "identificador": "resgate@afinix-relaciona.com.br", "provedor": "smtp", "quota": 300, "saude": 100.0, "tipo": "morna", "usado": 3}], "supressao": [{"contato": "Tulio Barros", "motivo": "opt-out registrado na campanha anterior"}, {"contato": "Paula Ribeiro", "motivo": "pediu remoção por telefone"}]};
 
 const MODELO_PASSOS = {"resgate-whatsapp":[{"canal":"whatsapp","atraso_horas":0,"template":"Oi {{nome}}, aqui é da Afinix. Você chegou a olhar o plano que conversamos?"},{"canal":"whatsapp","atraso_horas":48,"template":"{{nome}}, consegui uma condição melhor que a da nossa conversa. Quer ver?"},{"canal":"whatsapp","atraso_horas":96,"template":"{{nome}}, ainda faz sentido retomar? Se não, é só me dizer que eu paro por aqui."}],"resgate-multicanal":[{"canal":"whatsapp","atraso_horas":0,"template":"Oi {{nome}}, aqui é da Afinix. Podemos retomar aquela cotação?"},{"canal":"email","atraso_horas":48,"template":"{{nome}}, separei duas opções que cabem no que você falou."},{"canal":"whatsapp","atraso_horas":72,"template":"{{nome}}, te mandei um e-mail com as opções. Prefere que eu resuma por aqui?"},{"canal":"sms","atraso_horas":120,"template":"Afinix: {{nome}}, sua cotação continua válida. Responda SIM para retomar."}],"resgate-direct":[{"canal":"instagram","atraso_horas":0,"template":"Oi {{nome}}! Vi que você perguntou sobre plano de saúde. Posso te ajudar?"},{"canal":"instagram","atraso_horas":12,"template":"{{nome}}, consigo montar uma simulação rápida se você me disser a idade e a cidade."}],"renovacao-apolice":[{"canal":"whatsapp","atraso_horas":0,"template":"{{nome}}, sua apólice vence em breve. Quer que eu revise as condições antes da renovação?"},{"canal":"whatsapp","atraso_horas":168,"template":"{{nome}}, comparei seu plano com o que está no mercado hoje. Te mando?"},{"canal":"sms","atraso_horas":336,"template":"Afinix: {{nome}}, sua apólice vence em 15 dias. Responda SIM para falar com seu corretor."}],"reengajamento":[{"canal":"whatsapp","atraso_horas":0,"template":"{{nome}}, ficamos de continuar aquela conversa. Ainda quer que eu monte a proposta?"},{"canal":"email","atraso_horas":72,"template":"{{nome}}, deixo aqui o resumo do que conversamos, caso queira retomar."}],"prospeccao-fria":[{"canal":"whatsapp","atraso_horas":0,"template":"Olá {{nome}}, trabalho com plano de saúde empresarial em {{cidade}}. Faz sentido conversarmos?"},{"canal":"whatsapp","atraso_horas":96,"template":"{{nome}}, consigo fazer uma cotação sem compromisso. Quer que eu envie?"}],"prospeccao-fria-multicanal":[{"canal":"email","atraso_horas":0,"template":"{{nome}}, ajudo empresas de {{cidade}} a reduzir o custo do plano de saúde. Posso mandar um comparativo?"},{"canal":"whatsapp","atraso_horas":72,"template":"Olá {{nome}}, te mandei um e-mail sobre plano empresarial. Prefere falar por aqui?"},{"canal":"email","atraso_horas":168,"template":"{{nome}}, último toque. Se não for o momento, é só ignorar este e-mail."}]};
+
+/* ---------------------------------------------------------------------------
+   Canais. CANAIS, SIGLA e NOME_CANAL eram usados em doze lugares e não
+   existiam em lugar nenhum — o console quebrava com ReferenceError ao abrir
+   Canais, Configurações ou o wizard. Agora derivam do catálogo de provedores,
+   que é a fonte de verdade de quem tem adapter.
+   --------------------------------------------------------------------------- */
+
+const SIGLA = {whatsapp:'WA', email:'@', sms:'SMS', instagram:'IG'};
+const NOME_CANAL = {whatsapp:'WhatsApp', email:'E-mail', sms:'SMS', instagram:'Instagram'};
+const CANAL_CLS = {whatsapp:'wa', email:'email', sms:'sms', instagram:'ig'};
+
+const DESC_CANAL = {
+  whatsapp:'Oficial pela Gupshup, não oficial pela Evolution. Cada conta tem quota e segredo próprios.',
+  email:'Caixa de saída própria. Campanha fria usa domínio separado do institucional.',
+  sms:'Uma linha, 160 caracteres. Confirma intenção e move a conversa de canal.',
+  instagram:'Direct só dentro da janela de 24h aberta pela própria pessoa.'
+};
+
+const PROVEDORES_CANAL = (D.provedores_canal || []);
+
+// Duração da simulação exportada pelo demo. Faltava, como CANAIS — o console
+// quebrava ao pintar a linha do tempo.
+const HORAS = D.horas || 120;
+
+const CANAIS = ['whatsapp','email','sms','instagram'].map(id=>{
+  const ps = PROVEDORES_CANAL.filter(p=>p.canal===id);
+  return {
+    id, nome: NOME_CANAL[id], desc: DESC_CANAL[id],
+    provs: ps,
+    ok: ps.some(p=>p.tem_adapter),
+    prov: ps.filter(p=>p.tem_adapter).map(p=>p.slug).join(', ') || '—'
+  };
+});
+
+function contasDoCanal(id){ return (D.remetentes||[]).filter(r=>r.canal===id); }
 
 /* ============================ HUB ============================ */
 
@@ -768,43 +941,174 @@ document.getElementById('hub-campanhas').addEventListener('click', e=>{
 });
 
 
-/* ============================ CANAIS ============================ */
+/* ============================ ÍCONES ============================ */
 
-function pintarCanais(){
-  const usados = {};
-  D.campanhas.forEach(c=>c.canais.forEach(x=>usados[x]=(usados[x]||0)+1));
-  const agentesPorCanal = {};
-  D.agentes.forEach(a=>agentesPorCanal[a.canal]=(agentesPorCanal[a.canal]||0)+1);
+const IC = {
+  ia:'<path d="M12 3v3m0 12v3m9-9h-3M6 12H3m14.5-6.5l-2 2m-7 7l-2 2m0-11l2 2m7 7l2 2"/><circle cx="12" cy="12" r="3.5"/>',
+  agente:'<circle cx="12" cy="8" r="3.5"/><path d="M4.5 20a7.5 7.5 0 0 1 15 0"/>',
+  modelo:'<rect x="3.5" y="4.5" width="17" height="15" rx="2.5"/><path d="M8 9.5h8M8 14h5"/>',
+  plataforma:'<rect x="3.5" y="4.5" width="17" height="12" rx="2.5"/><path d="M8 20h8M12 16.5V20"/>',
+  wa:'<path d="M4 20l1.3-4A8 8 0 1 1 8 18.7z"/>',
+  email:'<rect x="3" y="5.5" width="18" height="13" rx="2.5"/><path d="M4 7l8 6 8-6"/>',
+  sms:'<path d="M4.5 5.5h15v10h-9l-4 3.5v-3.5h-2z"/>',
+  ig:'<rect x="3.5" y="3.5" width="17" height="17" rx="5"/><circle cx="12" cy="12" r="3.8"/><circle cx="17" cy="7" r="1.1"/>'
+};
+const SETA = '<svg class="seta" viewBox="0 0 24 24" stroke-linecap="round"><path d="M9 6l6 6-6 6"/></svg>';
 
-  document.getElementById('canais-lista').innerHTML = CANAIS.map(c=>`
-    <div class="card" style="cursor:default">
-      <div class="cardtop">
-        <div style="min-width:0"><b style="display:flex;align-items:center;gap:8px">
-          <i class="${c.id}" style="width:22px;height:22px;border-radius:7px;display:grid;
-            place-items:center;color:#fff;font-size:9.5px;font-weight:700;flex:none;
-            background:${corCanal(c.id)}">${SIGLA[c.id]||'?'}</i>${c.nome}</b>
-          <p>${c.desc}</p></div>
-        <span class="tipo ${c.ok?'morna':'fria'}">${c.ok?'ativo':'em breve'}</span>
-      </div>
-      <div class="campnum" style="grid-template-columns:repeat(3,1fr)">
-        <div><b class="mono">${usados[c.id]||0}</b><span>campanhas</span></div>
-        <div><b class="mono">${agentesPorCanal[c.id]||0}</b><span>agentes</span></div>
-        <div><b class="mono">${D.remetentes.filter(r=>r.canal===c.id).length}</b><span>remetentes</span></div>
-      </div>
-      <div class="cardfoot"><span>provedor: <b class="mono">${c.prov}</b></span></div>
-    </div>`).join('');
+function icone(nome){
+  return `<span class="ico"><svg viewBox="0 0 24 24" stroke-linejoin="round"
+    stroke-linecap="round">${IC[nome]||IC.plataforma}</svg></span>`;
 }
 
 function corCanal(id){
   return {whatsapp:'var(--wa)',email:'var(--mail)',sms:'var(--sms)',
-          instagram:'#B84A7D',rcs:'var(--ink-3)'}[id]||'var(--ink-3)';
+          instagram:'var(--ig)'}[id]||'var(--ink-3)';
 }
+
+function linhaIndice(attr, ic, titulo, desc, contagem, cor){
+  return `<button class="item" ${attr}>
+    ${cor ? `<span class="ico" style="background:${cor};color:#fff">
+      <svg viewBox="0 0 24 24" stroke-linejoin="round" stroke-linecap="round">${IC[ic]||''}</svg></span>`
+          : icone(ic)}
+    <span class="txt"><b>${titulo}</b><p>${desc}</p></span>
+    ${contagem ? `<span class="cont">${contagem}</span>` : ''}
+    ${SETA}</button>`;
+}
+
+/* ============================ CANAIS ============================ */
+
+function pintarCanaisIndice(){
+  const usados = {};
+  D.campanhas.forEach(c=>c.canais.forEach(x=>usados[x]=(usados[x]||0)+1));
+
+  document.getElementById('canais-indice').innerHTML = CANAIS.map(c=>{
+    const n = contasDoCanal(c.id).length;
+    const estado = c.ok ? `${n} conta${n===1?'':'s'}` : 'sem adapter';
+    return linhaIndice(`data-canal="${c.id}"`, CANAL_CLS[c.id], c.nome, c.desc,
+                       estado, corCanal(c.id));
+  }).join('');
+
+  // O mesmo índice alimenta o submenu do rail.
+  document.getElementById('sub-canais-itens').innerHTML = CANAIS.map(c=>
+    `<button data-v="canal:${c.id}">${c.nome}</button>`).join('');
+}
+
+let CANAL = 'whatsapp';
+let PROV_CANAL = null;
+
+function pintarCanal(){
+  const c = CANAIS.find(x=>x.id===CANAL) || CANAIS[0];
+  const contas = contasDoCanal(c.id);
+  const usadas = D.campanhas.filter(x=>x.canais.includes(c.id)).length;
+  const ags = D.agentes.filter(a=>a.canal===c.id).length;
+
+  document.getElementById('canal-nome').textContent = c.nome;
+  document.getElementById('canal-sub').textContent = c.desc;
+
+  const quota = contas.reduce((n,r)=>n+r.quota,0);
+  const usado = contas.reduce((n,r)=>n+r.usado,0);
+  document.getElementById('canal-kpis').innerHTML = [
+    ['Contas conectadas', contas.length, `${c.provs.filter(p=>p.tem_adapter).length} provedor(es) com adapter`],
+    ['Capacidade diária', quota, quota? `${usado} usada(s) hoje` : 'nenhuma conta ainda'],
+    ['Campanhas no canal', usadas, `${ags} agente(s) de plantão`]
+  ].map(([r,v,s])=>`<div class="kpi"><span class="r">${r}</span>
+      <b class="mono">${v}</b><span class="s">${s}</span></div>`).join('');
+
+  document.getElementById('canal-nc').textContent =
+    contas.length ? `${contas.length} no pool deste canal` : 'nenhuma ainda';
+
+  document.getElementById('canal-contas').innerHTML = contas.length
+    ? contas.map(r=>{
+        const pct = r.quota ? Math.round((r.usado/r.quota)*100) : 0;
+        const p = PROVEDORES_CANAL.find(x=>x.slug===r.provedor);
+        return `<div class="item" style="cursor:default">
+          <span class="ico" style="background:${corCanal(c.id)};color:#fff">
+            <svg viewBox="0 0 24 24" stroke-linejoin="round" stroke-linecap="round">${IC[CANAL_CLS[c.id]]||''}</svg></span>
+          <span class="txt"><b>${r.apelido || r.identificador}</b>
+            <p>${p? p.nome : r.provedor} · pool ${r.tipo} · ${r.usado}/${r.quota} hoje</p></span>
+          <span class="delta ${pct>=100?'baixa':pct>60?'neutra':''}">${pct}%</span>
+        </div>`;
+      }).join('')
+    : `<div class="item" style="cursor:default"><span class="txt">
+        <b>Nenhuma conta conectada</b>
+        <p>Sem conta, o motor adia o passo em vez de prometer envio que não acontece.</p>
+       </span></div>`;
+
+  if(!PROV_CANAL || PROV_CANAL.canal !== c.id) PROV_CANAL = c.provs[0] || null;
+
+  document.getElementById('canal-provs').innerHTML = c.provs.map(p=>`
+    <button class="opt" data-provcanal="${p.slug}" aria-pressed="${PROV_CANAL && p.slug===PROV_CANAL.slug}">
+      <b>${p.nome}</b><p>${p.descricao}</p>
+      <span class="chip">${p.oficial?'oficial':'não oficial'}</span>
+      ${p.tem_adapter?'':'<span class="chip">sem adapter</span>'}</button>`).join('')
+    || '<p style="color:var(--ink-3)">Nenhum provedor no catálogo para este canal.</p>';
+
+  document.getElementById('canal-form').innerHTML = PROV_CANAL
+    ? formularioProvedor(PROV_CANAL)
+    : '';
+}
+
+// Monta o formulário a partir dos campos que o próprio provedor declara —
+// nenhum código aqui conhece Gupshup, Evolution ou Comtele.
+function formularioProvedor(p){
+  const campos = p.campos.map(c=>`
+    <div class="campo">
+      <label for="cc-${c.chave}">${c.rotulo}${c.obrigatorio?'':' <span style="color:var(--ink-3);font-weight:400">(opcional)</span>'}</label>
+      <input id="cc-${c.chave}" type="${c.tipo==='senha'?'password':'text'}"
+        placeholder="${c.tipo==='senha'?'••••••••••••':''}">
+      ${c.ajuda?`<span style="font-size:11.5px;color:var(--ink-3)">${c.ajuda}</span>`:''}
+      ${c.segredo?`<span style="font-size:11.5px;color:var(--accent)">Vai para o Vault — o banco recusa gravar este campo em config.</span>`:''}
+    </div>`).join('');
+
+  return `<div class="campo">
+      <label for="cc-apelido">Apelido da conta</label>
+      <input id="cc-apelido" placeholder="Comercial SP">
+      <span style="font-size:11.5px;color:var(--ink-3)">Um número não diz de quem é. O apelido diz.</span>
+    </div>` + campos + `
+    <div class="campo">
+      <label for="cc-quota">Quota diária</label>
+      <input id="cc-quota" class="mono" placeholder="200">
+      <span style="font-size:11.5px;color:var(--ink-3)">Teto por dia desta conta. O banco recusa passar disso.</span>
+    </div>
+    <div style="display:flex;gap:9px;align-items:center;margin-top:4px">
+      <button class="btn prim">Conectar conta</button>
+      <span class="obs" style="font-size:11.5px;color:var(--ink-3)">
+        ${p.tem_adapter ? 'Protótipo sem backend — nada é gravado ainda.'
+                        : 'Este provedor ainda não tem adapter: a conta é cadastrada, mas não envia.'}</span>
+    </div>`;
+}
+
+document.getElementById('canais-indice').addEventListener('click', e=>{
+  const b = e.target.closest('[data-canal]'); if(b) irPara('canal:'+b.dataset.canal);
+});
+document.getElementById('canal-provs').addEventListener('click', e=>{
+  const b = e.target.closest('[data-provcanal]'); if(!b) return;
+  PROV_CANAL = PROVEDORES_CANAL.find(p=>p.slug===b.dataset.provcanal);
+  pintarCanal();
+});
 
 /* ============================ CONFIGURAÇÕES ============================ */
 
+function pintarConfigIndice(){
+  document.getElementById('config-indice').innerHTML = [
+    ['config:ia','ia','Provedores de IA',
+     'Anthropic, OpenAI, Gemini, Perplexity, DeepSeek e compatíveis. A chave mora no Vault.',
+     `${D.provedores.length} provedores`],
+    ['config:agentes','agente','Agentes',
+     'A persona que responde em cada canal quando a pessoa reage à cadência.',
+     `${D.agentes.length} agentes`],
+    ['config:modelos','modelo','Modelos de conversa',
+     'As receitas de cadência: canais, atrasos e texto de cada passo.',
+     `${D.modelos.length} modelos`],
+    ['config:plataformas','plataforma','Plataformas de contato',
+     'Catálogo de provedores por canal — WhatsApp, e-mail, SMS e Instagram.',
+     `${PROVEDORES_CANAL.length} provedores`]
+  ].map(([v,ic,t,d,c])=>linhaIndice(`data-v="${v}"`, ic, t, d, c)).join('');
+}
+
 let PROV = D.provedores[0];
 
-function pintarConfig(){
+function pintarProvedoresIA(){
   document.getElementById('prov-lista').innerHTML = D.provedores.map(p=>`
     <button class="opt" data-prov="${p.slug}" aria-pressed="${p.slug===PROV.slug}">
       <b>${p.nome}</b><p>${p.descricao}</p></button>`).join('');
@@ -840,7 +1144,9 @@ function pintarConfig(){
       <span class="obs" style="font-size:11.5px;color:var(--ink-3)">
         Protótipo sem backend — nada é gravado ainda.</span>
     </div>`;
+}
 
+function pintarAgentes(){
   document.getElementById('agentes-lista').innerHTML = D.agentes.map((a,i)=>`
     <button class="card" data-agente="${i}">
       <div class="cardtop">
@@ -857,10 +1163,45 @@ function pintarConfig(){
     </button>`).join('');
 }
 
+function pintarModelosConversa(){
+  document.getElementById('modelos-indice').innerHTML = D.modelos.map(m=>
+    linhaIndice(`data-modelo-cfg="${m.slug}"`, 'modelo', m.nome,
+      `${m.descricao} · ${m.passos} passos · ${m.canais.map(c=>NOME_CANAL[c]||c).join(', ')}`,
+      m.tipo)).join('');
+}
+
+function pintarPlataformas(){
+  document.getElementById('plataformas-indice').innerHTML = CANAIS.map(c=>{
+    const ps = c.provs;
+    if(!ps.length) return '';
+    return `<div class="sec" style="margin-top:14px"><h2>${c.nome}</h2>
+        <span>${ps.length} provedor(es)</span></div>` +
+      ps.map(p=>`<div class="item" style="cursor:default">
+        <span class="ico" style="background:${corCanal(c.id)};color:#fff">
+          <svg viewBox="0 0 24 24" stroke-linejoin="round" stroke-linecap="round">${IC[CANAL_CLS[c.id]]||''}</svg></span>
+        <span class="txt"><b>${p.nome}</b><p>${p.descricao}</p>
+          <span class="chips" style="margin-top:6px">
+            <span class="chip">${p.oficial?'oficial':'não oficial'}</span>
+            <span class="chip">${p.tem_adapter?'adapter pronto':'sem adapter'}</span>
+            <span class="chip">${p.campos.length} campos</span>
+          </span></span>
+        <span class="delta ${p.tem_adapter?'':'neutra'}">${p.tem_adapter?'ativo':'em breve'}</span>
+      </div>`).join('');
+  }).join('');
+}
+
+document.getElementById('config-indice').addEventListener('click', e=>{
+  const b = e.target.closest('[data-v]'); if(b) irPara(b.dataset.v);
+});
+
 document.getElementById('prov-lista').addEventListener('click', e=>{
   const b = e.target.closest('[data-prov]'); if(!b) return;
   PROV = D.provedores.find(p=>p.slug===b.dataset.prov);
-  pintarConfig();
+  pintarProvedoresIA();
+});
+
+document.getElementById('modelos-indice').addEventListener('click', e=>{
+  const b = e.target.closest('[data-modelo-cfg]'); if(b) abrirWizard(b.dataset.modeloCfg);
 });
 
 document.getElementById('agentes-lista').addEventListener('click', e=>{
@@ -880,13 +1221,66 @@ document.getElementById('agentes-lista').addEventListener('click', e=>{
 
 /* ============================ NAVEGAÇÃO ============================ */
 
+// O clique num grupo fechado abre e mostra o índice; num grupo já aberto,
+// fecha. Em nenhum caso pula direto para o conteúdo de um filho.
+document.getElementById('nav').addEventListener('click', e=>{
+  const b = e.target.closest('button[data-v]'); if(!b) return;
+  const g = b.dataset.grupo;
+  if(g && document.getElementById('sub-'+g).dataset.aberto === 'true'
+       && !document.getElementById('v-'+g).hidden){
+    document.getElementById('sub-'+g).dataset.aberto = 'false';
+    b.setAttribute('aria-expanded','false');
+    return;
+  }
+  irPara(b.dataset.v);
+});
+
+// Os botões "← voltar" das telas de submenu.
+document.addEventListener('click', e=>{
+  const b = e.target.closest('[data-ir]'); if(b) irPara(b.dataset.ir);
+});
+
+
+// Todas as telas existentes. `canal:<id>` e `config:<x>` são submenus: abrir o
+// grupo mostra o índice, nunca o conteúdo do primeiro filho.
+const TELAS = ['hub','campanha','canais','canal','config',
+               'config:ia','config:agentes','config:modelos','config:plataformas'];
+
+// A que grupo do rail cada tela pertence.
+function grupoDe(v){
+  if(v==='canais' || v.startsWith('canal:')) return 'canais';
+  if(v==='config' || v.startsWith('config:')) return 'config';
+  return null;
+}
+
 function irPara(v, campanha){
-  ['hub','campanha','canais','config'].forEach(x=>
-    document.getElementById('v-'+x).hidden = x!==v);
-  if(v==='canais') pintarCanais();
-  if(v==='config') pintarConfig();
+  // `canal:whatsapp` mora na tela `v-canal`; os demais têm tela própria.
+  const tela = v.startsWith('canal:') ? 'canal' : v;
+  TELAS.forEach(x=>{
+    const el = document.getElementById('v-'+x);
+    if(el) el.hidden = x!==tela;
+  });
+
+  if(v==='canais') pintarCanaisIndice();
+  if(v.startsWith('canal:')){ CANAL = v.slice(6); pintarCanaisIndice(); pintarCanal(); }
+  if(v==='config') pintarConfigIndice();
+  if(v==='config:ia') pintarProvedoresIA();
+  if(v==='config:agentes') pintarAgentes();
+  if(v==='config:modelos') pintarModelosConversa();
+  if(v==='config:plataformas') pintarPlataformas();
+
+  // Só o grupo da tela atual fica aberto. Nenhum nasce expandido.
+  const g = grupoDe(v);
+  ['canais','config'].forEach(nome=>{
+    const aberto = nome===g;
+    document.getElementById('sub-'+nome).dataset.aberto = String(aberto);
+    const bt = document.querySelector(`[data-grupo="${nome}"]`);
+    if(bt) bt.setAttribute('aria-expanded', String(aberto));
+  });
+
   [...document.querySelectorAll('#nav button')].forEach(b=>
     b.setAttribute('aria-current', String(b.dataset.v===v)));
+
   if(v==='campanha'){
     const c = D.campanhas.find(x=>x.nome===campanha) || D.campanhas[0];
     document.getElementById('camp-nome').textContent = c.nome;
@@ -899,9 +1293,6 @@ function irPara(v, campanha){
   }
   window.scrollTo({top:0,behavior:'smooth'});
 }
-document.getElementById('nav').addEventListener('click', e=>{
-  const b = e.target.closest('button'); if(b) irPara(b.dataset.v);
-});
 document.getElementById('voltar').addEventListener('click', ()=> irPara('hub'));
 /* ============================ CONSOLE ============================ */
 

@@ -87,6 +87,10 @@ e elas têm teste automatizado obrigatório.**
 - **Nunca** criar função em `public` que não seja API de verdade. `public` é publicado pelo PostgREST;
   RLS, gatilhos e motor moram em `privado`. Função nova não nasce com EXECUTE — conceder é decisão.
 - **Nunca** adicionar `privado` aos *Exposed schemas* do projeto. É o que separa motor de endpoint.
+- **Nunca** cadastrar remetente com provedor fora de `channel_provider_catalog`, nem gravar em
+  `sender_accounts.config` um campo que o catálogo marca como segredo. Segredo vai para o Vault.
+- **Nunca** deixar uma tela de Configurações ou Canais expandida por padrão. Grupo abre índice,
+  não conteúdo (D21).
 
 ---
 
@@ -133,8 +137,10 @@ e elas têm teste automatizado obrigatório.**
 > Toda mudança de schema roda `tests/run.sh` antes do commit. Teste vermelho é bloqueio, não aviso.
 > Toda mudança aplicada no projeto roda `get_advisors` depois: o suite não enxerga o que só existe
 > no Supabase (default privileges, superfície do PostgREST) — foi assim que D19 apareceu.
-> `demo/gerar.sh` roda o motor num cenário completo e `ui/console.html` mostra o resultado — foi
-> assim que D15 apareceu, um erro que teste unitário nenhum pegava.
+> `demo/gerar.sh` roda o motor num cenário completo, injeta o resultado em `ui/console.html` por
+> `demo/injetar.py` e o console mostra — foi assim que D15 apareceu, um erro que teste unitário
+> nenhum pegava. O dado do console **não** se cola à mão: colar à mão foi como as constantes de
+> canal sumiram do arquivo sem ninguém notar.
 
 **Fase 0 concluída** — inventário em `INVENTARIO-FASE-0.md`: 83 edge functions e 52 tabelas
 classificadas em migra/adapta/descarta. Leitura obrigatória antes de propor qualquer migração de

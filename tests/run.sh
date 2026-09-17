@@ -82,6 +82,7 @@ rodar despacho    "$RAIZ/tests/despacho.sql"
 rodar modelos     "$RAIZ/tests/modelos.sql"
 rodar agentes     "$RAIZ/tests/agentes.sql"
 rodar tenants     "$RAIZ/tests/tenants.sql"
+rodar provedores  "$RAIZ/tests/provedores.sql"
 
 # ---------------------------------------------------------------------------
 # Adapters de canal — TypeScript, sem rede (fetch injetado).

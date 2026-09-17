@@ -196,6 +196,36 @@ default privileges do Supabase — o suite passava com o buraco aberto. Ficou um
 regressão (`pg_default_acl` sem `anon`/`authenticated`), mas o advisor continua sendo a checagem que
 enxerga o que só existe no projeto.
 
+### D20 — Provedor de canal é catálogo; Gupshup é o WhatsApp oficial
+`channel_provider_catalog` descreve, por canal, cada provedor e os campos que ele precisa —
+o mesmo padrão do D17 para IA. `sender_accounts.provedor` passa a ser chave estrangeira para ele.
+*Justificativa:* `provedor` era texto livre, com um comentário dizendo que um CHECK obrigaria
+migration a cada provedor novo. O comentário estava certo sobre o CHECK e errado sobre a conclusão:
+quem evita migration é catálogo, não texto solto. Com texto solto, um typo vira remetente que o
+despachante não sabe construir — e isso só aparece na hora do envio.
+**Escolhas de provedor:**
+- **WhatsApp oficial: Gupshup** (BSP homologada), com adapter em `adapters/whatsapp-gupshup.ts`.
+  Múltiplas contas e múltiplas apps convivem: cada app é um `sender_account` com o seu `app_name`,
+  o seu `source` e o seu segredo no Vault. Por isso o pool e a quota por remetente (invariante 3)
+  continuam valendo sem nada de novo. Meta Cloud fica no catálogo como alternativa direta.
+- **WhatsApp não oficial: Evolution API** — automação sem homologação, para campanha fria, longe do
+  número institucional (D4). É o que existe na base, conforme D14.
+- **SMS: Comtele**, adapter já pronto.
+- SMTP e Instagram entram no catálogo declarados **sem adapter**: aparecem na tela, não viram opção
+  de envio. O motor recusa antes de prometer.
+**Consequência:** a tela de conectar conta se monta a partir de `campos`, então nenhum código de UI
+conhece Gupshup, Evolution ou Comtele. E o que o catálogo marca como segredo é recusado em
+`sender_accounts.config` por gatilho — a mesma garantia de `ai_credentials`.
+
+### D21 — Tudo em Configurações e Canais é submenu
+Abrir Configurações mostra um **índice** do que existe dentro; nada nasce expandido. O mesmo em
+Canais, onde cada canal tem a sua tela com as contas conectadas daquele canal.
+*Justificativa:* a versão anterior abria Provedores de IA junto com Agentes na mesma tela. Com
+quatro assuntos em Configurações e quatro canais, empilhar tudo numa página só deixa de ser
+navegação e vira rolagem.
+**Consequência:** o rail tem grupos que abrem e fecham, e só o grupo da tela atual fica aberto.
+Clicar num grupo já aberto fecha — nunca pula direto para o conteúdo de um filho.
+
 ---
 
 ## Decisões adiadas (não decidir agora)

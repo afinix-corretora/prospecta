@@ -225,10 +225,61 @@ deu erro — `42501` é o RLS recusando, `23503` é a chave composta, `23001` é
 entre agente e campanha. Um teste que só olha "levantou exceção" também passa com um typo no nome
 da coluna.
 
+## Canais e provedores de contato
+
+`channel_provider_catalog` descreve, por canal, cada provedor e os campos que ele precisa — o mesmo
+padrão do catálogo de IA. `sender_accounts.provedor` é chave estrangeira para ele, então provedor
+inexistente é recusado no cadastro, não na hora do envio.
+
+| Canal | Provedor | Situação |
+|---|---|---|
+| WhatsApp | **Gupshup** (oficial, BSP) | adapter pronto — é o caminho oficial da operação |
+| WhatsApp | Meta Cloud API (oficial, direto) | adapter pronto — alternativa quando a conta já é própria |
+| WhatsApp | Evolution API (não oficial) | adapter pronto — campanha fria, longe do número institucional (D4) |
+| SMS | Comtele | adapter pronto |
+| E-mail | SMTP | declarado sem adapter |
+| Instagram | Graph API | declarado sem adapter |
+
+**Múltiplas contas é o caso normal.** Cada app da Gupshup é um `sender_account` com o seu
+`app_name`, o seu `source` e o seu segredo no Vault — e por isso o pool, a quota diária e o circuit
+breaker (invariante 3) continuam valendo sem nada de novo. Duas contas no mesmo processo não se
+confundem porque o app vem da credencial da conta, nunca de constante no adapter; há teste para isso.
+
+**O segredo é verificado pelo banco**, como em `ai_credentials`: o catálogo marca quais campos são
+segredo e um gatilho recusa gravá-los em `sender_accounts.config`. Não existe coluna para a chave.
+
+Provedor sem adapter aparece na tela e **não** vira opção de envio: o motor recusa antes de prometer.
+
+## Navegação do console
+
+Configurações e Canais são grupos de submenu, não páginas empilhadas. Abrir um grupo mostra o
+índice do que existe dentro; nada nasce expandido (D21).
+
+```
+Campanhas
+Operação
+Canais ▸          WhatsApp · E-mail · SMS · Instagram
+Configurações ▸   Provedores de IA · Agentes · Modelos de conversa · Plataformas de contato
+```
+
+Cada canal tem a sua tela: contas conectadas, capacidade diária e o formulário de conectar outra —
+montado a partir dos `campos` que o provedor declara, então nenhum código de UI conhece Gupshup,
+Evolution ou Comtele.
+
+O visual segue a referência de design recebida: **Anek Latin** e **Roboto**, fundo escuro com cards
+em carvão, menta para o que deu certo e periwinkle para a série secundária, e o item de menu ativo
+como pílula preenchida.
+
 ## Console de operação
 
 `demo/gerar.sh` cria duas campanhas **a partir dos modelos**, roda o motor sobre sete contatos,
-avança o relógio de evento em evento e exporta tudo que ele decidiu para `demo/preview.json`.
+avança o relógio de evento em evento, exporta tudo que ele decidiu para `demo/preview.json` e
+injeta o resultado em `ui/console.html` por `demo/injetar.py`.
+
+O dado do console não se cola à mão. Colar à mão foi exatamente como `CANAIS`, `SIGLA`,
+`NOME_CANAL` e `HORAS` sumiram do arquivo sem ninguém notar — o console quebrava com
+`ReferenceError` ao abrir Canais, Configurações ou o wizard, e nenhum teste via, porque nenhum
+teste abria o console num navegador.
 `ui/console.html` lê esse arquivo.
 
 A tela tem duas partes. O **hub** é a inicial: métricas agregadas, cards das campanhas em operação,
