@@ -108,6 +108,20 @@ primeiro dia de produção, com registro de que a pessoa pediu para sair.
 `tests/mapa_status.sql` nos 27 valores legados. Status sem mapeamento derruba o backfill em vez de
 virar estado inventado. A migration `20260916140000` acrescenta o valor do item 3.
 
+### D14 — O WhatsApp não-oficial é Evolution API, não UAZAPI
+Revisa a premissa de D6, que supunha UAZAPI para o modo frio.
+*Evidência:* busca por `uaz` nos quatro repositórios não retorna nenhuma ocorrência em código.
+O não-oficial que roda hoje é Evolution API self-hosted (`evolutionapi.grupoafx.com.br`), com
+cliente completo em `send-evolution-message` e webhook em `evolution-webhook`.
+**Consequência:** `WhatsAppEvolutionAdapter` é o adapter do modo frio, e o cliente UAZAPI que o
+"o que sobrevive da codebase atual" listava como "migra quase intacto" não existe para migrar.
+O spike S1 muda de objeto: medir queima do pool Evolution atual, com dados de produção que já
+existem, em vez de um experimento de duas semanas com UAZAPI.
+**Reversível a custo baixo:** a interface `ChannelAdapter` não conhece provedor. Adotar UAZAPI
+depois é uma classe nova no `adapters/` e uma linha no registro — nada no motor muda.
+*Confirmar com o time comercial se há compromisso contratual com UAZAPI que eu não enxergo pelo
+código.*
+
 ---
 
 ## Decisões adiadas (não decidir agora)

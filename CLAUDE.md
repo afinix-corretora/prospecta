@@ -105,6 +105,10 @@ e elas têm teste automatizado obrigatório.**
 > (`processar_vencidos`), decidem e reivindicam sem enviar — o que torna a Fase 3 possível sem
 > nenhum adapter. O mapa de status do backfill está fechado em `backfill/mapa_status.sql`.
 >
+> A Fase 1 tem três adapters em `adapters/` (Evolution, Meta Cloud, Comtele) com a superfície de
+> despacho em SQL (`reivindicar_pendentes`, `registrar_resultado_envio`,
+> `registrar_evento_provedor`). E-mail e Instagram ainda não têm adapter, e o registro declara isso.
+>
 > Falta da Fase 2: o backfill em si, que depende de acesso aos dados do projeto legado
 > `gtivnngoeccqbvfjiyne`.
 >

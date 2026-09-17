@@ -1,11 +1,13 @@
 #!/usr/bin/env bash
-# Roda os testes contra um Postgres descartável.
+# Roda a suite contra um Postgres descartável.
 #
 #   tests/run.sh
 #
 # Usa PGHOST/PGPORT/PGUSER do ambiente (padrão: socket local em /tmp, 5433).
-# Cria um banco novo, aplica todas as migrations em ordem, roda as asserções,
-# verifica que os downs revertem em ordem inversa, e derruba o banco.
+#
+# Cada arquivo de teste roda em banco próprio. Compartilhar banco faz um teste
+# enxergar as fixtures do outro — já produziu duas falhas falsas aqui, uma por
+# remetente ambíguo e outra por mensagem pendente alheia.
 
 set -euo pipefail
 
@@ -15,53 +17,95 @@ PGUSER="${PGUSER:-postgres}"
 export PGHOST PGPORT PGUSER
 
 RAIZ="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-BANCO="prospecta_teste_$$"
+PREFIXO="prospecta_teste_$$"
+BANCOS=()
 
-limpar() { psql -q -d postgres -c "DROP DATABASE IF EXISTS $BANCO" >/dev/null 2>&1 || true; }
-trap limpar EXIT
-
-aplicar_migrations() {
-  for m in "$RAIZ"/supabase/migrations/*.sql; do
-    psql -q -v ON_ERROR_STOP=1 -d "$BANCO" -f "$m"
+limpar() {
+  for b in "${BANCOS[@]:-}"; do
+    [ -n "$b" ] && psql -q -d postgres -c "DROP DATABASE IF EXISTS $b" >/dev/null 2>&1 || true
   done
 }
+trap limpar EXIT
 
-echo "→ banco de teste: $BANCO"
-psql -q -d postgres -c "CREATE DATABASE $BANCO"
+# Cria um banco com todas as migrations aplicadas e ecoa o nome.
+novo_banco() {
+  local nome="${PREFIXO}_$1"
+  psql -q -d postgres -c "DROP DATABASE IF EXISTS $nome" >/dev/null 2>&1 || true
+  psql -q -d postgres -c "CREATE DATABASE $nome"
+  BANCOS+=("$nome")
+  for m in "$RAIZ"/supabase/migrations/*.sql; do
+    psql -q -v ON_ERROR_STOP=1 -d "$nome" -f "$m"
+  done
+  echo "$nome"
+}
 
-echo "→ aplicando migrations"
-aplicar_migrations
+# rodar <rótulo> <arquivo-de-teste> [arquivos a carregar antes...]
+rodar() {
+  local rotulo="$1" teste="$2"; shift 2
+  echo ""
+  echo "→ $rotulo"
+  local banco; banco="$(novo_banco "$rotulo")"
+  for extra in "$@"; do
+    psql -q -v ON_ERROR_STOP=1 -d "$banco" -f "$extra"
+  done
+  psql -v ON_ERROR_STOP=1 -d "$banco" -f "$teste"
+}
 
-echo "→ invariantes do schema"
-psql -v ON_ERROR_STOP=1 -d "$BANCO" -f "$RAIZ/tests/invariantes.sql"
+rodar invariantes "$RAIZ/tests/invariantes.sql"
+rodar mapa_status "$RAIZ/tests/mapa_status.sql" "$RAIZ/backfill/mapa_status.sql"
+rodar agendador   "$RAIZ/tests/agendador.sql"
+rodar despacho    "$RAIZ/tests/despacho.sql"
 
+# ---------------------------------------------------------------------------
+# Adapters de canal — TypeScript, sem rede (fetch injetado).
+# ---------------------------------------------------------------------------
 echo ""
-echo "→ mapa de status do backfill"
-psql -q -v ON_ERROR_STOP=1 -d "$BANCO" -f "$RAIZ/backfill/mapa_status.sql"
-psql -v ON_ERROR_STOP=1 -d "$BANCO" -f "$RAIZ/tests/mapa_status.sql"
+echo "→ adapters de canal (TypeScript)"
+node --experimental-strip-types --test "$RAIZ/tests/adapters.test.ts" \
+  | grep -E "^# (tests|pass|fail)|^not ok"
 
 # ---------------------------------------------------------------------------
 # Concorrência: o agendador precisa de SKIP LOCKED de verdade, não só no texto
 # da função. Duas sessões simultâneas têm que pegar lotes disjuntos.
 # ---------------------------------------------------------------------------
 echo ""
-echo "→ agendador e roteador"
-psql -v ON_ERROR_STOP=1 -d "$BANCO" -f "$RAIZ/tests/agendador.sql"
-
-echo ""
 echo "→ concorrência do agendador (SKIP LOCKED)"
+BANCO_CONC="$(novo_banco concorrencia)"
 
-TOTAL=$(psql -tA -d "$BANCO" -c "SELECT count(*) FROM proximos_vencidos(100)")
+psql -q -v ON_ERROR_STOP=1 -d "$BANCO_CONC" <<'SQL'
+INSERT INTO campaigns (id, nome, tipo, base_legal, canais_habilitados)
+VALUES ('cc000000-0000-0000-0000-000000000001','Conc','morna','opt-in','{whatsapp}');
+INSERT INTO flows (id, nome) VALUES ('cc000000-0000-0000-0000-000000000002','Conc');
+INSERT INTO flow_versions (id, flow_id, versao)
+VALUES ('cc000000-0000-0000-0000-000000000003','cc000000-0000-0000-0000-000000000002',1);
+INSERT INTO flow_steps (flow_version_id, ordem, canal, atraso_horas, template)
+VALUES ('cc000000-0000-0000-0000-000000000003',1,'whatsapp',0,'oi');
+DO $$
+DECLARE v uuid;
+BEGIN
+  FOR i IN 1..3 LOOP
+    v := gen_random_uuid();
+    INSERT INTO contacts (id, nome, origem) VALUES (v, 'C'||i, 'planilha');
+    INSERT INTO contact_identities (contact_id, canal, valor, valor_norm, origem)
+    VALUES (v,'whatsapp','+5515900000'||i,'5515900000'||i,'planilha');
+    PERFORM inscrever(v,'cc000000-0000-0000-0000-000000000001',
+                      'cc000000-0000-0000-0000-000000000003', now() - interval '1 minute');
+  END LOOP;
+END;
+$$;
+SQL
+
+TOTAL=$(psql -tA -d "$BANCO_CONC" -c "SELECT count(*) FROM proximos_vencidos(100)")
 
 # Sessão A segura o primeiro vencido dentro de uma transação aberta.
-psql -q -o /dev/null -d "$BANCO" \
+psql -q -o /dev/null -d "$BANCO_CONC" \
   -c "BEGIN; SELECT * FROM proximos_vencidos(1); SELECT pg_sleep(4); COMMIT;" &
 SESSAO_A=$!
 
 # Espera a sessão A pegar a trava (pg_sleep, não sleep de shell).
-psql -tAq -o /dev/null -d "$BANCO" -c "SELECT pg_sleep(1)"
+psql -tAq -o /dev/null -d "$BANCO_CONC" -c "SELECT pg_sleep(1)"
 
-RESTANTE=$(psql -tA -d "$BANCO" -c "SELECT count(*) FROM proximos_vencidos(100)")
+RESTANTE=$(psql -tA -d "$BANCO_CONC" -c "SELECT count(*) FROM proximos_vencidos(100)")
 wait $SESSAO_A
 
 ESPERADO=$((TOTAL - 1))
@@ -78,17 +122,13 @@ fi
 # ---------------------------------------------------------------------------
 echo ""
 echo "→ reversibilidade das migrations"
-psql -q -v ON_ERROR_STOP=1 -d "$BANCO" \
-  -c "DROP SCHEMA t CASCADE; DROP SCHEMA m CASCADE; DROP SCHEMA a CASCADE" >/dev/null
-psql -q -v ON_ERROR_STOP=1 -d "$BANCO" \
-  -c "DROP FUNCTION mapear_status_legado(text,text,jsonb); DROP TYPE acao_reinscricao" >/dev/null
+BANCO_DOWN="$(novo_banco reversibilidade)"
 
-# Ordem inversa da aplicação.
 for d in $(ls -r "$RAIZ"/supabase/down/*.sql); do
-  psql -q -v ON_ERROR_STOP=1 -d "$BANCO" -f "$d"
+  psql -q -v ON_ERROR_STOP=1 -d "$BANCO_DOWN" -f "$d"
 done
 
-RESTOS=$(psql -tA -d "$BANCO" -c "
+RESTOS=$(psql -tA -d "$BANCO_DOWN" -c "
   SELECT (SELECT count(*) FROM pg_tables WHERE schemaname = 'public')
        + (SELECT count(*) FROM pg_type t JOIN pg_namespace n ON n.oid = t.typnamespace
            WHERE n.nspname = 'public' AND t.typtype = 'e');")
@@ -97,12 +137,13 @@ if [ "$RESTOS" -eq 0 ]; then
   echo "PASS  migrations revertem sem deixar tabela nem tipo para trás"
 else
   echo "FALHA down deixou $RESTOS objeto(s) no schema public"
-  psql -d "$BANCO" -c "SELECT tablename FROM pg_tables WHERE schemaname='public'"
+  psql -d "$BANCO_DOWN" -c "SELECT tablename FROM pg_tables WHERE schemaname='public'"
   exit 1
 fi
 
-# E aplica de novo, para provar que o ciclo up→down→up fecha.
-aplicar_migrations
+for m in "$RAIZ"/supabase/migrations/*.sql; do
+  psql -q -v ON_ERROR_STOP=1 -d "$BANCO_DOWN" -f "$m"
+done
 echo "PASS  migrations reaplicam limpas após o down"
 
 echo ""

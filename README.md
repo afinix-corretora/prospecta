@@ -13,8 +13,9 @@ Mapa de `status` legado → modelo novo em [`MAPA-STATUS.md`](MAPA-STATUS.md).
 ```
 supabase/migrations/   schema, incremental
 supabase/down/         reversão de cada migration
+adapters/              ChannelAdapter por provedor (TypeScript, sem I/O de runtime)
 backfill/              ferramentas da migração de dados (fora do schema de runtime)
-tests/                 testes das invariantes e do mapa de status
+tests/                 suite — um banco descartável por arquivo
 ```
 
 ## Rodando os testes
@@ -81,6 +82,37 @@ em vez de por total:
 A quota é reservada nos dois modos de propósito: o shadow mode existe para mostrar o que o motor
 faria, e o que ele faria inclui ser freado pelo rate limit.
 
+## Adapters de canal
+
+`adapters/` implementa `ChannelAdapter` (`send`, `normalizeWebhook`, `checkHealth`). O motor já
+decidiu identidade, remetente e conteúdo antes de chegar aqui — o adapter só fala o dialeto do
+provedor.
+
+| Provedor | Canal | Migra de |
+|---|---|---|
+| `evolution` | whatsapp (não-oficial) | `send-evolution-message` + `evolution-webhook` |
+| `meta_cloud` | whatsapp (oficial) | `meta-send-via-bsp` + `meta-webhook` |
+| `comtele` | sms | `comtele-send-sms` |
+
+E-mail e Instagram ainda não têm adapter, e o registro **declara isso** em
+`PROVEDORES_POR_CANAL` — melhor do que descobrir em produção.
+
+Três regras que valem para qualquer adapter novo:
+
+- **Nenhuma API específica de runtime.** Só `fetch` e tipos web, e `fetch` é injetado pelo
+  construtor. O mesmo arquivo roda no Deno das edge functions e no Node dos testes, e nenhum teste
+  toca a rede.
+- **Segredo entra por parâmetro.** O adapter nunca lê variável de ambiente nem consulta o banco; o
+  chamador resolve do Vault.
+- **Toda falha diz de quem é a culpa** (`remetente`, `destino`, `transitorio`). Só `remetente`
+  alimenta o circuit breaker — derrubar uma conta boa por causa de um número inválido esvazia o
+  pool sem motivo.
+
+Rodam com `node --experimental-strip-types --test tests/adapters.test.ts`, ou junto da suite.
+
 ## Convenção
 
 Teste vermelho é bloqueio, não aviso. Toda mudança de schema roda `tests/run.sh` antes do commit.
+
+Cada arquivo de teste roda em banco próprio. Compartilhar banco já produziu duas falhas falsas
+aqui — uma por remetente ambíguo entre fixtures, outra por mensagem pendente alheia.
