@@ -251,20 +251,53 @@ segredo e um gatilho recusa gravá-los em `sender_accounts.config`. Não existe 
 
 Provedor sem adapter aparece na tela e **não** vira opção de envio: o motor recusa antes de prometer.
 
-### Um buraco conhecido no canal não-oficial
+### Como a resposta encerra a cadência
+
+Dois caminhos, porque os provedores não são iguais nisso:
+
+| | Quando | Como casa |
+|---|---|---|
+| Por id | O provedor diz a qual mensagem nossa o evento se refere — oficiais, e toda confirmação de entrega | `provider_message_id` |
+| Por número | O provedor não diz. É o caso da resposta nas não oficiais | o chip que recebeu o webhook dá o tenant; o banco acha a última mensagem daquele tenant para aquele número |
+
+**Cada chip tem a sua URL de webhook** (`/canal-webhook/<token>`), e é ela que diz de qual conta o
+evento veio. Sem isso não haveria tenant, e casar pelo número escolheria a mensagem de outro
+cliente. O token é a credencial: 128 bits aleatórios, um por conta.
+
+O encerramento continua saindo do gatilho de `message_events`. A invariante 4 não ganhou um segundo
+caminho — ganhou uma segunda entrada para o mesmo caminho.
+
+## Criar chip pela plataforma
+
+`provider_servers` guarda a URL e o token de administração do provedor (o token no Vault, sem coluna
+de texto). A partir dele a plataforma cria a instância sozinha:
+
+1. sorteia o token do webhook
+2. cria a instância no provedor **já apontando** para esse endpoint
+3. guarda o token da instância no Vault e cria o `sender_account`, numa transação
+
+A ordem importa. Criar primeiro no banco deixaria conta apontando para instância que não existe se o
+provedor recusasse; criar sem webhook e apontar depois deixaria uma janela em que a resposta do
+contato se perde. No pior caso sobra uma instância órfã no painel do provedor — visível e
+descartável, em vez de silenciosa no nosso banco.
+
+O QR volta na resposta e morre ali: guardar QR é guardar credencial de sessão de WhatsApp.
+
+### O que isto consertou
 
 A resposta do contato só encerra o enrollment se o webhook citar a mensagem que o motor mandou —
 é por `provider_message_id` que `registrar_evento_provedor` liga as duas pontas. As APIs oficiais
 mandam esse `context`; as não oficiais, normalmente não.
 
-O adapter da UAZAPI, por isso, **só emite `respondido` quando há citação**. Sem citação ele não
-emite nada, porque o id que o payload traz é o da mensagem do contato e não casa com nada em
-`messages` — registrar seria inventar um vínculo.
+O adapter emite `providerMessageId` quando há citação e `deNumero` quando não há — nunca um id
+inventado, que gravaria um evento que jamais casa.
 
-**Então a invariante 4 não vale para resposta sem citação no canal não-oficial**, e vale o mesmo
-para Evolution hoje. Consertar exige decidir como o webhook identifica a conta que o recebeu (uma
-URL por `sender_account`, ou o provedor mandando a instância no payload). Está registrado em D23 e
-ainda não foi decidido.
+**A invariante 4 não valia para resposta sem citação no canal não-oficial**: o contato respondia, o
+motor não ficava sabendo e a cadência seguia tocando. Valia o mesmo para Evolution, que emitia o id
+da mensagem do contato — um id que nunca casava com `messages`.
+
+Agora vale, pelos dois adapters. `tests/webhook.sql` exercita o caminho inteiro: campanha fria,
+primeiro toque, resposta sem citação, enrollment encerrado com motivo `resposta`.
 
 ## Navegação do console
 

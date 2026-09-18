@@ -50,4 +50,17 @@ export interface Banco {
     ocorridoEm: string,
     payload: Record<string, unknown>,
   ): Promise<boolean>;
+
+  /**
+   * Resposta que o provedor não ligou a mensagem nenhuma (D23). O chip diz o
+   * tenant; o banco acha a última mensagem que esse tenant mandou para este
+   * número e grava o evento nela. Devolve false quando o número nunca recebeu
+   * nada — alguém escrevendo do nada para o chip não é resposta a nada.
+   */
+  registrarRespostaPorNumero(
+    senderId: string,
+    valorNorm: string,
+    ocorridoEm: string,
+    payload: Record<string, unknown>,
+  ): Promise<boolean>;
 }

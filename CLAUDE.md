@@ -91,6 +91,8 @@ e elas têm teste automatizado obrigatório.**
   `sender_accounts.config` um campo que o catálogo marca como segredo. Segredo vai para o Vault.
 - **Nunca** deixar uma tela de Configurações ou Canais expandida por padrão. Grupo abre índice,
   não conteúdo (D21).
+- **Nunca** receber webhook num endpoint que não identifique o chip. Sem chip não há tenant, e sem
+  tenant casar resposta pelo número encerra a cadência do cliente errado (D24).
 
 ---
 
@@ -118,6 +120,7 @@ e elas têm teste automatizado obrigatório.**
 > A Fase 1 tem cinco adapters em `adapters/` (Gupshup, Meta Cloud, UAZAPI, Evolution, Comtele) com a superfície de
 > despacho em SQL (`reivindicar_pendentes`, `registrar_resultado_envio`,
 > `registrar_evento_provedor`). E-mail e Instagram ainda não têm adapter, e o registro declara isso.
+> Cada chip tem a sua URL de webhook (D24), e a UAZAPI cria instância pela própria plataforma (D25).
 >
 > O worker existe (`supabase/functions/motor-worker`), roda em `simulado` por padrão, e com ele a
 > **Fase 3 está completa de ponta a ponta**: agendador, roteador, adapters e despacho rodam sem

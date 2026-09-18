@@ -128,7 +128,10 @@ test('evolution: credencial ausente culpa o remetente e não chama a rede', asyn
   assert.equal(chamadas.length, 0);
 });
 
-test('evolution: mensagem recebida vira respondido', () => {
+test('evolution: mensagem recebida vira respondido, casada pelo número', () => {
+  // Este teste travava o comportamento errado: `key.id` é o id da mensagem DO
+  // CONTATO, não da nossa, e casar por ele nunca achava nada em `messages` —
+  // a invariante 4 não valia neste canal. Agora o vínculo é pelo número (D23).
   const eventos = new WhatsAppEvolutionAdapter().normalizeWebhook({
     event: 'messages.upsert',
     data: { key: { id: 'EVO123', fromMe: false, remoteJid: '5511900000001@s.whatsapp.net' },
@@ -136,8 +139,17 @@ test('evolution: mensagem recebida vira respondido', () => {
   });
   assert.equal(eventos.length, 1);
   assert.equal(eventos[0].tipo, 'respondido');
-  assert.equal(eventos[0].providerMessageId, 'EVO123');
+  assert.equal(eventos[0].deNumero, '5511900000001');
+  assert.equal(eventos[0].providerMessageId, undefined);
   assert.equal(eventos[0].ocorridoEm, new Date(1789999999_000).toISOString());
+});
+
+test('evolution: mensagem de grupo não encerra cadência', () => {
+  const eventos = new WhatsAppEvolutionAdapter().normalizeWebhook({
+    event: 'messages.upsert',
+    data: { key: { id: 'EVO9', fromMe: false, remoteJid: '120363000000000000@g.us' } },
+  });
+  assert.deepEqual(eventos, []);
 });
 
 test('evolution: o próprio eco (fromMe) é descartado', () => {
@@ -543,14 +555,105 @@ test('uazapi liga a resposta pela citação da nossa mensagem', () => {
   assert.equal(evs[0].providerMessageId, 'uaz-1');
 });
 
-test('uazapi: resposta sem citação não vira evento', () => {
-  // Nas APIs não oficiais a resposta normalmente não cita nada. Emitir o id da
-  // mensagem dele seria inventar um vínculo que não casa com `messages`.
+test('uazapi: resposta sem citação casa pelo número, não por id inventado', () => {
+  // É o caso comum nas não oficiais. O id do payload é o da mensagem DELE e
+  // não existe em `messages`; quem resolve é o banco, pelo número e pelo chip
+  // que recebeu o webhook (D23).
   const evs = new WhatsAppUazapiAdapter().normalizeWebhook({
     event: 'messages',
     message: { id: 'dele-9', fromMe: false, sender: '5511900000001@s.whatsapp.net' },
   });
+  assert.equal(evs.length, 1);
+  assert.equal(evs[0].tipo, 'respondido');
+  assert.equal(evs[0].deNumero, '5511900000001');
+  assert.equal(evs[0].providerMessageId, undefined);
+});
+
+test('uazapi: mensagem de grupo não é resposta de cadência', () => {
+  // O motor nunca mandou para um grupo, então nada ali pode encerrar um
+  // enrollment.
+  const evs = new WhatsAppUazapiAdapter().normalizeWebhook({
+    event: 'messages',
+    message: { id: 'g-1', fromMe: false, sender: '120363000000000000@g.us' },
+  });
   assert.deepEqual(evs, []);
+});
+
+test('uazapi: citação ganha do número quando as duas existem', () => {
+  // Casar por id é mais preciso: aponta a mensagem exata.
+  const evs = new WhatsAppUazapiAdapter().normalizeWebhook({
+    event: 'messages',
+    message: { id: 'dele-9', fromMe: false, sender: '5511900000001@s.whatsapp.net',
+               quoted: { id: 'uaz-1' } },
+  });
+  assert.equal(evs[0].providerMessageId, 'uaz-1');
+  assert.equal(evs[0].deNumero, undefined);
+});
+
+test('uazapi provisiona instância e devolve token e QR', async () => {
+  const chamadas: { url: string; init?: RequestInit }[] = [];
+  const buscar = (async (url: unknown, init?: RequestInit) => {
+    chamadas.push({ url: String(url), init });
+    const corpo = String(url).endsWith('/instance/init')
+      ? { token: 'tok-nova', name: 'chip-02' }
+      : { instance: { qrcode: 'data:image/png;base64,AAA' } };
+    return new Response(JSON.stringify(corpo), { status: 200 });
+  }) as unknown as Buscador;
+
+  const r = await new WhatsAppUazapiAdapter(buscar).provisionar!({
+    baseUrl: 'https://afinix.uazapi.com/',
+    adminToken: 'admin-secreto',
+    nome: 'chip-02',
+    webhookUrl: 'https://proj.functions.supabase.co/canal-webhook/tok-abc',
+  });
+
+  assert.equal(r.ok, true);
+  assert.equal(r.instancia, 'chip-02');
+  assert.equal(r.credenciais!.token, 'tok-nova');
+  assert.equal(r.credenciais!.base_url, 'https://afinix.uazapi.com');
+  assert.equal(r.qrcode, 'data:image/png;base64,AAA');
+
+  // Criar usa admintoken; conectar usa o token da instância recém-criada.
+  assert.equal(chamadas[0].url, 'https://afinix.uazapi.com/instance/init');
+  assert.equal((chamadas[0].init!.headers as Record<string,string>).admintoken, 'admin-secreto');
+  assert.equal(JSON.parse(String(chamadas[0].init!.body)).webhook,
+               'https://proj.functions.supabase.co/canal-webhook/tok-abc');
+  assert.equal(chamadas[1].url, 'https://afinix.uazapi.com/instance/connect');
+  assert.equal((chamadas[1].init!.headers as Record<string,string>).token, 'tok-nova');
+});
+
+test('uazapi: instância criada sem token é falha, não sucesso pela metade', async () => {
+  const { buscar } = fetchFalso(200, { name: 'chip-03' });
+  const r = await new WhatsAppUazapiAdapter(buscar).provisionar!({
+    baseUrl: 'https://afinix.uazapi.com', adminToken: 'a', nome: 'chip-03',
+  });
+  assert.equal(r.ok, false);
+  assert.match(r.erro!, /sem token/);
+});
+
+test('uazapi: QR que falha não derruba a instância criada', async () => {
+  // A instância existe no provedor; pedir o QR de novo é barato, recriar não.
+  let n = 0;
+  const buscar = (async (url: unknown) => {
+    n += 1;
+    if (String(url).endsWith('/instance/connect')) throw new Error('timeout no QR');
+    return new Response(JSON.stringify({ token: 'tok-nova' }), { status: 200 });
+  }) as unknown as Buscador;
+
+  const r = await new WhatsAppUazapiAdapter(buscar).provisionar!({
+    baseUrl: 'https://afinix.uazapi.com', adminToken: 'a', nome: 'chip-04',
+  });
+  assert.equal(r.ok, true);
+  assert.equal(r.credenciais!.token, 'tok-nova');
+  assert.equal(r.qrcode, undefined);
+  assert.equal(n, 2);
+});
+
+test('só quem hospeda instância sabe provisionar', () => {
+  // A Meta e a Gupshup não criam número — quem cria é a operadora.
+  assert.equal(typeof new WhatsAppUazapiAdapter().provisionar, 'function');
+  assert.equal(new WhatsAppGupshupAdapter().provisionar, undefined);
+  assert.equal(new WhatsAppMetaAdapter().provisionar, undefined);
 });
 
 test('uazapi descarta o próprio eco', () => {

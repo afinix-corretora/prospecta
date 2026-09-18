@@ -23,8 +23,8 @@
 // que gravar uma mensagem que nunca vai casar com o webhook.
 
 import type {
-  Buscador, ChannelAdapter, EventoNormalizado, PedidoEnvio,
-  ResultadoEnvio, Saude, TipoEvento,
+  Buscador, ChannelAdapter, EventoNormalizado, PedidoEnvio, PedidoProvisionamento,
+  ResultadoEnvio, ResultadoProvisionamento, Saude, TipoEvento,
 } from './tipos.ts';
 import { erroDeRede, exigir } from './tipos.ts';
 import { normalizarTelefone } from './telefone.ts';
@@ -108,23 +108,32 @@ export class WhatsAppUazapiAdapter implements ChannelAdapter {
         }];
       }
 
-      // Mensagem recebida. Só vira `respondido` se vier citando uma mensagem
-      // nossa: é a citação que liga a resposta ao enrollment. Sem ela, o id
-      // que existe no payload é o da mensagem DELE, que não casa com nada em
-      // `messages` — gravar seria inventar um vínculo.
-      const citado = idCitado(item);
-      if (!citado) return [];
-
-      return [{
-        providerMessageId: citado,
+      // Mensagem recebida. Duas formas de ligar ao enrollment:
+      //
+      // com citação — o provedor disse a qual mensagem nossa ele respondeu;
+      //               casa por id, igual às oficiais.
+      // sem citação — o caso comum aqui. O id do payload é o da mensagem DELE
+      //               e não existe em `messages`; quem casa é o número, no
+      //               banco, a partir do chip que recebeu este webhook (D23).
+      const de = numeroDe(item);
+      const base = {
         tipo: 'respondido' as TipoEvento,
         ocorridoEm: instante(item.messageTimestamp ?? item.timestamp ?? item.t),
         payload: {
           de: item.sender ?? item.from ?? item.chatid ?? null,
           tipo_mensagem: item.messageType ?? item.type ?? null,
         },
-      }];
+      };
+
+      const citado = idCitado(item);
+      if (citado) return [{ providerMessageId: citado, ...base }];
+      if (de) return [{ deNumero: de, ...base }];
+      return [];
     });
+  }
+
+  provisionar(pedido: PedidoProvisionamento): Promise<ResultadoProvisionamento> {
+    return provisionarUazapi(this.buscar, pedido);
   }
 
   async checkHealth(credenciais: Record<string, string>): Promise<Saude> {
@@ -140,6 +149,100 @@ export class WhatsAppUazapiAdapter implements ChannelAdapter {
   }
 }
 
+/**
+ * Cria instância no servidor da UAZAPI.
+ *
+ *   confirmado  POST {base}/instance/init cria, header `admintoken`
+ *   confirmado  POST {base}/instance/connect conecta e devolve o QR
+ *   defensivo   o token da instância vem em `token` na resposta do init; lido
+ *               de uma lista de grafias pelo mesmo motivo do id de mensagem
+ *
+ * O QR não é guardado em lugar nenhum: é devolvido para a tela e morre ali.
+ * Guardar QR seria guardar uma credencial de sessão de WhatsApp.
+ */
+async function provisionarUazapi(
+  buscar: Buscador, pedido: PedidoProvisionamento,
+): Promise<ResultadoProvisionamento> {
+  const base = pedido.baseUrl.replace(/\/$/, '');
+  const cabecalho = { 'Content-Type': 'application/json', admintoken: pedido.adminToken };
+
+  try {
+    const criada = await buscar(`${base}/instance/init`, {
+      method: 'POST',
+      headers: cabecalho,
+      body: JSON.stringify({
+        name: pedido.nome,
+        // A UAZAPI aponta o webhook por instância, que é exatamente o que o
+        // motor precisa: um endpoint por chip.
+        ...(pedido.webhookUrl ? { webhook: pedido.webhookUrl } : {}),
+      }),
+    });
+
+    const corpo = await criada.json().catch(() => ({} as Record<string, unknown>));
+    if (!criada.ok) {
+      return { ok: false, erro: mensagemDeErro(corpo) ?? `HTTP ${criada.status}` };
+    }
+
+    const token = tokenDaInstancia(corpo);
+    if (!token) return { ok: false, erro: 'instância criada sem token — não dá para usar' };
+
+    const instancia = String(
+      (corpo.name ?? corpo.instance ?? (corpo.instance as Record<string, unknown>)?.name)
+      ?? pedido.nome,
+    );
+
+    // Conectar é o que gera o QR. Falhar aqui não desfaz a instância: ela
+    // existe e pode ser conectada depois pela tela.
+    let qrcode: string | undefined;
+    try {
+      const conectada = await buscar(`${base}/instance/connect`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', token },
+        body: JSON.stringify({}),
+      });
+      const c = await conectada.json().catch(() => ({} as Record<string, unknown>));
+      qrcode = qrDe(c);
+    } catch { /* instância existe; o QR se pede de novo */ }
+
+    return {
+      ok: true,
+      instancia,
+      qrcode,
+      credenciais: { token, base_url: base },
+    };
+  } catch (e) {
+    return { ok: false, erro: e instanceof Error ? e.message : String(e) };
+  }
+}
+
+function tokenDaInstancia(o: Record<string, unknown>): string | null {
+  const ninho = (o.instance ?? o.data) as Record<string, unknown> | undefined;
+  for (const fonte of [o, ninho]) {
+    const v = fonte?.token ?? fonte?.apikey ?? fonte?.instanceToken;
+    if (typeof v === 'string' && v) return v;
+  }
+  return null;
+}
+
+function qrDe(o: Record<string, unknown>): string | undefined {
+  const ninho = (o.instance ?? o.data) as Record<string, unknown> | undefined;
+  for (const fonte of [o, ninho]) {
+    const v = fonte?.qrcode ?? fonte?.qrCode ?? fonte?.qr;
+    if (typeof v === 'string' && v) return v;
+  }
+  return undefined;
+}
+
+/** O número de quem mandou, normalizado — é por ele que a resposta casa. */
+function numeroDe(item: Record<string, unknown>): string | null {
+  const bruto = item.sender ?? item.from ?? item.chatid ?? item.chatId;
+  if (typeof bruto !== 'string' || !bruto) return null;
+  // Vem como JID: 5511900000001@s.whatsapp.net. Grupo não é conversa de
+  // cadência — o motor nunca mandou para um, então não pode ser resposta.
+  if (bruto.includes('@g.us')) return null;
+  return normalizarTelefone(bruto.split('@')[0]) || null;
+}
+
 const TIPO_POR_STATUS: Record<string, TipoEvento> = {
   sent: 'enviado',
   server_ack: 'enviado',
@@ -152,7 +255,8 @@ const TIPO_POR_STATUS: Record<string, TipoEvento> = {
 };
 
 function ehMensagemRecebida(evento: string, item: Record<string, unknown>): boolean {
-  return evento.includes('message') && item.fromMe !== true && idCitado(item) !== null;
+  return evento.includes('message') && item.fromMe !== true
+    && (idCitado(item) !== null || numeroDe(item) !== null);
 }
 
 /** O id da nossa mensagem, nas grafias que a UAZAPI já usou. */

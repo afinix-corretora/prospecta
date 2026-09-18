@@ -39,14 +39,14 @@ export function bancoSupabase(sb: SupabaseClient): Banco {
     async credenciaisDoRemetente(senderId) {
       const { data, error } = await sb
         .from('sender_accounts')
-        .select('provedor, credenciais_secret_id')
+        .select('provedor')
         .eq('id', senderId)
         .single();
       if (error) throw new Error(`remetente ${senderId}: ${error.message}`);
 
-      const segredo = await rpc('get_decrypted_meta_token', {
-        p_secret_id: data.credenciais_secret_id,
-      });
+      // `get_decrypted_meta_token` era nome herdado do legado e não existia em
+      // migration nenhuma: o despachante quebraria aqui no primeiro envio real.
+      const segredo = await rpc('segredo_do_remetente', { p_sender_id: senderId });
       if (!segredo) throw new Error(`remetente ${senderId}: segredo não resolvido no Vault`);
 
       return { provedor: data.provedor, credenciais: JSON.parse(String(segredo)) };
@@ -71,5 +71,25 @@ export function bancoSupabase(sb: SupabaseClient): Banco {
       });
       return gravado === true;
     },
+
+    async registrarRespostaPorNumero(senderId, valorNorm, ocorridoEm, payload) {
+      const gravado = await rpc('registrar_resposta_por_numero', {
+        p_sender_id: senderId,
+        p_valor_norm: valorNorm,
+        p_ocorrido_em: ocorridoEm,
+        p_payload: payload,
+      });
+      return gravado === true;
+    },
   };
+}
+
+/** Token da URL do webhook → de qual chip ele veio. */
+export async function resolverWebhook(sb: SupabaseClient, token: string): Promise<{
+  sender_id: string; tenant_id: string; provedor: string; canal: string;
+} | null> {
+  const { data, error } = await sb.rpc('resolver_webhook', { p_token: token });
+  if (error) throw new Error(`resolver_webhook: ${error.message}`);
+  const linhas = (data ?? []) as Record<string, string>[];
+  return linhas.length ? (linhas[0] as never) : null;
 }

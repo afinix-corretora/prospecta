@@ -72,6 +72,12 @@ END;
 $$;
 
 -- Pool: morno e frio separados por schema, não por disciplina (D4).
+-- O servidor UAZAPI: é dele que a plataforma cria instância nova sem ninguém
+-- entrar no painel do provedor.
+INSERT INTO provider_servers (id, provedor, nome, base_url)
+VALUES ('dd000000-0000-0000-0000-0000000000d1','uazapi','UAZAPI Afinix',
+        'https://afinix.uazapi.com');
+
 -- Duas contas da Gupshup no mesmo canal e no mesmo pool: é o caso normal, e é
 -- o que mostra que quota é por conta, não por canal.
 INSERT INTO sender_accounts
@@ -85,6 +91,10 @@ INSERT INTO sender_accounts
   -- Chip frio com quota baixa de propósito: é o que faz o freio aparecer.
   ('dd000000-0000-0000-0000-000000000003','whatsapp','+55 11 98000-0009','Chip frio SP',
    'uazapi','fria',2,'{"base_url":"https://afinix.uazapi.com","instancia":"fria-sp"}'::jsonb);
+
+-- O chip frio veio do servidor, como viria pela tela de criar instância.
+UPDATE sender_accounts SET provider_server_id = 'dd000000-0000-0000-0000-0000000000d1'
+ WHERE id = 'dd000000-0000-0000-0000-000000000003';
 
 -- Sete pessoas, cada uma mostrando uma coisa diferente.
 INSERT INTO contacts (id, nome, origem, metadados) VALUES
@@ -311,8 +321,16 @@ SELECT jsonb_pretty(jsonb_build_object(
       'identificador', identificador, 'apelido', apelido, 'canal', canal,
       'provedor', provedor, 'tipo', tipo_permitido,
       'usado', enviados_na_janela, 'quota', quota_diaria,
-      'saude', health_score, 'estado', estado, 'config', config
+      'saude', health_score, 'estado', estado, 'config', config,
+      'webhook_token', webhook_token, 'servidor', provider_server_id
     ) ORDER BY identificador), '[]'::jsonb) FROM sender_accounts),
+
+  'servidores', (SELECT coalesce(jsonb_agg(jsonb_build_object(
+      'id', id, 'provedor', provedor, 'nome', nome, 'base_url', base_url,
+      'tem_admin', admin_secret_id IS NOT NULL, 'ativo', ativo,
+      'instancias', (SELECT count(*) FROM sender_accounts sa
+                      WHERE sa.provider_server_id = ps.id)
+    ) ORDER BY nome), '[]'::jsonb) FROM provider_servers ps),
 
   -- O catálogo de provedores de canal: é dele que a UI monta a tela de
   -- conectar conta, sem conhecer Gupshup nem Evolution.

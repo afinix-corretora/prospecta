@@ -255,10 +255,47 @@ gravar o id dele seria inventar um vínculo que nunca casa.
 sabendo, e a cadência continua. Vale hoje para Evolution também — o adapter atual emite o id da
 mensagem do contato, que igualmente não casa; a diferença é que ele registra um evento inútil em vez
 de nenhum.
-*O conserto pede uma decisão que ainda não foi tomada:* casar a resposta **pelo número** exige saber
-de qual conta veio o webhook, e hoje o webhook não diz. As opções são uma URL de webhook por
-`sender_account`, ou o provedor mandar a instância no payload e o motor resolver a conta a partir
-dela. Enquanto não for decidido, campanha fria multi-toque pode tocar quem já respondeu.
+**Fechada por D24:** a decisão foi uma URL de webhook por `sender_account`.
+
+### D24 — Um endpoint de webhook por chip
+Cada `sender_account` nasce com um `webhook_token` (uuid aleatório) e a sua URL própria:
+`/canal-webhook/<token>`. Era por provedor; passou a ser por conta.
+*Justificativa:* fecha D23. Quem recebe o evento precisa saber de qual chip ele veio, porque é daí
+que sai o tenant — e sem tenant, casar uma resposta pelo número escolheria a mensagem de outro
+cliente. A alternativa (o provedor mandar a instância no payload) depende de cada provedor mandar,
+e de mandar certo; a URL é nossa e vale para todos.
+**Como a resposta encerra a cadência agora:** `registrar_resposta_por_numero(chip, número)` acha a
+última mensagem que aquele tenant mandou para aquela identidade e grava `respondido` nela. O
+encerramento continua saindo do gatilho de `message_events` — a invariante 4 não ganhou um segundo
+caminho, ganhou uma segunda entrada para o mesmo caminho.
+**Duas escolhas dentro disso, ambas contraintuitivas:**
+- *Não filtra por chip.* A pessoa responde para quem falou com ela, e o pool pode ter trocado de
+  chip entre um toque e outro.
+- *Não filtra por status da mensagem.* `pendente` entra porque o webhook pode ganhar do
+  despachante: o provedor entrega, a pessoa responde e o retorno chega antes de
+  `registrar_resultado_envio` gravar `enviado`. Filtrar perderia exatamente a resposta mais rápida.
+**O token é a credencial.** Quem tem a URL pode postar evento naquele chip. São 128 bits aleatórios,
+um por conta, e token desconhecido responde 404 sem dizer mais nada.
+**Evolution também foi corrigida:** ela emitia o id da mensagem do contato, que nunca casava com
+`messages`. Agora casa pelo número, como a UAZAPI.
+
+### D25 — A plataforma cria a instância; o segredo nasce no Vault
+`provider_servers` guarda URL e token de administração do provedor (o token no Vault, sem coluna de
+texto). A partir dele, `provisionar-instancia` cria a instância, guarda o token dela no Vault e
+cria o `sender_account` — tudo sem ninguém abrir o painel do provedor.
+*Justificativa:* chip novo era trabalho manual em dois sistemas, e o token acabava colado em algum
+lugar no caminho. Aqui ele vai do provedor para o Vault sem passar por tela.
+**A ordem não é arbitrária:** sorteia o token do webhook → cria a instância no provedor já
+apontando para esse endpoint → só então grava conta e credencial, numa transação. Criar primeiro no
+banco deixaria conta apontando para instância que não existe se o provedor recusasse; criar a
+instância sem webhook e apontar depois deixaria uma janela em que a resposta do contato se perde.
+No pior caso sobra uma instância órfã no painel do provedor — visível e descartável, em vez de
+silenciosa no nosso banco.
+**Não é tabela por canal** (anti-regra): é por provedor. Serve a uma Evolution self-hosted no dia
+que precisar. Provedor que não hospeda instância — Gupshup, Meta — não aparece na tela: quem cria
+número ali é a operadora.
+**Consequência de higiene:** `get_decrypted_meta_token`, que o worker chamava e não existia em
+migration nenhuma, virou `segredo_do_remetente`. O despachante quebraria na primeira mensagem real.
 
 ---
 

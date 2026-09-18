@@ -19,16 +19,27 @@ export async function receberWebhook(
   banco: Banco,
   provedor: string,
   corpo: unknown,
-  opcoes: { buscar?: Buscador; criar?: typeof criarAdapter } = {},
+  opcoes: { buscar?: Buscador; criar?: typeof criarAdapter; senderId?: string } = {},
 ): Promise<ResumoWebhook> {
   const criar = opcoes.criar ?? criarAdapter;
   const eventos = criar(provedor, opcoes.buscar).normalizeWebhook(corpo);
 
   let gravados = 0;
   for (const e of eventos) {
-    const ok = await banco.registrarEventoProvedor(
-      e.providerMessageId, e.tipo, e.ocorridoEm, e.payload,
-    );
+    let ok = false;
+
+    if (e.providerMessageId) {
+      ok = await banco.registrarEventoProvedor(
+        e.providerMessageId, e.tipo, e.ocorridoEm, e.payload,
+      );
+    } else if (e.deNumero && opcoes.senderId) {
+      // Sem chip não há tenant, e sem tenant casar pelo número escolheria a
+      // mensagem de outro cliente. Melhor descartar do que acertar o errado.
+      ok = await banco.registrarRespostaPorNumero(
+        opcoes.senderId, e.deNumero, e.ocorridoEm, e.payload,
+      );
+    }
+
     if (ok) gravados += 1;
   }
 

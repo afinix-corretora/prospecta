@@ -87,12 +87,18 @@ export class WhatsAppEvolutionAdapter implements ChannelAdapter {
         const chave = item.key as ChaveEvolution | undefined;
         // fromMe é o eco do que nós mesmos mandamos. Tratar como resposta do
         // contato faria o motor encerrar o enrollment no próprio disparo.
-        if (!chave?.id || chave.fromMe) return [];
+        if (chave?.fromMe) return [];
+
+        // `key.id` aqui é o id da mensagem DELE, não da nossa — casar por ele
+        // nunca encontrava nada em `messages`, e a invariante 4 não valia
+        // neste canal. Agora o vínculo é pelo número (D23).
+        const numero = numeroDoJid(chave?.remoteJid);
+        if (!numero) return [];
         return [{
-          providerMessageId: chave.id,
+          deNumero: numero,
           tipo: 'respondido' as TipoEvento,
           ocorridoEm: instante(item.messageTimestamp),
-          payload: { remoteJid: chave.remoteJid ?? null, autoria: null },
+          payload: { remoteJid: chave?.remoteJid ?? null, autoria: null },
         }];
       });
     }
@@ -136,6 +142,13 @@ const TIPO_POR_STATUS: Record<string, TipoEvento> = {
   PLAYED: 'lido',
   ERROR: 'falha',
 };
+
+/** Número do JID; grupo não é conversa de cadência. */
+function numeroDoJid(jid: unknown): string | null {
+  if (typeof jid !== 'string' || !jid) return null;
+  if (jid.includes('@g.us')) return null;
+  return normalizarTelefone(jid.split('@')[0]) || null;
+}
 
 function instante(bruto: unknown): string {
   const n = Number(bruto);

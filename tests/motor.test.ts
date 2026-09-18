@@ -21,9 +21,11 @@ function bancoFalso(pendentes: MensagemParaEnviar[], opcoes: {
   erroCredencial?: string;
   erroAoRegistrar?: string;
   eventoAceito?: (id: string) => boolean;
+  respostaAceita?: boolean;
 } = {}) {
   const registros: Registro[] = [];
   const eventos: { id: string; tipo: string }[] = [];
+  const porNumero: { senderId: string; numero: string; tipo: string }[] = [];
   let agendadas = 0;
 
   const banco: Banco = {
@@ -44,9 +46,13 @@ function bancoFalso(pendentes: MensagemParaEnviar[], opcoes: {
       eventos.push({ id: providerMessageId, tipo });
       return opcoes.eventoAceito ? opcoes.eventoAceito(providerMessageId) : true;
     },
+    async registrarRespostaPorNumero(senderId, valorNorm, _ocorridoEm, _payload) {
+      porNumero.push({ senderId, numero: valorNorm, tipo: 'respondido' });
+      return opcoes.respostaAceita ?? true;
+    },
   };
 
-  return { banco, registros, eventos, chamadasAgendador: () => agendadas };
+  return { banco, registros, eventos, porNumero, chamadasAgendador: () => agendadas };
 }
 
 function adapterFalso(canal: string, resposta: ResultadoEnvio | (() => ResultadoEnvio),
@@ -275,4 +281,64 @@ test('webhook de provedor desconhecido falha alto', async () => {
     () => receberWebhook(banco, 'inexistente', {}),
     /provedor sem adapter/,
   );
+});
+
+// ---------------------------------------------------------------------------
+// Resposta sem id do provedor — o caso das APIs não oficiais (D23)
+// ---------------------------------------------------------------------------
+
+test('evento sem id casa pelo número, usando o chip que recebeu o webhook', async () => {
+  const { banco, porNumero, eventos } = bancoFalso([]);
+  const { criar } = adapterFalso('whatsapp', { ok: true }, [
+    { deNumero: '5511900000001', tipo: 'respondido',
+      ocorridoEm: '2026-09-18T12:00:00Z', payload: {} },
+  ]);
+
+  const r = await receberWebhook(banco, 'falso', {}, { criar, senderId: 'chip-1' });
+
+  assert.equal(r.gravados, 1);
+  assert.deepEqual(porNumero, [{ senderId: 'chip-1', numero: '5511900000001', tipo: 'respondido' }]);
+  // Não tentou casar por id: não havia id.
+  assert.deepEqual(eventos, []);
+});
+
+test('sem chip, evento por número é descartado em vez de casar errado', async () => {
+  // Sem chip não há tenant, e casar pelo número escolheria a mensagem de outro
+  // cliente. Errar de tenant é pior que perder o evento.
+  const { banco, porNumero } = bancoFalso([]);
+  const { criar } = adapterFalso('whatsapp', { ok: true }, [
+    { deNumero: '5511900000001', tipo: 'respondido',
+      ocorridoEm: '2026-09-18T12:00:00Z', payload: {} },
+  ]);
+
+  const r = await receberWebhook(banco, 'falso', {}, { criar });
+
+  assert.equal(r.normalizados, 1);
+  assert.equal(r.gravados, 0);
+  assert.equal(r.descartados, 1);
+  assert.deepEqual(porNumero, []);
+});
+
+test('número que nunca recebeu nada conta como descartado', async () => {
+  const { banco } = bancoFalso([], { respostaAceita: false });
+  const { criar } = adapterFalso('whatsapp', { ok: true }, [
+    { deNumero: '5511999999999', tipo: 'respondido',
+      ocorridoEm: '2026-09-18T12:00:00Z', payload: {} },
+  ]);
+
+  const r = await receberWebhook(banco, 'falso', {}, { criar, senderId: 'chip-1' });
+  assert.equal(r.gravados, 0);
+  assert.equal(r.descartados, 1);
+});
+
+test('id do provedor continua tendo precedência sobre número', async () => {
+  const { banco, eventos, porNumero } = bancoFalso([]);
+  const { criar } = adapterFalso('whatsapp', { ok: true }, [
+    { providerMessageId: 'prov-1', tipo: 'entregue',
+      ocorridoEm: '2026-09-18T12:00:00Z', payload: {} },
+  ]);
+
+  await receberWebhook(banco, 'falso', {}, { criar, senderId: 'chip-1' });
+  assert.deepEqual(eventos, [{ id: 'prov-1', tipo: 'entregue' }]);
+  assert.deepEqual(porNumero, []);
 });
