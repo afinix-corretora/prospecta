@@ -324,6 +324,56 @@ provedor novo entrar no catálogo.
 não são API: devolvem a chave em texto claro e só o `service_role` chama. O suite confere que
 `authenticated` alcança as de escrita e **não** alcança essas.
 
+## Agendar o motor
+
+O motor não é um endpoint que alguém chama — é um worker que acorda e pergunta "quem está vencido
+agora?". `pg_cron` faz a pergunta; `pg_net` entrega a batida na edge function e volta na hora, para
+que job nenhum fique esperando worker.
+
+A service key **não** entra no comando do job. O jeito que a maioria dos tutoriais ensina é colar a
+chave ali dentro, e `cron.job` é uma tabela como outra qualquer: vai para backup, réplica e
+`pg_dump`. Aqui a chave fica no Vault e `privado.chave_do_motor()` a lê no instante da chamada (D29).
+
+Guarde o segredo uma vez, em **Project Settings ▸ Vault ▸ New secret**, com o nome exato:
+
+| Nome | Valor |
+|---|---|
+| `chave_do_motor` | a `service_role` key do projeto |
+
+Pela tela do Vault, não pelo SQL editor — o editor guarda histórico de consulta, e a chave ficaria
+lá em texto claro, que é justamente o que esta decisão evita.
+
+Depois, uma linha no SQL editor:
+
+```sql
+SELECT privado.agendar_motor(
+  'https://<ref>.supabase.co/functions/v1/motor-worker',  -- URL do worker
+  '*/5 * * * *',                                          -- de 5 em 5 minutos
+  50                                                      -- vencidos por passada
+);
+```
+
+Reagendar com outra expressão é a operação comum — subir a frequência, baixar no fim de semana — e
+por isso a função é idempotente: ela desagenda antes. Duas cópias do mesmo job dobrariam a carga sem
+ninguém notar até o rate limit reclamar.
+
+**O corpo não leva `modo`,** e o worker trata a ausência como `simulado`. O motor calcula, roteia e
+grava tudo como `simulado` sem enviar nada. Ligar o envio de verdade é decisão de operação — editar
+o agendamento — não mudança de código.
+
+Para ver se está rodando, em shadow mode não há sintoma externo nenhum:
+
+```sql
+SELECT * FROM privado.ultimas_passadas(10);   -- quando, status, corpo
+SELECT jobname, schedule, active FROM cron.job;
+SELECT privado.desagendar_motor();            -- parar
+```
+
+Sem `ultimas_passadas`, um 401 no worker pareceria exatamente igual a "não havia vencidos".
+
+As cinco funções moram em `privado`, sem EXECUTE para `anon` nem `authenticated`: agendar o motor é
+operação da plataforma, não do cliente. Nenhum tenant agenda o motor de ninguém.
+
 ## Navegação do console
 
 Configurações e Canais são grupos de submenu, não páginas empilhadas. Abrir um grupo mostra o

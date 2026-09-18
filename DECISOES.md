@@ -339,6 +339,23 @@ então o campo sempre volta vazio.
 Nasce sem EXECUTE para ninguém, como manda o D19 — conceder é decisão. Há teste conferindo que
 `authenticated` *não* alcança essa, e alcança a de escrita.
 
+### D29 — A chave do motor não mora no comando do job
+`privado.agendar_motor()` agenda `SELECT privado.acordar_motor('<url>', <limite>)`. A service key
+não aparece: quem a lê é `privado.chave_do_motor()`, do Vault, no instante da batida.
+*Justificativa:* a receita corrente para cron + edge function é colar a service key dentro do
+comando do job. O comando vive em `cron.job`, que é uma tabela como outra qualquer — vai para
+backup, réplica e `pg_dump`, e aparece inteiro para quem tiver SELECT nela. É a anti-regra "nunca
+colocar secret fora do Vault", só que escondida atrás de um tutorial.
+**O agendamento é operação da plataforma, não do cliente.** As cinco funções nascem em `privado`,
+sem EXECUTE para `anon` nem `authenticated`, e só o `service_role` recebe. Não são API e nunca vão
+ser: nenhum tenant agenda o motor de ninguém.
+**`pg_cron` e `pg_net` entram pela própria migration,** guardadas por `pg_available_extensions` —
+o Postgres do teste não as tem, e referência direta faria a suíte inteira parar de aplicar.
+**A reversão não derruba as extensões.** São do projeto, não deste schema: outra coisa pode ter
+passado a depender delas, e um `CREATE EXTENSION` custa menos que descobrir o que quebrou.
+**`ultimas_passadas` existe porque shadow mode não tem sintoma.** Ninguém recebe mensagem, então um
+401 no worker pareceria exatamente igual a "não havia vencidos".
+
 ---
 
 ## Decisões adiadas (não decidir agora)
