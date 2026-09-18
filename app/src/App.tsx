@@ -10,15 +10,47 @@ import {
 } from './telas/Telas';
 import { lerProvedoresCanal, criarTenant } from './dados';
 import type { ProvedorCanal } from './dados';
-import { mensagemDeErro } from './supabase';
+import { configurado, faltando, mensagemDeErro } from './supabase';
 
 export function App() {
+  // Antes de qualquer coisa: sem configuração não há o que tentar, e dizer o
+  // que falta vale mais do que uma tela em branco.
+  if (!configurado) return <SemConfiguracao />;
+
   return (
     <ProvedorSessao>
       <BrowserRouter>
         <Portao />
       </BrowserRouter>
     </ProvedorSessao>
+  );
+}
+
+function SemConfiguracao() {
+  return (
+    <div className="entrar">
+      <div style={{ width: 'min(520px, 100%)' }} className="painel">
+        <h1 style={{ fontSize: 22 }}>Falta configurar</h1>
+        <p style={{ color: 'var(--ink-2)' }}>
+          {faltando.length === 1 ? 'A variável' : 'As variáveis'}{' '}
+          {faltando.map((f) => <code key={f} className="mono">{f}</code>)
+            .reduce((a, b) => <>{a} e {b}</>)}{' '}
+          {faltando.length === 1 ? 'não chegou' : 'não chegaram'} ao navegador.
+        </p>
+        <Aviso tipo="neutro">
+          <b>Na Vercel:</b> Settings → Environment Variables, nos três ambientes.
+          Variável adicionada não entra num deploy que já passou — é preciso
+          <b> redeploy</b>.<br /><br />
+          <b>Local:</b> copie <code className="mono">app/.env.example</code> para{' '}
+          <code className="mono">app/.env.local</code> e reinicie o
+          <code className="mono"> npm run dev</code>.
+        </Aviso>
+        <p style={{ fontSize: 12, color: 'var(--ink-3)', marginBottom: 0 }}>
+          O prefixo <code className="mono">VITE_</code> é obrigatório: o Vite só
+          expõe ao navegador variável que o tenha.
+        </p>
+      </div>
+    </div>
   );
 }
 
