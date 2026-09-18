@@ -93,6 +93,10 @@ e elas têm teste automatizado obrigatório.**
   não conteúdo (D21).
 - **Nunca** receber webhook num endpoint que não identifique o chip. Sem chip não há tenant, e sem
   tenant casar resposta pelo número encerra a cadência do cliente errado (D24).
+- **Nunca** exigir o painel do Supabase para configurar o produto. Segredo entra pela tela, por
+  `salvar_servidor_provedor` / `salvar_credencial_remetente` (D26).
+- **Nunca** misturar provedor oficial e não oficial na mesma tela. Mudam base contratual, risco de
+  banimento e pool permitido — misturar é como campanha institucional acaba num chip frio (D27).
 
 ---
 

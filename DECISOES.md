@@ -297,6 +297,31 @@ número ali é a operadora.
 **Consequência de higiene:** `get_decrypted_meta_token`, que o worker chamava e não existia em
 migration nenhuma, virou `segredo_do_remetente`. O despachante quebraria na primeira mensagem real.
 
+### D26 — Provedor se configura no painel do produto, não no do Supabase
+`salvar_servidor_provedor` e `salvar_credencial_remetente` gravam no Vault a partir da tela.
+*Justificativa:* `provider_servers.admin_secret_id` existia e não havia como preenchê-lo de dentro
+da aplicação — escrever no Vault é SECURITY DEFINER, e nada com SECURITY DEFINER estava exposto ao
+usuário logado (D19). Na prática isso significava abrir o dashboard do Supabase e colar o token, o
+que é o dono do produto tendo acesso de operador do banco. Um cliente do SaaS nunca vai ter isso.
+**São a exceção ao D19, e por isso checam permissão em código.** SECURITY DEFINER passa por cima da
+RLS; então a pergunta que a política faria (`pode_administrar`) é feita dentro da função. Há teste
+para operador barrado e para quem administra passando — é o tipo de checagem que some numa
+refatoração sem ninguém notar.
+**Token em branco na edição não apaga o guardado.** O campo volta vazio porque segredo não é
+legível; tratar vazio como "apagar" derrubaria um servidor que está funcionando.
+**O catálogo decide o que é credencial.** Campo que não existe no provedor é recusado em vez de ir
+para o Vault como se fosse dele.
+
+### D27 — Oficial e não oficial são telas separadas
+`Canais ▸ WhatsApp` virou índice de duas telas: **API Oficial** (Gupshup, Meta) e **API não
+oficial** (UAZAPI, Evolution). O servidor de instância mora dentro da segunda, que é o único mundo
+em que ele existe.
+*Justificativa:* não é organização visual. Oficial e não oficial mudam base contratual, risco de
+banimento (D11) e qual pool pode usar (D4). Configurar chip de automação e número homologado na
+mesma lista é o que faz alguém apontar uma campanha institucional para um chip frio sem perceber.
+**A divisão é derivada, não fixa:** sai de `channel_provider_catalog.oficial`. Canal que só tem um
+dos dois — SMS, e-mail, Instagram hoje — continua com uma tela só, sem submenu vazio.
+
 ---
 
 ## Decisões adiadas (não decidir agora)

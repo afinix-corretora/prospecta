@@ -299,6 +299,20 @@ da mensagem do contato — um id que nunca casava com `messages`.
 Agora vale, pelos dois adapters. `tests/webhook.sql` exercita o caminho inteiro: campanha fria,
 primeiro toque, resposta sem citação, enrollment encerrado com motivo `resposta`.
 
+## Configurar provedor
+
+Tudo se configura pelo painel do produto — **nada depende de abrir o dashboard do Supabase**.
+`salvar_servidor_provedor` e `salvar_credencial_remetente` mandam o segredo para o Vault a partir
+da tela.
+
+As duas são a exceção à regra do D19 (nada com `SECURITY DEFINER` exposto ao usuário logado), porque
+escrever no Vault exige isso. Como `SECURITY DEFINER` passa por cima da RLS, a pergunta que a
+política faria — `pode_administrar` — é feita **dentro da função**, com teste para operador barrado
+e para administrador passando.
+
+Token em branco na edição não apaga o que está guardado: o campo volta vazio porque segredo não é
+legível, e tratar vazio como "apagar" derrubaria um servidor que está funcionando.
+
 ## Navegação do console
 
 Configurações e Canais são grupos de submenu, não páginas empilhadas. Abrir um grupo mostra o
@@ -307,9 +321,18 @@ Configurações e Canais são grupos de submenu, não páginas empilhadas. Abrir
 ```
 Campanhas
 Operação
-Canais ▸          WhatsApp · E-mail · SMS · Instagram
+Canais ▸          WhatsApp ▸   API Oficial        Gupshup, Meta Cloud
+                              API não oficial    UAZAPI, Evolution + servidores de instância
+                  E-mail · SMS · Instagram
 Configurações ▸   Provedores de IA · Agentes · Modelos de conversa · Plataformas de contato
 ```
+
+**Oficial e não oficial são telas separadas** (D27), e não por organização visual: mudam base
+contratual, risco de banimento e qual pool pode usar. Configurar chip de automação e número
+homologado na mesma lista é o que faz alguém apontar campanha institucional para um chip frio.
+
+A divisão sai de `channel_provider_catalog.oficial`, então canal que só tem um dos dois — SMS,
+e-mail, Instagram — continua com uma tela só, sem submenu vazio.
 
 Cada canal tem a sua tela: contas conectadas, capacidade diária e o formulário de conectar outra —
 montado a partir dos `campos` que o provedor declara, então nenhum código de UI conhece Gupshup,

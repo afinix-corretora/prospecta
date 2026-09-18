@@ -198,6 +198,127 @@ SELECT wh.confere('servidor de provedor que não hospeda instância é erro de c
      JOIN channel_provider_catalog c ON c.slug = ps.provedor
     WHERE c.slug IN ('gupshup','meta_cloud'))));
 
+-- ---------------------------------------------------------------------------
+-- Configurar pelo painel do produto (D26)
+-- ---------------------------------------------------------------------------
+--
+-- SECURITY DEFINER passa por cima da RLS. Então quem passa por cima tem que
+-- perguntar, em código, o que a política perguntaria — e é isto que estes
+-- testes verificam, porque é o tipo de coisa que some numa refatoração.
+
+-- Os usuários: um administra, outro só opera.
+INSERT INTO tenant_users (tenant_id, user_id, papel) VALUES
+  ('00000000-0000-0000-0000-0000000000aa','11111111-aaaa-0000-0000-00000000000a','dono'),
+  ('00000000-0000-0000-0000-0000000000aa','33333333-aaaa-0000-0000-00000000000a','operador');
+
+DO $$
+DECLARE v_id uuid;
+BEGIN
+  PERFORM set_config('request.jwt.claims','{"sub":"33333333-aaaa-0000-0000-00000000000a"}', true);
+  v_id := salvar_servidor_provedor('00000000-0000-0000-0000-0000000000aa','uazapi',
+            'Servidor do operador','https://x.uazapi.com','tok');
+  PERFORM wh.confere('operador não configura provedor', false, 'configurou');
+EXCEPTION WHEN insufficient_privilege THEN
+  PERFORM wh.confere('operador não configura provedor (42501)', true);
+WHEN others THEN
+  PERFORM wh.confere('operador não configura provedor', false, SQLSTATE || ': ' || SQLERRM);
+END;
+$$;
+
+DO $$
+DECLARE v_id uuid;
+BEGIN
+  PERFORM set_config('request.jwt.claims','{"sub":"11111111-aaaa-0000-0000-00000000000a"}', true);
+  -- Sem Vault local, quem administra chega até a escrita do segredo e para
+  -- lá — que é exatamente um passo depois da checagem de permissão.
+  v_id := salvar_servidor_provedor('00000000-0000-0000-0000-0000000000aa','uazapi',
+            'Servidor do dono','https://y.uazapi.com','tok');
+  PERFORM wh.confere('quem administra passa da checagem de permissão', false, 'sem Vault deveria parar');
+EXCEPTION WHEN feature_not_supported THEN
+  PERFORM wh.confere('quem administra passa da checagem de permissão', true);
+WHEN insufficient_privilege THEN
+  PERFORM wh.confere('quem administra passa da checagem de permissão', false, 'barrou quem pode');
+END;
+$$;
+
+DO $$
+DECLARE v_id uuid;
+BEGIN
+  PERFORM set_config('request.jwt.claims','{"sub":"11111111-aaaa-0000-0000-00000000000a"}', true);
+  v_id := salvar_servidor_provedor('00000000-0000-0000-0000-0000000000aa','inventado',
+            'S','https://z.com','tok');
+  PERFORM wh.confere('provedor fora do catálogo é recusado', false, 'aceitou');
+EXCEPTION WHEN no_data_found THEN
+  PERFORM wh.confere('provedor fora do catálogo é recusado', true);
+WHEN others THEN
+  PERFORM wh.confere('provedor fora do catálogo é recusado', false, SQLSTATE || ': ' || SQLERRM);
+END;
+$$;
+
+-- Sem token, um servidor já existente não perde o que tem: o campo volta vazio
+-- na tela porque segredo não é legível, e reenviar vazio não pode apagar a
+-- credencial de um servidor que está funcionando.
+UPDATE provider_servers SET admin_secret_id = '00000000-0000-0000-0000-000000000099'
+ WHERE id = 'ee000000-0000-0000-0000-0000000000d1';
+
+DO $$
+BEGIN
+  PERFORM set_config('request.jwt.claims','{"sub":"11111111-aaaa-0000-0000-00000000000a"}', true);
+  PERFORM salvar_servidor_provedor('00000000-0000-0000-0000-0000000000aa','uazapi',
+            'UAZAPI Afinix','https://novo.uazapi.com', NULL);
+END;
+$$;
+
+SELECT wh.confere('editar sem reenviar token preserva o segredo',
+  (SELECT admin_secret_id = '00000000-0000-0000-0000-000000000099'
+      AND base_url = 'https://novo.uazapi.com'
+     FROM provider_servers WHERE id = 'ee000000-0000-0000-0000-0000000000d1'));
+
+SELECT wh.confere('editar não duplica servidor',
+  (SELECT count(*) = 1 FROM provider_servers
+    WHERE tenant_id = '00000000-0000-0000-0000-0000000000aa' AND nome = 'UAZAPI Afinix'));
+
+-- Credencial de remetente: o catálogo decide o que é campo do provedor.
+DO $$
+BEGIN
+  PERFORM set_config('request.jwt.claims','{"sub":"11111111-aaaa-0000-0000-00000000000a"}', true);
+  PERFORM salvar_credencial_remetente('ee000000-0000-0000-0000-000000000001',
+    '{"token":"t","inventado":"x"}'::jsonb);
+  PERFORM wh.confere('campo que não existe no provedor é recusado', false, 'aceitou');
+EXCEPTION WHEN invalid_parameter_value THEN
+  PERFORM wh.confere('campo que não existe no provedor é recusado', true);
+WHEN others THEN
+  PERFORM wh.confere('campo que não existe no provedor é recusado', false, SQLSTATE || ': ' || SQLERRM);
+END;
+$$;
+
+DO $$
+BEGIN
+  PERFORM set_config('request.jwt.claims','{"sub":"33333333-aaaa-0000-0000-00000000000a"}', true);
+  PERFORM salvar_credencial_remetente('ee000000-0000-0000-0000-000000000001', '{"token":"t"}'::jsonb);
+  PERFORM wh.confere('operador não troca credencial de remetente', false, 'trocou');
+EXCEPTION WHEN insufficient_privilege THEN
+  PERFORM wh.confere('operador não troca credencial de remetente', true);
+WHEN others THEN
+  PERFORM wh.confere('operador não troca credencial de remetente', false, SQLSTATE || ': ' || SQLERRM);
+END;
+$$;
+
+SELECT set_config('request.jwt.claims','', true);
+
+SELECT wh.confere('as duas funções de configuração são API de usuário logado',
+  (SELECT count(*) = 2 FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+    WHERE n.nspname = 'public'
+      AND p.proname IN ('salvar_servidor_provedor','salvar_credencial_remetente')
+      AND has_function_privilege('authenticated', p.oid, 'EXECUTE')));
+
+SELECT wh.confere('e continuam fechadas para anônimo',
+  NOT EXISTS (
+    SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+     WHERE n.nspname = 'public'
+       AND p.proname IN ('salvar_servidor_provedor','salvar_credencial_remetente')
+       AND has_function_privilege('anon', p.oid, 'EXECUTE')));
+
 \echo ''
 \echo '============= WEBHOOK POR CHIP ============='
 SELECT CASE WHEN ok THEN 'PASS' ELSE 'FALHA' END AS status, nome,
