@@ -303,16 +303,26 @@ primeiro toque, resposta sem citação, enrollment encerrado com motivo `respost
 ## Configurar provedor
 
 Tudo se configura pelo painel do produto — **nada depende de abrir o dashboard do Supabase**.
-`salvar_servidor_provedor` e `salvar_credencial_remetente` mandam o segredo para o Vault a partir
-da tela.
+`salvar_servidor_provedor`, `salvar_credencial_remetente` e `salvar_credencial_ia` mandam o segredo
+para o Vault a partir da tela.
 
-As duas são a exceção à regra do D19 (nada com `SECURITY DEFINER` exposto ao usuário logado), porque
+As três são a exceção à regra do D19 (nada com `SECURITY DEFINER` exposto ao usuário logado), porque
 escrever no Vault exige isso. Como `SECURITY DEFINER` passa por cima da RLS, a pergunta que a
 política faria — `pode_administrar` — é feita **dentro da função**, com teste para operador barrado
 e para administrador passando.
 
 Token em branco na edição não apaga o que está guardado: o campo volta vazio porque segredo não é
 legível, e tratar vazio como "apagar" derrubaria um servidor que está funcionando.
+
+**A separação entre segredo e `config` é do catálogo, não da tela** (D28). A tela manda tudo o que
+foi preenchido num objeto só; a função lê `ai_provider_catalog` / `channel_provider_catalog` e
+decide o que vai para o Vault. Pedir à UI que mandasse os dois separados obrigaria ela a saber que
+`api_key` é segredo e `base_url` não — e é por não conhecer provedor nenhum que ela sobrevive a um
+provedor novo entrar no catálogo.
+
+`segredo_da_credencial_ia`, `segredo_do_remetente` e `segredo_do_servidor` são o caminho de volta, e
+não são API: devolvem a chave em texto claro e só o `service_role` chama. O suite confere que
+`authenticated` alcança as de escrita e **não** alcança essas.
 
 ## Navegação do console
 

@@ -86,6 +86,17 @@ export interface Agente {
   tenant_id: string | null;
 }
 
+export interface CredencialIA {
+  id: string;
+  nome: string;
+  provedor: string;
+  modelo: string;
+  /** Só o ponteiro para o Vault. A chave não volta — nem para a tela. */
+  chave_secret_id: string | null;
+  config: Record<string, string>;
+  ativo: boolean;
+}
+
 export interface ProvedorIA {
   slug: string;
   nome: string;
@@ -111,6 +122,9 @@ export const lerProvedoresCanal = () =>
 export const lerProvedoresIA = () =>
   tabela<ProvedorIA>('ai_provider_catalog',
     'slug, nome, descricao, campos, modelos_sugeridos, docs_url, ordem', 'ordem');
+
+export const lerCredenciaisIA = () =>
+  tabela<CredencialIA>('ai_credentials', 'id, nome, provedor, modelo, chave_secret_id, config, ativo', 'nome');
 
 export const lerRemetentes = () =>
   tabela<Remetente>('sender_accounts',
@@ -213,6 +227,34 @@ export async function provisionarInstancia(dados: {
     return { ok: false, erro: corpo?.erro ?? error.message };
   }
   return data as InstanciaCriada;
+}
+
+/** Credencial de IA, com o catálogo separando segredo de config (D26).
+ *
+ * A tela manda tudo o que foi preenchido, num objeto só. Quem decide o que é
+ * segredo é a função, lendo o catálogo — se a decisão morasse aqui, a UI
+ * precisaria conhecer provedor, e é por não conhecer nenhum que ela não quebra
+ * quando um provedor novo entra.
+ */
+export async function salvarCredencialIA(dados: {
+  tenant: string; nome: string; provedor: string; modelo: string;
+  campos: Record<string, string>;
+}): Promise<string> {
+  const { data, error } = await sb.rpc('salvar_credencial_ia', {
+    p_tenant: dados.tenant,
+    p_nome: dados.nome,
+    p_provedor: dados.provedor,
+    p_modelo: dados.modelo,
+    p_campos: dados.campos,
+  });
+  if (error) throw error;
+  return data as string;
+}
+
+/** Desligar não apaga: a credencial some do pool e o histórico continua. */
+export async function alternarCredencialIA(id: string, ativo: boolean) {
+  const { error } = await sb.from('ai_credentials').update({ ativo }).eq('id', id);
+  if (error) throw error;
 }
 
 export async function criarCampanhaDeModelo(dados: {

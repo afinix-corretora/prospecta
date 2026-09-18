@@ -218,6 +218,170 @@ SELECT ag.confere('nenhuma tabela do motor referencia agente',
      WHERE table_name IN ('enrollments','messages','flow_steps','flow_versions')
        AND column_name LIKE '%agent%'));
 
+-- ---------------------------------------------------------------------------
+-- Credencial de IA pelo painel do produto (D26)
+-- ---------------------------------------------------------------------------
+--
+-- A tela de Provedores de IA desenhava os campos e não tinha para onde
+-- mandá-los: ligar um agente exigia o painel do Supabase. O que estes testes
+-- verificam não é só que a função grava — é que ela decide a separação entre
+-- segredo e config pelo catálogo, e não confia na tela para isso.
+
+INSERT INTO tenant_users (tenant_id, user_id, papel) VALUES
+  ('00000000-0000-0000-0000-0000000000aa','11111111-bbbb-0000-0000-00000000000a','dono'),
+  ('00000000-0000-0000-0000-0000000000aa','33333333-bbbb-0000-0000-00000000000a','operador');
+
+DO $$
+BEGIN
+  PERFORM set_config('request.jwt.claims','{"sub":"33333333-bbbb-0000-0000-00000000000a"}', true);
+  PERFORM salvar_credencial_ia('00000000-0000-0000-0000-0000000000aa','Do operador',
+            'anthropic','claude-opus-5','{"api_key":"sk-ant-x"}'::jsonb);
+  PERFORM ag.confere('operador não configura provedor de IA', false, 'configurou');
+EXCEPTION WHEN insufficient_privilege THEN
+  PERFORM ag.confere('operador não configura provedor de IA (42501)', true);
+WHEN others THEN
+  PERFORM ag.confere('operador não configura provedor de IA', false, SQLSTATE || ': ' || SQLERRM);
+END;
+$$;
+
+DO $$
+BEGIN
+  PERFORM set_config('request.jwt.claims','{"sub":"11111111-bbbb-0000-0000-00000000000a"}', true);
+  PERFORM salvar_credencial_ia('00000000-0000-0000-0000-0000000000aa','X',
+            'inventado','m','{}'::jsonb);
+  PERFORM ag.confere('provedor de IA fora do catálogo é recusado', false, 'aceitou');
+EXCEPTION WHEN no_data_found THEN
+  PERFORM ag.confere('provedor de IA fora do catálogo é recusado', true);
+WHEN others THEN
+  PERFORM ag.confere('provedor de IA fora do catálogo é recusado', false, SQLSTATE || ': ' || SQLERRM);
+END;
+$$;
+
+DO $$
+BEGIN
+  PERFORM set_config('request.jwt.claims','{"sub":"11111111-bbbb-0000-0000-00000000000a"}', true);
+  PERFORM salvar_credencial_ia('00000000-0000-0000-0000-0000000000aa','X',
+            'anthropic','claude-opus-5','{"api_key":"sk-ant-x","inventado":"y"}'::jsonb);
+  PERFORM ag.confere('campo que não existe no provedor de IA é recusado', false, 'aceitou');
+EXCEPTION WHEN invalid_parameter_value THEN
+  PERFORM ag.confere('campo que não existe no provedor de IA é recusado', true);
+WHEN others THEN
+  PERFORM ag.confere('campo que não existe no provedor de IA é recusado', false, SQLSTATE || ': ' || SQLERRM);
+END;
+$$;
+
+-- Credencial sem modelo não serve para chamar nada: o erro vale mais agora que
+-- no meio de uma conversa com o contato esperando resposta.
+DO $$
+BEGIN
+  PERFORM set_config('request.jwt.claims','{"sub":"11111111-bbbb-0000-0000-00000000000a"}', true);
+  PERFORM salvar_credencial_ia('00000000-0000-0000-0000-0000000000aa','X',
+            'anthropic','   ','{"api_key":"sk-ant-x"}'::jsonb);
+  PERFORM ag.confere('credencial de IA sem modelo é recusada', false, 'aceitou');
+EXCEPTION WHEN invalid_parameter_value THEN
+  PERFORM ag.confere('credencial de IA sem modelo é recusada', true);
+WHEN others THEN
+  PERFORM ag.confere('credencial de IA sem modelo é recusada', false, SQLSTATE || ': ' || SQLERRM);
+END;
+$$;
+
+-- `compativel` é o único provedor com campo obrigatório que não é segredo.
+DO $$
+BEGIN
+  PERFORM set_config('request.jwt.claims','{"sub":"11111111-bbbb-0000-0000-00000000000a"}', true);
+  PERFORM salvar_credencial_ia('00000000-0000-0000-0000-0000000000aa','Local',
+            'compativel','llama','{"api_key":"sk-x"}'::jsonb);
+  PERFORM ag.confere('campo obrigatório em branco é recusado na criação', false, 'aceitou');
+EXCEPTION WHEN invalid_parameter_value THEN
+  PERFORM ag.confere('campo obrigatório em branco é recusado na criação', true);
+WHEN others THEN
+  PERFORM ag.confere('campo obrigatório em branco é recusado na criação', false, SQLSTATE || ': ' || SQLERRM);
+END;
+$$;
+
+DO $$
+BEGIN
+  PERFORM set_config('request.jwt.claims','{"sub":"11111111-bbbb-0000-0000-00000000000a"}', true);
+  -- Sem Vault local, quem administra chega até a escrita do segredo e para lá
+  -- — um passo depois da checagem de permissão, que é o que interessa aqui.
+  PERFORM salvar_credencial_ia('00000000-0000-0000-0000-0000000000aa','Claude',
+            'anthropic','claude-opus-5','{"api_key":"sk-ant-x"}'::jsonb);
+  PERFORM ag.confere('quem administra passa da checagem de permissão (IA)', false,
+    'sem Vault deveria parar');
+EXCEPTION WHEN feature_not_supported THEN
+  PERFORM ag.confere('quem administra passa da checagem de permissão (IA)', true);
+WHEN insufficient_privilege THEN
+  PERFORM ag.confere('quem administra passa da checagem de permissão (IA)', false, 'barrou quem pode');
+END;
+$$;
+
+-- Credencial que já tem chave guardada: editar só o que não é segredo não
+-- chama o Vault, e é por isso que este caminho roda inteiro sem ele.
+INSERT INTO ai_credentials (id, nome, provedor, modelo, chave_secret_id, config)
+VALUES ('aa000000-0000-0000-0000-0000000000c1','Claude de produção','anthropic',
+        'claude-sonnet-5','00000000-0000-0000-0000-000000000077','{}'::jsonb);
+
+DO $$
+BEGIN
+  PERFORM set_config('request.jwt.claims','{"sub":"11111111-bbbb-0000-0000-00000000000a"}', true);
+  PERFORM salvar_credencial_ia('00000000-0000-0000-0000-0000000000aa','Claude de produção',
+            'anthropic','claude-opus-5','{"base_url":"https://gw.interno"}'::jsonb);
+END;
+$$;
+
+SELECT ag.confere('editar sem reenviar a chave preserva o segredo',
+  (SELECT chave_secret_id = '00000000-0000-0000-0000-000000000077' AND modelo = 'claude-opus-5'
+     FROM ai_credentials WHERE id = 'aa000000-0000-0000-0000-0000000000c1'));
+
+SELECT ag.confere('campo não-secreto vai para config',
+  (SELECT config = '{"base_url":"https://gw.interno"}'::jsonb
+     FROM ai_credentials WHERE id = 'aa000000-0000-0000-0000-0000000000c1'));
+
+SELECT ag.confere('editar não duplica a credencial',
+  (SELECT count(*) = 1 FROM ai_credentials
+    WHERE tenant_id = '00000000-0000-0000-0000-0000000000aa' AND nome = 'Claude de produção'));
+
+-- A separação é do catálogo, não da tela: se a função copiasse o objeto inteiro
+-- para config, quem barraria seria o gatilho — com erro de banco na cara do
+-- usuário e a chave já tendo passado por onde não devia.
+SELECT ag.confere('nenhuma credencial guarda campo de segredo em config',
+  NOT EXISTS (SELECT 1 FROM ai_credentials cr
+    JOIN ai_provider_catalog p ON p.slug = cr.provedor,
+    LATERAL jsonb_array_elements(p.campos) c
+   WHERE (c ->> 'segredo')::boolean AND cr.config ? (c ->> 'chave')));
+
+DO $$
+BEGIN
+  PERFORM segredo_da_credencial_ia('aa000000-0000-0000-0000-0000000000ff');
+  PERFORM ag.confere('segredo de credencial inexistente é erro, não NULL', false, 'devolveu');
+EXCEPTION WHEN no_data_found THEN
+  PERFORM ag.confere('segredo de credencial inexistente é erro, não NULL', true);
+WHEN others THEN
+  PERFORM ag.confere('segredo de credencial inexistente é erro, não NULL', false,
+    SQLSTATE || ': ' || SQLERRM);
+END;
+$$;
+
+SELECT set_config('request.jwt.claims','', true);
+
+SELECT ag.confere('salvar_credencial_ia é API de usuário logado',
+  (SELECT has_function_privilege('authenticated', p.oid, 'EXECUTE')
+     FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+    WHERE n.nspname = 'public' AND p.proname = 'salvar_credencial_ia'));
+
+-- Esta devolve a chave em texto claro. Usuário logado não chama.
+SELECT ag.confere('segredo_da_credencial_ia não é API de usuário logado',
+  (SELECT NOT has_function_privilege('authenticated', p.oid, 'EXECUTE')
+     FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+    WHERE n.nspname = 'public' AND p.proname = 'segredo_da_credencial_ia'));
+
+SELECT ag.confere('e nenhuma das duas para anônimo',
+  NOT EXISTS (
+    SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+     WHERE n.nspname = 'public'
+       AND p.proname IN ('salvar_credencial_ia','segredo_da_credencial_ia')
+       AND has_function_privilege('anon', p.oid, 'EXECUTE')));
+
 \echo ''
 \echo '============= AGENTES E IA ============='
 SELECT CASE WHEN ok THEN 'PASS' ELSE 'FALHA' END AS status, nome,

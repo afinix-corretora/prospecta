@@ -97,6 +97,8 @@ e elas têm teste automatizado obrigatório.**
   `salvar_servidor_provedor` / `salvar_credencial_remetente` (D26).
 - **Nunca** misturar provedor oficial e não oficial na mesma tela. Mudam base contratual, risco de
   banimento e pool permitido — misturar é como campanha institucional acaba num chip frio (D27).
+- **Nunca** deixar a tela decidir o que é segredo. Quem separa Vault de `config` é o catálogo,
+  dentro da função — a UI manda o que foi preenchido e não conhece provedor nenhum (D28).
 
 ---
 
@@ -137,7 +139,7 @@ e elas têm teste automatizado obrigatório.**
 > domínio, chaves estrangeiras compostas `(tenant_id, id)` e RLS por papel. `tests/tenants.sql`
 > entra na pele de dois clientes diferentes e confere o SQLSTATE de cada recusa.
 >
-> O schema está **aplicado no projeto `hucuwjvihqgftdjpnych`** (12 migrations), conferido por
+> O schema está **aplicado no projeto `hucuwjvihqgftdjpnych`** (17 migrations), conferido por
 > digest estrutural contra o banco de teste — colunas, constraints, índices, políticas, corpos de
 > função e a grade de privilégios batem byte a byte.
 >

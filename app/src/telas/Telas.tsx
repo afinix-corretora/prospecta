@@ -3,10 +3,10 @@ import { useNavigate } from 'react-router-dom';
 import { useSessao } from '../sessao';
 import { mensagemDeErro } from '../supabase';
 import {
-  criarCampanhaDeModelo, lerAgentes, lerCampanhas, lerModelos,
-  lerProvedoresCanal, lerProvedoresIA, lerRemetentes,
+  criarCampanhaDeModelo, lerAgentes, lerCampanhas, lerCredenciaisIA, lerModelos,
+  lerProvedoresCanal, lerProvedoresIA, lerRemetentes, salvarCredencialIA,
 } from '../dados';
-import type { Agente, Campanha, Modelo, ProvedorCanal, ProvedorIA } from '../dados';
+import type { Agente, Campanha, CredencialIA, Modelo, ProvedorCanal, ProvedorIA } from '../dados';
 import {
   Aviso, Campo, Kpi, LinhaIndice, NOME_CANAL, Secao, corCanal,
 } from '../componentes/base';
@@ -260,49 +260,152 @@ export function Config() {
 
 export function ConfigIA() {
   const nav = useNavigate();
-  const { dados, erro, carregando } = useDados(lerProvedoresIA);
-  const [slug, setSlug] = useState('');
+  const { tenant, administra } = useSessao();
+  const { dados, erro, carregando, recarregar } = useDados(
+    async () => ({
+      provedores: await lerProvedoresIA(),
+      credenciais: await lerCredenciaisIA(),
+    }), [tenant?.tenant_id],
+  );
 
   if (carregando) return <div className="wrap"><p className="vazio">Carregando…</p></div>;
-  const provs: ProvedorIA[] = dados ?? [];
-  const p = provs.find((x) => x.slug === slug) ?? provs[0];
+
+  const provs: ProvedorIA[] = dados?.provedores ?? [];
+  const creds: CredencialIA[] = dados?.credenciais ?? [];
 
   return (
     <Moldura titulo="Provedores de IA" voltar={() => nav('/config')}
              sub="Escolha o provedor e os campos certos aparecem. A chave vai para o Vault — o banco recusa gravá-la em qualquer outro lugar.">
       {erro && <Aviso tipo="erro">{erro}</Aviso>}
-      <div className="painel">
-        <div className="opts" style={{ marginBottom: 16 }}>
-          {provs.map((x) => (
-            <button key={x.slug} className="opt" aria-pressed={x.slug === p?.slug} onClick={() => setSlug(x.slug)}>
-              <b>{x.nome}</b><p>{x.descricao}</p>
-            </button>
-          ))}
-        </div>
-        {p && <FormularioIA provedor={p} />}
-      </div>
+
+      <Secao titulo="Credenciais" nota="é o que os agentes usam para responder" />
+      <section className="indice" style={{ marginBottom: 14 }}>
+        {creds.length ? creds.map((c) => (
+          <div key={c.id} className="item" style={{ cursor: 'default' }}>
+            <span className="txt">
+              <b>{c.nome}</b>
+              <p>
+                {provs.find((x) => x.slug === c.provedor)?.nome ?? c.provedor}
+                {' · '}<span className="mono">{c.modelo}</span>
+              </p>
+              <span className="chips" style={{ marginTop: 6 }}>
+                <span className="chip">{c.chave_secret_id ? 'chave no Vault' : 'sem chave'}</span>
+                {Object.keys(c.config).map((k) => <span key={k} className="chip">{k}</span>)}
+              </span>
+            </span>
+            <span className={`delta ${c.ativo && c.chave_secret_id ? '' : 'neutra'}`}>
+              {c.ativo ? (c.chave_secret_id ? 'pronta' : 'falta chave') : 'desligada'}
+            </span>
+          </div>
+        )) : (
+          <div className="item" style={{ cursor: 'default' }}><span className="txt">
+            <b>Nenhuma credencial cadastrada</b>
+            <p>Sem credencial, agente nenhum responde. O motor segue tocando a cadência — só não conversa.</p>
+          </span></div>
+        )}
+      </section>
+
+      {administra && tenant
+        ? <FormularioIA provedores={provs} credenciais={creds} tenant={tenant.tenant_id} aoSalvar={recarregar} />
+        : <Aviso tipo="neutro">Só quem administra o cliente configura provedor de IA.</Aviso>}
     </Moldura>
   );
 }
 
-function FormularioIA({ provedor }: { provedor: ProvedorIA }) {
+/** O formulário não conhece provedor nenhum: desenha o que o catálogo declara.
+ *
+ * Também não decide o que é segredo. Manda tudo o que foi preenchido para
+ * `salvar_credencial_ia` e é o banco, lendo o catálogo, que separa Vault de
+ * config — a mesma razão por que a tela sobrevive a um provedor novo.
+ */
+function FormularioIA(props: {
+  provedores: ProvedorIA[]; credenciais: CredencialIA[]; tenant: string;
+  aoSalvar(): Promise<void>;
+}) {
+  const [slug, setSlug] = useState('');
+  const [nome, setNome] = useState('');
+  const [modelo, setModelo] = useState('');
   const [valores, setValores] = useState<Record<string, string>>({});
+  const [estado, setEstado] = useState<'parado' | 'salvando'>('parado');
+  const [msg, setMsg] = useState<{ tipo: 'erro' | 'ok'; texto: string } | null>(null);
+
+  const escolhido = props.provedores.find((x) => x.slug === slug) ?? props.provedores[0];
+  if (!escolhido) return null;
+  // A anotação não é decorativa: sem ela o narrowing do guard acima não chega
+  // dentro de `salvar`, que é uma closure.
+  const provedor: ProvedorIA = escolhido;
+
+  // Reenviar o mesmo nome edita, como em `salvar_servidor_provedor`. Dizer isso
+  // antes de salvar evita a descoberta pelo caminho ruim: duas credenciais
+  // quase iguais e nenhuma pista de qual o agente está usando.
+  const existente = props.credenciais.find((c) => c.nome === nome.trim());
+
+  function trocarProvedor(novo: string) {
+    setSlug(novo);
+    // Campo de provedor anterior não sobrevive à troca: o banco recusaria a
+    // chave que o provedor novo não declara, e o erro sairia sem explicação.
+    setValores({});
+    setMsg(null);
+  }
+
+  async function salvar(e: React.FormEvent) {
+    e.preventDefault();
+    setMsg(null); setEstado('salvando');
+    try {
+      await salvarCredencialIA({
+        tenant: props.tenant, nome: nome.trim(), provedor: provedor.slug,
+        modelo, campos: valores,
+      });
+      setMsg({
+        tipo: 'ok',
+        texto: existente ? 'Credencial atualizada.' : 'Credencial salva. A chave foi para o Vault.',
+      });
+      // Só o segredo é limpo: o resto continua à vista para uma segunda edição.
+      setValores(Object.fromEntries(
+        Object.entries(valores).filter(([k]) => !provedor.campos.find((c) => c.chave === k)?.segredo),
+      ));
+      await props.aoSalvar();
+    } catch (e2) { setMsg({ tipo: 'erro', texto: mensagemDeErro(e2) }); }
+    finally { setEstado('parado'); }
+  }
+
   return (
-    <>
+    <form className="painel" onSubmit={salvar}>
+      <div className="opts" style={{ marginBottom: 16 }}>
+        {props.provedores.map((x) => (
+          <button key={x.slug} type="button" className="opt" aria-pressed={x.slug === provedor.slug}
+                  onClick={() => trocarProvedor(x.slug)}>
+            <b>{x.nome}</b><p>{x.descricao}</p>
+          </button>
+        ))}
+      </div>
+
       {provedor.docs_url && (
         <p style={{ marginTop: 0 }}>
           <a href={provedor.docs_url} target="_blank" rel="noopener">documentação do {provedor.nome}</a>
         </p>
       )}
+
+      <Campo id="ia-nome" rotulo="Nome da credencial" valor={nome} aoMudar={setNome}
+             placeholder="Claude de produção"
+             ajuda={existente
+               ? `Já existe: salvar edita a credencial ${existente.provedor} em vez de criar outra.`
+               : 'É por ele que o agente escolhe. Reenviar o mesmo nome edita em vez de duplicar.'} />
+
       {provedor.campos.map((c) => (
         <Campo key={c.chave} id={`ia-${c.chave}`} rotulo={c.rotulo} tipo={c.tipo}
                valor={valores[c.chave] ?? ''} obrigatorio={c.obrigatorio}
                aoMudar={(v) => setValores({ ...valores, [c.chave]: v })} ajuda={c.ajuda}
-               vault={c.segredo ? 'Vai para o Vault — o banco recusa gravar este campo em config.' : undefined} />
+               vault={c.segredo
+                 ? 'Vai para o Vault. Em branco na edição, a chave guardada fica como está.'
+                 : undefined} />
       ))}
+
       <div className="campo">
         <label htmlFor="ia-modelo">Modelo</label>
-        <input id="ia-modelo" list="modelos-ia" placeholder={provedor.modelos_sugeridos[0] ?? 'nome do modelo'} />
+        <input id="ia-modelo" list="modelos-ia" value={modelo}
+               onChange={(e) => setModelo(e.target.value)}
+               placeholder={provedor.modelos_sugeridos[0] ?? 'nome do modelo'} />
         <datalist id="modelos-ia">
           {provedor.modelos_sugeridos.map((m) => <option key={m} value={m} />)}
         </datalist>
@@ -312,11 +415,12 @@ function FormularioIA({ provedor }: { provedor: ProvedorIA }) {
             : 'Catálogo de modelo muda toda semana — o campo é livre de propósito.'}
         </span>
       </div>
-      <Aviso tipo="neutro">
-        A credencial de IA ainda não tem função de escrita própria, como
-        <span className="mono"> salvar_servidor_provedor</span> tem. É o próximo passo.
-      </Aviso>
-    </>
+
+      {msg && <Aviso tipo={msg.tipo}>{msg.texto}</Aviso>}
+      <button className="btn prim" disabled={estado === 'salvando' || !nome.trim() || !modelo.trim()}>
+        {estado === 'salvando' ? 'Salvando…' : existente ? 'Atualizar credencial' : 'Salvar credencial'}
+      </button>
+    </form>
   );
 }
 

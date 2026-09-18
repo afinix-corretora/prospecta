@@ -322,6 +322,23 @@ mesma lista é o que faz alguém apontar uma campanha institucional para um chip
 **A divisão é derivada, não fixa:** sai de `channel_provider_catalog.oficial`. Canal que só tem um
 dos dois — SMS, e-mail, Instagram hoje — continua com uma tela só, sem submenu vazio.
 
+### D28 — Quem separa segredo de config é o catálogo, não a tela
+`salvar_credencial_ia` recebe todos os campos preenchidos num objeto só e decide, lendo
+`ai_provider_catalog`, o que vai para o Vault e o que vai para `config`.
+*Justificativa:* a tela de Provedores de IA era o buraco que o D26 deixou — desenhava os campos que
+o catálogo declara e não tinha para onde mandá-los. Ligar um agente exigia o painel do Supabase,
+exatamente o que o D26 proíbe.
+**A alternativa era a UI mandar dois objetos, `segredos` e `config`.** Foi recusada: obriga a tela a
+saber que `api_key` é segredo e `base_url` não, e é justamente por não conhecer provedor nenhum que
+ela não quebra quando um provedor novo entra no catálogo. Pior que quebrar: a UI errando a separação
+grava chave em `config`, e quem recusa é o gatilho `ai_credentials_sem_segredo` — erro de banco na
+cara do usuário, com a chave já tendo passado por onde não devia.
+**Chave em branco na edição preserva a guardada,** pela mesma razão do D26: segredo não é legível,
+então o campo sempre volta vazio.
+**`segredo_da_credencial_ia` não é API.** Devolve a chave em texto claro; só o `service_role` chama.
+Nasce sem EXECUTE para ninguém, como manda o D19 — conceder é decisão. Há teste conferindo que
+`authenticated` *não* alcança essa, e alcança a de escrita.
+
 ---
 
 ## Decisões adiadas (não decidir agora)
