@@ -81,6 +81,26 @@ e elas têm teste automatizado obrigatório.**
   `contact_identity`.
 - **Nunca** deixar campanha fria usar remetente ou domínio da operação institucional.
 - **Nunca** encerrar enrollment por clique em link. Clique é engajamento, não resposta.
+- **Nunca** criar tabela de domínio sem `tenant_id`, nem chave estrangeira entre tabelas de domínio
+  que não seja composta `(tenant_id, id)`. RLS não alcança o worker, que roda com service key.
+- **Nunca** deixar tenant implícito em assinatura de função. É como bug entre clientes acontece.
+- **Nunca** criar função em `public` que não seja API de verdade. `public` é publicado pelo PostgREST;
+  RLS, gatilhos e motor moram em `privado`. Função nova não nasce com EXECUTE — conceder é decisão.
+- **Nunca** adicionar `privado` aos *Exposed schemas* do projeto. É o que separa motor de endpoint.
+- **Nunca** cadastrar remetente com provedor fora de `channel_provider_catalog`, nem gravar em
+  `sender_accounts.config` um campo que o catálogo marca como segredo. Segredo vai para o Vault.
+- **Nunca** deixar uma tela de Configurações ou Canais expandida por padrão. Grupo abre índice,
+  não conteúdo (D21).
+- **Nunca** receber webhook num endpoint que não identifique o chip. Sem chip não há tenant, e sem
+  tenant casar resposta pelo número encerra a cadência do cliente errado (D24).
+- **Nunca** exigir o painel do Supabase para configurar o produto. Segredo entra pela tela, por
+  `salvar_servidor_provedor` / `salvar_credencial_remetente` (D26).
+- **Nunca** misturar provedor oficial e não oficial na mesma tela. Mudam base contratual, risco de
+  banimento e pool permitido — misturar é como campanha institucional acaba num chip frio (D27).
+- **Nunca** deixar a tela decidir o que é segredo. Quem separa Vault de `config` é o catálogo,
+  dentro da função — a UI manda o que foi preenchido e não conhece provedor nenhum (D28).
+- **Nunca** escrever segredo no comando de um job do `pg_cron`. `cron.job` é tabela comum: vai para
+  backup, réplica e `pg_dump`. A chave fica no Vault e é lida na batida (D29).
 
 ---
 
@@ -99,15 +119,51 @@ e elas têm teste automatizado obrigatório.**
 
 ## Fase atual
 
-> **Fase 0 — inventário (read-only).**
-> Mapear toda edge function, tabela, cron e dependência externa dos projetos existentes
-> (`sdr-resgate-evolution`, `nina-sdr-evolution`, `AqueceJá`, `ProfitCare`), classificando cada item
-> em **migra / adapta / descarta**. Identificar integrações duplicadas — especialmente WhatsApp,
-> que provavelmente existe em mais de um lugar.
+> **Fase 2 — schema central.**
+> O schema das 12 tabelas existe em `supabase/migrations/`, com as quatro invariantes garantidas
+> por constraint e trigger, não por convenção. O agendador e o roteador existem
+> (`processar_vencidos`), decidem e reivindicam sem enviar — o que torna a Fase 3 possível sem
+> nenhum adapter. O mapa de status do backfill está fechado em `backfill/mapa_status.sql`.
 >
-> **Não alterar código nesta fase.**
+> A Fase 1 tem cinco adapters em `adapters/` (Gupshup, Meta Cloud, UAZAPI, Evolution, Comtele) com a superfície de
+> despacho em SQL (`reivindicar_pendentes`, `registrar_resultado_envio`,
+> `registrar_evento_provedor`). E-mail e Instagram ainda não têm adapter, e o registro declara isso.
+> Cada chip tem a sua URL de webhook (D24), e a UAZAPI cria instância pela própria plataforma (D25).
+>
+> O worker existe (`supabase/functions/motor-worker`), roda em `simulado` por padrão, e com ele a
+> **Fase 3 está completa de ponta a ponta**: agendador, roteador, adapters e despacho rodam sem
+> enviar nada.
+>
+> Falta da Fase 2: o backfill em si, que depende de acesso aos dados do projeto legado
+> `gtivnngoeccqbvfjiyne` — e com ele a comparação contra o Disparador.
+>
+> O schema é **multi-tenant desde a primeira migration** (D18): `tenant_id` em toda tabela de
+> domínio, chaves estrangeiras compostas `(tenant_id, id)` e RLS por papel. `tests/tenants.sql`
+> entra na pele de dois clientes diferentes e confere o SQLSTATE de cada recusa.
+>
+> O schema está **aplicado no projeto `hucuwjvihqgftdjpnych`** (18 migrations), conferido por
+> digest estrutural contra o banco de teste — colunas, constraints, índices, políticas, corpos de
+> função e a grade de privilégios batem byte a byte.
+>
+> Toda mudança de schema roda `tests/run.sh` antes do commit. Teste vermelho é bloqueio, não aviso.
+> Toda mudança aplicada no projeto roda `get_advisors` depois: o suite não enxerga o que só existe
+> no Supabase (default privileges, superfície do PostgREST) — foi assim que D19 apareceu.
+> O produto roda em `app/` (React + Vite, deploy na Vercel); `ui/console.html` é o protótipo onde
+> o design foi decidido e vai morrer quando o app cobrir tudo.
+> `demo/gerar.sh` roda o motor num cenário completo, injeta o resultado em `ui/console.html` por
+> `demo/injetar.py` e o console mostra — foi assim que D15 apareceu, um erro que teste unitário
+> nenhum pegava. O dado do console **não** se cola à mão: colar à mão foi como as constantes de
+> canal sumiram do arquivo sem ninguém notar.
 
-Fases seguintes em `DECISOES.md`.
+**Fase 0 concluída** — inventário em `INVENTARIO-FASE-0.md`: 83 edge functions e 52 tabelas
+classificadas em migra/adapta/descarta. Leitura obrigatória antes de propor qualquer migração de
+código antigo; várias suposições do `DECISOES.md` foram corrigidas lá (em especial: UAZAPI não
+existia na base, e o WhatsApp não-oficial que rodava era Evolution API). **D22 revisou isso:** o
+compromisso com UAZAPI existe fora do código, então UAZAPI é o não-oficial de agora e Evolution
+continua no catálogo por causa dos chips do legado.
+
+A Fase 1 (`ChannelAdapter`) vem depois do schema — ver D12 em `DECISOES.md`.
+Demais fases em `DECISOES.md`.
 
 ---
 
@@ -120,4 +176,5 @@ Fases seguintes em `DECISOES.md`.
 | **Sender account** | Remetente físico: inbox, chip, número oficial. Tem quota e health score. |
 | **Tipo de campanha** | Morna (base própria, opt-in) ou fria. Define base legal, canais e pool permitidos. |
 | **Resgate** | Reativação de oportunidade antiga da base própria. |
-| **Supressão** | Lista global e imutável de quem não pode receber nada. Acima de qualquer regra. |
+| **Supressão** | Lista imutável, **por tenant**, de quem não pode receber nada. Acima de qualquer regra do cliente — e o opt-out dado a um cliente não é fato de outro. |
+| **Tenant** | Cliente do produto. Dono dos seus contatos, campanhas, remetentes e agentes. Papéis: dono, admin, operador, leitor. |
