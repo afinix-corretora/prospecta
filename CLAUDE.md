@@ -144,6 +144,8 @@ e elas têm teste automatizado obrigatório.**
 > Toda mudança de schema roda `tests/run.sh` antes do commit. Teste vermelho é bloqueio, não aviso.
 > Toda mudança aplicada no projeto roda `get_advisors` depois: o suite não enxerga o que só existe
 > no Supabase (default privileges, superfície do PostgREST) — foi assim que D19 apareceu.
+> O produto roda em `app/` (React + Vite, deploy na Vercel); `ui/console.html` é o protótipo onde
+> o design foi decidido e vai morrer quando o app cobrir tudo.
 > `demo/gerar.sh` roda o motor num cenário completo, injeta o resultado em `ui/console.html` por
 > `demo/injetar.py` e o console mostra — foi assim que D15 apareceu, um erro que teste unitário
 > nenhum pegava. O dado do console **não** se cola à mão: colar à mão foi como as constantes de

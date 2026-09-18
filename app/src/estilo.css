@@ -1,0 +1,257 @@
+/* Tokens e componentes base.
+ *
+ * Vêm do protótipo em ui/console.html, que foi onde o design da referência foi
+ * decidido e conferido nos dois temas. Copiar em vez de importar é proposital:
+ * o console é um arquivo só, feito para abrir sem servidor, e vai morrer quando
+ * este app cobrir tudo. Até lá, mudança de identidade acontece aqui.
+ */
+
+:root {
+  --ground:#FBF7FC; --surface:#FFFFFF; --surface-2:#F3EEF6; --surface-3:#E9E2EE;
+  --line:#E6DFEB; --line-strong:#CFC5D6;
+  --ink:#141419; --ink-2:#55555F; --ink-3:#8A8A97;
+  --accent:#3A3AD1; --accent-ink:#FFFFFF; --accent-soft:#E7E7FD;
+  --ok:#0E9C64; --ok-ink:#FFFFFF; --ok-soft:#D8F5E7;
+  --warn:#96650B; --warn-soft:#F8ECD3; --crit:#B43A2C; --crit-soft:#FADFDB;
+  --wa:#0E9C64; --mail:#3A3AD1; --sms:#7B4BD1; --ig:#B84A7D;
+  --blob-1:rgba(155,155,245,.24); --blob-2:rgba(77,240,169,.16);
+  --shadow:0 1px 2px rgba(20,20,25,.05),0 10px 30px -14px rgba(20,20,25,.22);
+  --r:14px; --r-sm:10px;
+}
+@media (prefers-color-scheme:dark) { :root:not([data-theme="light"]) {
+  --ground:#0F0F14; --surface:#1A1A21; --surface-2:#23232C; --surface-3:#2B2B36;
+  --line:#2D2D39; --line-strong:#3E3E4D;
+  --ink:#F3F1F8; --ink-2:#A8A8B7; --ink-3:#75758A;
+  --accent:#9B9BF5; --accent-ink:#141430; --accent-soft:#272747;
+  --ok:#4DF0A9; --ok-ink:#06291B; --ok-soft:#103626;
+  --warn:#E0B458; --warn-soft:#332811; --crit:#F08B7D; --crit-soft:#3A1E1A;
+  --wa:#4DF0A9; --mail:#9B9BF5; --sms:#B58BD8; --ig:#E489B4;
+  --blob-1:rgba(120,120,235,.20); --blob-2:rgba(77,240,169,.10);
+  --shadow:0 1px 2px rgba(0,0,0,.5),0 14px 34px -16px rgba(0,0,0,.7);
+}}
+:root[data-theme="dark"] {
+  --ground:#0F0F14; --surface:#1A1A21; --surface-2:#23232C; --surface-3:#2B2B36;
+  --line:#2D2D39; --line-strong:#3E3E4D;
+  --ink:#F3F1F8; --ink-2:#A8A8B7; --ink-3:#75758A;
+  --accent:#9B9BF5; --accent-ink:#141430; --accent-soft:#272747;
+  --ok:#4DF0A9; --ok-ink:#06291B; --ok-soft:#103626;
+  --warn:#E0B458; --warn-soft:#332811; --crit:#F08B7D; --crit-soft:#3A1E1A;
+  --wa:#4DF0A9; --mail:#9B9BF5; --sms:#B58BD8; --ig:#E489B4;
+  --blob-1:rgba(120,120,235,.20); --blob-2:rgba(77,240,169,.10);
+  --shadow:0 1px 2px rgba(0,0,0,.5),0 14px 34px -16px rgba(0,0,0,.7);
+}
+
+* { box-sizing: border-box }
+/* `.sec` e `.indice` declaram display, e display vence o atributo hidden. */
+[hidden] { display: none !important }
+html, body, #raiz { height: 100% }
+body {
+  margin: 0; background: var(--ground); color: var(--ink);
+  font-family: Roboto, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-size: 14px; line-height: 1.5; -webkit-font-smoothing: antialiased;
+}
+h1, h2, h3 {
+  font-family: "Anek Latin", Roboto, system-ui, sans-serif;
+  margin: 0; text-wrap: balance; letter-spacing: -.01em;
+}
+h1 { font-weight: 600; font-size: 27px }
+.mono { font-family: "Roboto Mono", ui-monospace, monospace; font-variant-numeric: tabular-nums }
+button { font: inherit; color: inherit; background: none; border: none; cursor: pointer }
+a { color: var(--accent) }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px }
+
+/* Blobs do fundo. Atrás de tudo, sem capturar clique. */
+body::before, body::after {
+  content: ""; position: fixed; z-index: -1; border-radius: 50%;
+  filter: blur(90px); pointer-events: none;
+}
+body::before { width: 46vw; height: 46vw; left: -12vw; top: -14vw; background: var(--blob-1) }
+body::after { width: 38vw; height: 38vw; right: -10vw; bottom: -12vw; background: var(--blob-2) }
+
+/* ---------- shell ---------- */
+.shell { display: grid; grid-template-columns: 228px 1fr; min-height: 100% }
+.rail {
+  background: var(--surface); border-right: 1px solid var(--line);
+  padding-block: 18px; display: flex; flex-direction: column; gap: 22px;
+  position: sticky; top: 0; align-self: start; height: 100vh;
+}
+.brand { padding-inline: 18px; display: flex; flex-direction: column; gap: 2px }
+.brand b {
+  font-family: "Anek Latin", Roboto, system-ui, sans-serif;
+  font-size: 17px; font-weight: 700; letter-spacing: -.02em;
+}
+.brand span {
+  font-size: 10.5px; letter-spacing: .1em; text-transform: uppercase;
+  color: var(--ink-3); font-weight: 600;
+}
+.nav { display: flex; flex-direction: column; gap: 1px; padding-inline: 10px }
+.nav button {
+  display: flex; align-items: center; gap: 10px; padding: 8px 10px;
+  border-radius: 8px; color: var(--ink-2); font-size: 13.5px; text-align: left; width: 100%;
+}
+.nav button:hover { background: var(--surface-2); color: var(--ink) }
+.nav button[aria-current="true"] { background: var(--ok); color: var(--ok-ink); font-weight: 600 }
+.nav .grupo { justify-content: space-between }
+.nav .chev { width: 14px; height: 14px; flex: none; transition: transform .16s ease; color: var(--ink-3) }
+.nav .grupo[aria-expanded="true"] .chev { transform: rotate(90deg) }
+.nav .grupo[aria-current="true"] .chev { color: inherit }
+
+.sub, .sub2 { display: grid; grid-template-rows: 0fr; transition: grid-template-rows .18s ease }
+.sub[data-aberto="true"], .sub2[data-aberto="true"] { grid-template-rows: 1fr }
+.sub > div, .sub2 > div { overflow: hidden }
+.sub button { font-size: 12.5px; padding: 6px 10px 6px 22px; position: relative; color: var(--ink-3) }
+.sub button::before {
+  content: ""; position: absolute; left: 12px; top: 0; bottom: 0; width: 1.5px; background: var(--line);
+}
+.sub button[aria-current="true"] { background: var(--surface-2); color: var(--ink); font-weight: 600 }
+.sub button[aria-current="true"]::before { background: var(--ok); width: 2px }
+.sub2 button { font-size: 12px; padding: 5px 10px 5px 34px; position: relative; color: var(--ink-3) }
+.sub2 button::before {
+  content: ""; position: absolute; left: 24px; top: 0; bottom: 0; width: 1.5px; background: var(--line);
+}
+.sub2 button[aria-current="true"] { background: var(--surface-2); color: var(--ink); font-weight: 600 }
+.sub2 button[aria-current="true"]::before { background: var(--ok); width: 2px }
+.sub .grupo2 { justify-content: space-between }
+.sub .grupo2 .chev { width: 12px; height: 12px }
+
+.railfoot {
+  margin-top: auto; padding-inline: 18px; font-size: 11.5px; color: var(--ink-3);
+  display: flex; flex-direction: column; gap: 8px;
+}
+.railfoot button { font-size: 11.5px; color: var(--ink-3); text-decoration: underline; padding: 0 }
+
+.wrap { max-width: 1180px; padding: 26px 30px 60px }
+.cabeca { display: flex; align-items: flex-start; gap: 18px; margin-bottom: 22px }
+.cabeca p { margin: 6px 0 0; color: var(--ink-2); max-width: 62ch }
+.cabeca .cta { margin-left: auto }
+.voltar {
+  display: inline-flex; align-items: center; gap: 5px; font-size: 12.5px;
+  color: var(--ink-3); margin-bottom: 8px; padding: 5px 9px; border-radius: 7px; font-weight: 500;
+}
+.voltar:hover { background: var(--surface-2); color: var(--ink) }
+
+.sec { display: flex; align-items: baseline; gap: 10px; margin: 26px 0 10px }
+.sec h2 { font-size: 15px; font-weight: 600 }
+.sec span { font-size: 12px; color: var(--ink-3) }
+
+/* ---------- blocos ---------- */
+.kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 12px }
+.kpi {
+  background: var(--surface); border: 1px solid var(--line); border-radius: var(--r);
+  padding: 15px 16px;
+}
+.kpi .r { font-size: 10.5px; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-3); font-weight: 600 }
+.kpi b {
+  font-family: "Anek Latin", Roboto, system-ui, sans-serif; font-size: 25px; font-weight: 700;
+  letter-spacing: -.03em; line-height: 1.05; display: block; margin: 5px 0 3px;
+}
+.kpi .s { font-size: 11.5px; color: var(--ink-3) }
+
+.indice { display: grid; gap: 8px; margin-top: 4px }
+.item {
+  display: flex; align-items: center; gap: 14px; width: 100%; text-align: left;
+  background: var(--surface); border: 1px solid var(--line); border-radius: var(--r);
+  padding: 15px 16px; transition: border-color .14s ease, transform .14s ease; color: inherit;
+}
+button.item:hover { border-color: var(--line-strong); transform: translateX(2px) }
+.item .ico {
+  width: 38px; height: 38px; flex: none; border-radius: 11px; display: grid; place-items: center;
+  background: var(--surface-2); color: var(--ink-2);
+}
+.item .ico svg { width: 19px; height: 19px; fill: none; stroke: currentColor; stroke-width: 1.7 }
+.item .txt { min-width: 0; flex: 1 }
+.item .txt b {
+  display: block; font-family: "Anek Latin", Roboto, system-ui, sans-serif;
+  font-size: 15px; font-weight: 600; letter-spacing: -.01em;
+}
+.item .txt p { margin: 1px 0 0; font-size: 12.5px; color: var(--ink-3); line-height: 1.45 }
+.item .cont { font-family: "Roboto Mono", monospace; font-size: 12px; color: var(--ink-3); flex: none }
+.item .seta { width: 16px; height: 16px; flex: none; color: var(--ink-3); fill: none; stroke: currentColor; stroke-width: 1.8 }
+
+.delta {
+  display: inline-flex; align-items: center; gap: 3px; font-size: 11px; font-weight: 600;
+  padding: 2px 7px; border-radius: 999px; background: var(--ok-soft); color: var(--ok);
+  font-family: "Roboto Mono", monospace; flex: none;
+}
+.delta.baixa { background: var(--crit-soft); color: var(--crit) }
+.delta.neutra { background: var(--surface-2); color: var(--ink-3) }
+
+.chips { display: flex; flex-wrap: wrap; gap: 6px }
+.chip {
+  font-size: 11px; padding: 2px 8px; border-radius: 999px;
+  background: var(--surface-2); color: var(--ink-2); font-weight: 500;
+}
+
+.painel { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 16px }
+.opts { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 10px }
+.opt {
+  border: 1.5px solid var(--line); border-radius: var(--r-sm); padding: 12px 13px;
+  text-align: left; background: var(--surface);
+}
+.opt:hover { border-color: var(--line-strong) }
+.opt[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-soft) }
+.opt b { display: block; font-size: 13px; font-weight: 600 }
+.opt p { margin: 3px 0 0; font-size: 11.5px; color: var(--ink-3); line-height: 1.45 }
+
+.campo { display: flex; flex-direction: column; gap: 5px; margin-bottom: 14px }
+.campo label { font-size: 12.5px; font-weight: 600 }
+.campo input, .campo select {
+  border: 1.5px solid var(--line); border-radius: 9px; padding: 9px 11px;
+  font: inherit; font-size: 14px; background: var(--surface); color: var(--ink); width: 100%;
+}
+.campo input:focus, .campo select:focus { outline: none; border-color: var(--accent) }
+/* Sem isto o select fica com o cromo claro do sistema por cima do tema escuro. */
+.campo select {
+  appearance: none; cursor: pointer; padding-right: 32px;
+  background-image: linear-gradient(45deg, transparent 50%, currentColor 50%),
+                    linear-gradient(135deg, currentColor 50%, transparent 50%);
+  background-position: calc(100% - 17px) 50%, calc(100% - 12px) 50%;
+  background-size: 5px 5px, 5px 5px; background-repeat: no-repeat;
+}
+.campo select option { background: var(--surface); color: var(--ink) }
+.campo .ajuda { font-size: 11.5px; color: var(--ink-3) }
+.campo .vault { font-size: 11.5px; color: var(--accent) }
+
+.btn {
+  border: 1.5px solid var(--line); border-radius: 9px; padding: 9px 15px;
+  font-weight: 600; font-size: 13.5px;
+}
+.btn:hover { border-color: var(--line-strong) }
+.btn.prim { background: var(--accent); border-color: transparent; color: var(--accent-ink) }
+.btn.prim:hover { filter: brightness(1.08) }
+.btn[disabled] { opacity: .55; cursor: progress }
+
+.copiar {
+  font-size: 11px; color: var(--ink-2); background: var(--surface-2);
+  border: 1px solid var(--line); border-radius: 6px; padding: 2px 7px; cursor: pointer;
+  max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: middle;
+}
+.copiar:hover { border-color: var(--line-strong); color: var(--ink) }
+.copiar.ok { background: var(--ok-soft); color: var(--ok); border-color: transparent }
+
+.aviso { border-radius: var(--r-sm); padding: 11px 13px; font-size: 12.5px; margin: 12px 0 }
+.aviso.erro { background: var(--crit-soft); color: var(--crit) }
+.aviso.ok { background: var(--ok-soft); color: var(--ok) }
+.aviso.neutro { background: var(--surface-2); color: var(--ink-2) }
+
+.vazio { color: var(--ink-3); font-size: 13px }
+
+/* ---------- entrar ---------- */
+.entrar { min-height: 100%; display: grid; place-items: center; padding: 24px }
+.entrar form {
+  width: min(380px, 100%); background: var(--surface); border: 1px solid var(--line);
+  border-radius: var(--r); padding: 26px; box-shadow: var(--shadow);
+}
+.entrar h1 { font-size: 22px; margin-bottom: 4px }
+.entrar > form > p { color: var(--ink-2); font-size: 13px; margin: 0 0 20px }
+
+.qr { display: grid; gap: 10px; justify-items: center; padding: 14px; background: var(--surface-2); border-radius: var(--r-sm) }
+.qr img { width: 220px; height: 220px; image-rendering: pixelated; border-radius: 8px; background: #fff }
+
+@media (max-width: 860px) {
+  .shell { grid-template-columns: 1fr }
+  .rail { position: static; height: auto }
+  .wrap { padding: 20px 16px 48px }
+  .cabeca { flex-direction: column; gap: 10px }
+  .cabeca .cta { margin-left: 0 }
+}

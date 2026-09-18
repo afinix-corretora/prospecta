@@ -17,6 +17,7 @@ adapters/              ChannelAdapter por provedor (TypeScript, sem I/O de runti
 motor/                 despachante e webhooks — lógica pura, banco atrás de uma porta
 supabase/functions/    edge functions: só fiação, a única camada sem teste
 demo/                  cenário de demonstração: roda o motor e exporta o que ele decidiu
+app/                   o produto: React + Vite, falando com o Supabase
 ui/                    console de operação (protótipo), alimentado pela saída do demo
 backfill/              ferramentas da migração de dados (fora do schema de runtime)
 tests/                 suite — um banco descartável por arquivo
@@ -375,3 +376,66 @@ Teste vermelho é bloqueio, não aviso. Toda mudança de schema roda `tests/run.
 
 Cada arquivo de teste roda em banco próprio. Compartilhar banco já produziu duas falhas falsas
 aqui — uma por remetente ambíguo entre fixtures, outra por mensagem pendente alheia.
+
+## O app
+
+`ui/console.html` é protótipo: um arquivo só, sem servidor, com os dados do demo colados dentro.
+Ele nunca vai falar com o Supabase — foi onde o design foi decidido, não onde o produto roda.
+
+`app/` é o produto: React + Vite + TypeScript, falando com o Supabase de verdade.
+
+```bash
+cd app
+cp .env.example .env.local     # as duas variáveis são públicas por desenho
+npm install
+npm run dev
+```
+
+**A chave `anon` é pública.** Ela vai para o navegador e quem protege o dado é o RLS, não ela. Se o
+RLS estiver certo, vazar a chave não dá acesso a nada; se estiver errado, escondê-la não salva. Sem
+login, o app enxerga só os dois catálogos (`channel_provider_catalog`, `ai_provider_catalog`), que
+têm política `USING (true)` de propósito — o resto exige `pertence_ao_tenant`.
+
+| Caminho | O que faz |
+|---|---|
+| `src/supabase.ts` | cliente e URL das edge functions |
+| `src/sessao.tsx` | sessão, tenants do usuário e papel; troca de cliente |
+| `src/dados.ts` | uma função por pergunta. **Nenhuma filtra por tenant à mão** — quem filtra é o RLS |
+| `src/telas/Canal.tsx` | contas, servidores, criar instância, conectar conta |
+| `src/telas/Telas.tsx` | hub, canais, configurações |
+
+Login é por link no e-mail: não existe senha para vazar nem para o suporte redefinir.
+
+## Deploy na Vercel
+
+O que o repositório já traz pronto: `app/vercel.json` com o *rewrite* de SPA (sem ele,
+`/canais/whatsapp/nao` dá 404 ao recarregar), cache imutável nos assets e cabeçalhos de segurança.
+
+O que precisa ser feito uma vez, no painel:
+
+1. **New Project** → importe `afinix-corretora/prospecta`.
+2. **Root Directory: `app`.** É o passo que mais se esquece: sem isso a Vercel procura
+   `package.json` na raiz e não acha o app.
+3. Framework preset **Vite** (a Vercel detecta sozinha depois do passo 2).
+4. **Environment Variables**, nos três ambientes (Production, Preview, Development):
+
+   | Nome | Valor |
+   |---|---|
+   | `VITE_SUPABASE_URL` | `https://hucuwjvihqgftdjpnych.supabase.co` |
+   | `VITE_SUPABASE_ANON_KEY` | a chave publishable do projeto |
+
+   `VITE_` é obrigatório no prefixo: o Vite só expõe ao navegador variável com ele.
+
+5. **Deploy.**
+
+Depois do primeiro deploy, no Supabase → **Authentication → URL Configuration**:
+
+- *Site URL*: o domínio de produção.
+- *Redirect URLs*: o domínio de produção **e** `https://*-<seu-escopo>.vercel.app` para os previews.
+  Sem isso o link de acesso volta para `localhost` e o login de preview não fecha.
+
+### O que não vai para a Vercel
+
+As edge functions e o worker rodam no Supabase, não aqui — `supabase functions deploy`. A Vercel
+serve só o front. Isso é de propósito: o worker precisa de `service_role`, e chave de serviço em
+função de front é como ela vaza.
