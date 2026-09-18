@@ -162,8 +162,8 @@ test('credencial que não resolve culpa o remetente e não fica em silêncio', a
 });
 
 test('provedor sem adapter vira falha registrada, não exceção solta', async () => {
-  const { banco, registros } = bancoFalso([mensagem()], { provedor: 'uazapi' });
-  const r = await despachar(banco); // registro real: uazapi não existe
+  const { banco, registros } = bancoFalso([mensagem()], { provedor: 'zapi' });
+  const r = await despachar(banco); // registro real: zapi não tem adapter
   assert.equal(r.falhas, 1);
   assert.equal(registros[0].culpa, 'remetente');
   assert.match(registros[0].erro!, /provedor sem adapter/);

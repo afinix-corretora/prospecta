@@ -12,6 +12,7 @@ import assert from 'node:assert/strict';
 
 import type { Buscador, PedidoEnvio } from '../adapters/tipos.ts';
 import { WhatsAppGupshupAdapter } from '../adapters/whatsapp-gupshup.ts';
+import { WhatsAppUazapiAdapter } from '../adapters/whatsapp-uazapi.ts';
 import { WhatsAppEvolutionAdapter } from '../adapters/whatsapp-evolution.ts';
 import { WhatsAppMetaAdapter } from '../adapters/whatsapp-meta.ts';
 import { SmsComteleAdapter } from '../adapters/sms-comtele.ts';
@@ -446,6 +447,154 @@ test('gupshup ignora evento que não conhece', () => {
 });
 
 // ---------------------------------------------------------------------------
+// WhatsApp não oficial via UAZAPI — o caminho frio da operação
+// ---------------------------------------------------------------------------
+
+const CRED_UAZ = { base_url: 'https://afinix.uazapi.com/', token: 'tok-instancia' };
+
+function pedidoUazapi(extra: Partial<PedidoEnvio> = {}): PedidoEnvio {
+  return {
+    messageId: 'm-uaz', destino: '+55 11 90000-0001', conteudo: 'Oi Ana',
+    remetente: 'chip-frio-sp', credenciais: CRED_UAZ, ...extra,
+  };
+}
+
+test('uazapi envia JSON em /send/text com header token', async () => {
+  const { buscar, chamadas } = fetchFalso(200, { id: 'uaz-1' });
+  const r = await new WhatsAppUazapiAdapter(buscar).send(pedidoUazapi());
+
+  assert.equal(r.ok, true);
+  assert.equal(r.providerMessageId, 'uaz-1');
+  assert.equal(chamadas[0].url, 'https://afinix.uazapi.com/send/text');
+
+  const h = chamadas[0].init!.headers as Record<string, string>;
+  assert.equal(h.token, 'tok-instancia');
+  // adminToken dá poder administrativo; enviar não precisa dele.
+  assert.equal(h.adminToken, undefined);
+
+  const corpo = JSON.parse(String(chamadas[0].init!.body));
+  assert.equal(corpo.number, '5511900000001');
+  assert.equal(corpo.text, 'Oi Ana');
+});
+
+test('uazapi aceita as grafias de id que a API já usou', async () => {
+  // Tolerância deliberada: sem id não há como casar o webhook de volta.
+  for (const corpo of [{ id: 'x' }, { messageid: 'x' }, { messageId: 'x' },
+                       { key: { id: 'x' } }, { message: { id: 'x' } }]) {
+    const { buscar } = fetchFalso(200, corpo);
+    const r = await new WhatsAppUazapiAdapter(buscar).send(pedidoUazapi());
+    assert.equal(r.providerMessageId, 'x', JSON.stringify(corpo));
+  }
+});
+
+test('uazapi: 200 sem id nenhum não conta como enviado', async () => {
+  const { buscar } = fetchFalso(200, { status: 'ok' });
+  const r = await new WhatsAppUazapiAdapter(buscar).send(pedidoUazapi());
+  assert.equal(r.ok, false);
+  assert.equal(r.culpa, 'transitorio');
+});
+
+test('uazapi: token e instância caída derrubam a conta; número ruim não', async () => {
+  const token = new WhatsAppUazapiAdapter(fetchFalso(401, { error: 'invalid token' }).buscar);
+  assert.equal((await token.send(pedidoUazapi())).culpa, 'remetente');
+
+  const caida = new WhatsAppUazapiAdapter(
+    fetchFalso(500, { error: 'instance not connected' }).buscar);
+  assert.equal((await caida.send(pedidoUazapi())).culpa, 'remetente');
+
+  const numero = new WhatsAppUazapiAdapter(
+    fetchFalso(400, { error: 'number does not exist on WhatsApp' }).buscar);
+  assert.equal((await numero.send(pedidoUazapi())).culpa, 'destino');
+});
+
+test('uazapi sem base_url é culpa do remetente', async () => {
+  const { buscar } = fetchFalso(200, {});
+  const r = await new WhatsAppUazapiAdapter(buscar).send(
+    pedidoUazapi({ credenciais: { token: 'x' } }));
+  assert.equal(r.ok, false);
+  assert.equal(r.culpa, 'remetente');
+});
+
+test('uazapi: queda de rede é transitória', async () => {
+  const r = await new WhatsAppUazapiAdapter(fetchQueExplode('ETIMEDOUT')).send(pedidoUazapi());
+  assert.equal(r.culpa, 'transitorio');
+});
+
+test('uazapi normaliza mudança de status da nossa mensagem', () => {
+  const evs = new WhatsAppUazapiAdapter().normalizeWebhook({
+    event: 'messages_update',
+    message: { id: 'uaz-1', status: 'DELIVERED', messageTimestamp: 1758000000 },
+  });
+  assert.equal(evs.length, 1);
+  assert.equal(evs[0].tipo, 'entregue');
+  assert.equal(evs[0].providerMessageId, 'uaz-1');
+});
+
+test('uazapi liga a resposta pela citação da nossa mensagem', () => {
+  const evs = new WhatsAppUazapiAdapter().normalizeWebhook({
+    event: 'messages',
+    message: { id: 'dele-9', fromMe: false, messageType: 'conversation',
+               sender: '5511900000001@s.whatsapp.net',
+               quoted: { id: 'uaz-1' }, messageTimestamp: 1758000000 },
+  });
+  assert.equal(evs.length, 1);
+  assert.equal(evs[0].tipo, 'respondido');
+  // O id é o da NOSSA mensagem citada, não o da mensagem dele.
+  assert.equal(evs[0].providerMessageId, 'uaz-1');
+});
+
+test('uazapi: resposta sem citação não vira evento', () => {
+  // Nas APIs não oficiais a resposta normalmente não cita nada. Emitir o id da
+  // mensagem dele seria inventar um vínculo que não casa com `messages`.
+  const evs = new WhatsAppUazapiAdapter().normalizeWebhook({
+    event: 'messages',
+    message: { id: 'dele-9', fromMe: false, sender: '5511900000001@s.whatsapp.net' },
+  });
+  assert.deepEqual(evs, []);
+});
+
+test('uazapi descarta o próprio eco', () => {
+  // Encerraria o enrollment no próprio disparo (invariante 4 ao contrário).
+  const ad = new WhatsAppUazapiAdapter();
+  assert.deepEqual(ad.normalizeWebhook({
+    event: 'messages', message: { id: 'a', fromMe: true, quoted: { id: 'uaz-1' } } }), []);
+  assert.deepEqual(ad.normalizeWebhook({
+    event: 'messages', message: { id: 'a', wasSentByApi: true, quoted: { id: 'uaz-1' } } }), []);
+});
+
+test('uazapi aceita lote de eventos num POST só', () => {
+  const evs = new WhatsAppUazapiAdapter().normalizeWebhook({
+    event: 'messages_update',
+    data: [{ id: 'a', status: 'sent' }, { id: 'b', status: 'read' }, { id: 'c' }],
+  });
+  assert.equal(evs.length, 2);
+  assert.deepEqual(evs.map(e => e.tipo), ['enviado', 'lido']);
+});
+
+test('uazapi entende epoch em segundo e em milissegundo', () => {
+  const ad = new WhatsAppUazapiAdapter();
+  const seg = ad.normalizeWebhook({ event:'messages_update',
+    data:{ id:'a', status:'read', messageTimestamp: 1758000000 } })[0].ocorridoEm;
+  const ms = ad.normalizeWebhook({ event:'messages_update',
+    data:{ id:'a', status:'read', messageTimestamp: 1758000000000 } })[0].ocorridoEm;
+  assert.equal(seg, ms);
+});
+
+test('uazapi ignora o que não conhece', () => {
+  const ad = new WhatsAppUazapiAdapter();
+  assert.deepEqual(ad.normalizeWebhook({}), []);
+  assert.deepEqual(ad.normalizeWebhook({ event: 'connection', data: { state: 'open' } }), []);
+  assert.deepEqual(ad.normalizeWebhook({ event: 'messages_update', data: { status: 'read' } }), []);
+});
+
+test('uazapi checkHealth bate em /instance/status', async () => {
+  const { buscar, chamadas } = fetchFalso(200, { connected: true });
+  const s = await new WhatsAppUazapiAdapter(buscar).checkHealth(CRED_UAZ);
+  assert.equal(s.ok, true);
+  assert.equal(chamadas[0].url, 'https://afinix.uazapi.com/instance/status');
+});
+
+// ---------------------------------------------------------------------------
 // Registro
 // ---------------------------------------------------------------------------
 
@@ -456,7 +605,7 @@ test('registro devolve o adapter de cada provedor', () => {
 });
 
 test('provedor sem adapter falha alto, não silencioso', () => {
-  assert.throws(() => criarAdapter('uazapi'), /provedor sem adapter/);
+  assert.throws(() => criarAdapter('zapi'), /provedor sem adapter/);
 });
 
 test('canais sem adapter são declarados, não descobertos em produção', () => {

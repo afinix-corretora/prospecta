@@ -115,7 +115,7 @@ e elas têm teste automatizado obrigatório.**
 > (`processar_vencidos`), decidem e reivindicam sem enviar — o que torna a Fase 3 possível sem
 > nenhum adapter. O mapa de status do backfill está fechado em `backfill/mapa_status.sql`.
 >
-> A Fase 1 tem três adapters em `adapters/` (Evolution, Meta Cloud, Comtele) com a superfície de
+> A Fase 1 tem cinco adapters em `adapters/` (Gupshup, Meta Cloud, UAZAPI, Evolution, Comtele) com a superfície de
 > despacho em SQL (`reivindicar_pendentes`, `registrar_resultado_envio`,
 > `registrar_evento_provedor`). E-mail e Instagram ainda não têm adapter, e o registro declara isso.
 >
@@ -145,7 +145,9 @@ e elas têm teste automatizado obrigatório.**
 **Fase 0 concluída** — inventário em `INVENTARIO-FASE-0.md`: 83 edge functions e 52 tabelas
 classificadas em migra/adapta/descarta. Leitura obrigatória antes de propor qualquer migração de
 código antigo; várias suposições do `DECISOES.md` foram corrigidas lá (em especial: UAZAPI não
-existe na base — o WhatsApp não-oficial é Evolution API).
+existia na base, e o WhatsApp não-oficial que rodava era Evolution API). **D22 revisou isso:** o
+compromisso com UAZAPI existe fora do código, então UAZAPI é o não-oficial de agora e Evolution
+continua no catálogo por causa dos chips do legado.
 
 A Fase 1 (`ChannelAdapter`) vem depois do schema — ver D12 em `DECISOES.md`.
 Demais fases em `DECISOES.md`.

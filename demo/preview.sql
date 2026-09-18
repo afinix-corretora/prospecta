@@ -84,7 +84,7 @@ INSERT INTO sender_accounts
    'smtp','morna',300,'{"host":"smtp.afinix-relaciona.com.br","porta":"587","usuario":"resgate"}'::jsonb),
   -- Chip frio com quota baixa de propósito: é o que faz o freio aparecer.
   ('dd000000-0000-0000-0000-000000000003','whatsapp','+55 11 98000-0009','Chip frio SP',
-   'evolution','fria',2,'{"base_url":"https://evo.afinix.com.br","instancia":"fria-sp"}'::jsonb);
+   'uazapi','fria',2,'{"base_url":"https://afinix.uazapi.com","instancia":"fria-sp"}'::jsonb);
 
 -- Sete pessoas, cada uma mostrando uma coisa diferente.
 INSERT INTO contacts (id, nome, origem, metadados) VALUES

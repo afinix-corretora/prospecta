@@ -122,7 +122,7 @@
             "ator": "provedor",
             "canal": "whatsapp",
             "contato": "Marina Alves",
-            "detalhe": "PROV-3ab9148b",
+            "detalhe": "PROV-45fcdd96",
             "momento": 0,
             "remetente": "+55 11 99000-0001"
         },
@@ -131,7 +131,7 @@
             "ator": "provedor",
             "canal": "whatsapp",
             "contato": "Otávio Lima",
-            "detalhe": "PROV-58010322",
+            "detalhe": "PROV-4bf9b322",
             "momento": 0,
             "remetente": "+55 11 99000-0002"
         },
@@ -140,7 +140,7 @@
             "ator": "provedor",
             "canal": "whatsapp",
             "contato": "Paula Ribeiro",
-            "detalhe": "PROV-fc789884",
+            "detalhe": "PROV-9eef8669",
             "momento": 0,
             "remetente": "+55 11 99000-0001"
         },
@@ -149,7 +149,7 @@
             "ator": "provedor",
             "canal": "whatsapp",
             "contato": "Rui Nogueira",
-            "detalhe": "PROV-74b65076",
+            "detalhe": "PROV-798acc3d",
             "momento": 0,
             "remetente": "+55 11 99000-0002"
         },
@@ -158,7 +158,7 @@
             "ator": "provedor",
             "canal": "whatsapp",
             "contato": "Sônia Prado",
-            "detalhe": "PROV-e8c15112",
+            "detalhe": "PROV-66bf2c3c",
             "momento": 0,
             "remetente": "+55 11 98000-0009"
         },
@@ -221,7 +221,7 @@
             "ator": "provedor",
             "canal": "email",
             "contato": "Marina Alves",
-            "detalhe": "PROV-0e24e7c3",
+            "detalhe": "PROV-aaa86c4a",
             "momento": 48,
             "remetente": "resgate@afinix-relaciona.com.br"
         },
@@ -230,7 +230,7 @@
             "ator": "provedor",
             "canal": "email",
             "contato": "Otávio Lima",
-            "detalhe": "PROV-c5d4d082",
+            "detalhe": "PROV-7e73fb12",
             "momento": 48,
             "remetente": "resgate@afinix-relaciona.com.br"
         },
@@ -239,7 +239,7 @@
             "ator": "provedor",
             "canal": "email",
             "contato": "Rui Nogueira",
-            "detalhe": "PROV-ac965e79",
+            "detalhe": "PROV-90c2c96c",
             "momento": 48,
             "remetente": "resgate@afinix-relaciona.com.br"
         },
@@ -302,7 +302,7 @@
             "ator": "provedor",
             "canal": "whatsapp",
             "contato": "Sônia Prado",
-            "detalhe": "PROV-62a9feda",
+            "detalhe": "PROV-e24b7d0f",
             "momento": 96,
             "remetente": "+55 11 98000-0009"
         },
@@ -356,7 +356,7 @@
             "ator": "provedor",
             "canal": "whatsapp",
             "contato": "Marina Alves",
-            "detalhe": "PROV-0b441f44",
+            "detalhe": "PROV-b1f6fa8d",
             "momento": 120,
             "remetente": "+55 11 99000-0001"
         },
@@ -365,7 +365,7 @@
             "ator": "provedor",
             "canal": "whatsapp",
             "contato": "Rui Nogueira",
-            "detalhe": "PROV-e492a6a7",
+            "detalhe": "PROV-9c62839a",
             "momento": 120,
             "remetente": "+55 11 99000-0001"
         }
@@ -956,12 +956,12 @@
             "saude": 100.00,
             "usado": 1,
             "config": {
-                "base_url": "https://evo.afinix.com.br",
+                "base_url": "https://afinix.uazapi.com",
                 "instancia": "fria-sp"
             },
             "estado": "ativo",
             "apelido": "Chip frio SP",
-            "provedor": "evolution",
+            "provedor": "uazapi",
             "identificador": "+55 11 98000-0009"
         },
         {
@@ -1179,6 +1179,41 @@
             "tem_adapter": true
         },
         {
+            "docs": "https://docs.uazapi.com",
+            "nome": "UAZAPI (não oficial)",
+            "slug": "uazapi",
+            "canal": "whatsapp",
+            "campos": [
+                {
+                    "tipo": "senha",
+                    "ajuda": "O token da instância, não o adminToken",
+                    "chave": "token",
+                    "rotulo": "Token da instância",
+                    "segredo": true,
+                    "obrigatorio": true
+                },
+                {
+                    "tipo": "texto",
+                    "ajuda": "Ex.: https://suaempresa.uazapi.com",
+                    "chave": "base_url",
+                    "rotulo": "URL do servidor",
+                    "segredo": false,
+                    "obrigatorio": true
+                },
+                {
+                    "tipo": "texto",
+                    "ajuda": "Só para identificar no painel da UAZAPI",
+                    "chave": "instancia",
+                    "rotulo": "Nome da instância",
+                    "segredo": false,
+                    "obrigatorio": false
+                }
+            ],
+            "oficial": false,
+            "descricao": "Automação de WhatsApp sem homologação, uma instância por chip. Serve a campanha fria; nunca ao número institucional (D4).",
+            "tem_adapter": true
+        },
+        {
             "docs": "https://doc.evolution-api.com",
             "nome": "Evolution API (não oficial)",
             "slug": "evolution",
@@ -1210,7 +1245,7 @@
                 }
             ],
             "oficial": false,
-            "descricao": "Automação de WhatsApp comum, sem homologação. Serve a campanha fria; nunca ao número institucional (D4).",
+            "descricao": "Automação de WhatsApp sem homologação. É o que roda no legado; contas novas vão para UAZAPI (D22).",
             "tem_adapter": true
         },
         {

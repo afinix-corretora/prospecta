@@ -20,13 +20,37 @@ BEGIN INSERT INTO pv.resultado (nome, ok, detalhe)
 -- O catálogo semeado
 -- ---------------------------------------------------------------------------
 
-SELECT pv.confere('o catálogo traz os seis provedores',
-  (SELECT count(*) = 6 FROM channel_provider_catalog),
+SELECT pv.confere('o catálogo traz os sete provedores',
+  (SELECT count(*) = 7 FROM channel_provider_catalog),
   (SELECT count(*)::text FROM channel_provider_catalog));
 
 SELECT pv.confere('WhatsApp tem oficial e não oficial separados',
-  (SELECT count(*) FILTER (WHERE oficial) = 2 AND count(*) FILTER (WHERE NOT oficial) = 1
+  (SELECT count(*) FILTER (WHERE oficial) = 2 AND count(*) FILTER (WHERE NOT oficial) = 2
      FROM channel_provider_catalog WHERE canal = 'whatsapp'));
+
+-- D22: UAZAPI é o não-oficial de agora; Evolution fica porque é o que roda no
+-- legado e os chips existentes apontam para ele.
+SELECT pv.confere('UAZAPI é o não-oficial escolhido e tem adapter',
+  (SELECT NOT oficial AND tem_adapter FROM channel_provider_catalog WHERE slug = 'uazapi'));
+
+SELECT pv.confere('Evolution continua no catálogo, atrás da UAZAPI',
+  (SELECT u.ordem < e.ordem
+     FROM channel_provider_catalog u, channel_provider_catalog e
+    WHERE u.slug = 'uazapi' AND e.slug = 'evolution'));
+
+-- Apagar provedor com conta apontando para ele é o que a FK existe para
+-- impedir — senão o backfill de chip do legado perderia o vínculo.
+DO $$
+BEGIN
+  INSERT INTO sender_accounts (canal, identificador, provedor, tipo_permitido, quota_diaria)
+  VALUES ('whatsapp','5511977770001','uazapi','fria',50);
+  DELETE FROM channel_provider_catalog WHERE slug = 'uazapi';
+  PERFORM pv.confere('provedor em uso não pode ser apagado', false, 'foi apagado');
+EXCEPTION WHEN others THEN
+  PERFORM pv.confere('provedor em uso não pode ser apagado (FK, 23503)',
+    SQLSTATE = '23503', SQLSTATE || ': ' || SQLERRM);
+END;
+$$;
 
 SELECT pv.confere('Gupshup é o oficial de WhatsApp e já tem adapter',
   (SELECT oficial AND tem_adapter FROM channel_provider_catalog WHERE slug = 'gupshup'));

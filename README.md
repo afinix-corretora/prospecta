@@ -235,7 +235,8 @@ inexistente é recusado no cadastro, não na hora do envio.
 |---|---|---|
 | WhatsApp | **Gupshup** (oficial, BSP) | adapter pronto — é o caminho oficial da operação |
 | WhatsApp | Meta Cloud API (oficial, direto) | adapter pronto — alternativa quando a conta já é própria |
-| WhatsApp | Evolution API (não oficial) | adapter pronto — campanha fria, longe do número institucional (D4) |
+| WhatsApp | **UAZAPI** (não oficial) | adapter pronto — é o não-oficial escolhido (D22), campanha fria |
+| WhatsApp | Evolution API (não oficial) | adapter pronto — é o que roda no legado; contas novas vão para UAZAPI |
 | SMS | Comtele | adapter pronto |
 | E-mail | SMTP | declarado sem adapter |
 | Instagram | Graph API | declarado sem adapter |
@@ -249,6 +250,21 @@ confundem porque o app vem da credencial da conta, nunca de constante no adapter
 segredo e um gatilho recusa gravá-los em `sender_accounts.config`. Não existe coluna para a chave.
 
 Provedor sem adapter aparece na tela e **não** vira opção de envio: o motor recusa antes de prometer.
+
+### Um buraco conhecido no canal não-oficial
+
+A resposta do contato só encerra o enrollment se o webhook citar a mensagem que o motor mandou —
+é por `provider_message_id` que `registrar_evento_provedor` liga as duas pontas. As APIs oficiais
+mandam esse `context`; as não oficiais, normalmente não.
+
+O adapter da UAZAPI, por isso, **só emite `respondido` quando há citação**. Sem citação ele não
+emite nada, porque o id que o payload traz é o da mensagem do contato e não casa com nada em
+`messages` — registrar seria inventar um vínculo.
+
+**Então a invariante 4 não vale para resposta sem citação no canal não-oficial**, e vale o mesmo
+para Evolution hoje. Consertar exige decidir como o webhook identifica a conta que o recebeu (uma
+URL por `sender_account`, ou o provedor mandando a instância no payload). Está registrado em D23 e
+ainda não foi decidido.
 
 ## Navegação do console
 

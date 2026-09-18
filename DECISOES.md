@@ -119,6 +119,7 @@ O spike S1 muda de objeto: medir queima do pool Evolution atual, com dados de pr
 existem, em vez de um experimento de duas semanas com UAZAPI.
 **Reversível a custo baixo:** a interface `ChannelAdapter` não conhece provedor. Adotar UAZAPI
 depois é uma classe nova no `adapters/` e uma linha no registro — nada no motor muda.
+**Revisada por D22:** o compromisso existe, e UAZAPI passou a ser o não-oficial.
 *Confirmar com o time comercial se há compromisso contratual com UAZAPI que eu não enxergo pelo
 código.*
 
@@ -225,6 +226,39 @@ quatro assuntos em Configurações e quatro canais, empilhar tudo numa página s
 navegação e vira rolagem.
 **Consequência:** o rail tem grupos que abrem e fecham, e só o grupo da tela atual fica aberto.
 Clicar num grupo já aberto fecha — nunca pula direto para o conteúdo de um filho.
+
+### D22 — O não-oficial passa a ser UAZAPI; Evolution fica no catálogo
+Revisa D14. Ela concluiu Evolution porque o inventário da Fase 0 não achou UAZAPI em repositório
+nenhum, e deixou a pergunta explícita: *confirmar com o time comercial se há compromisso contratual
+com UAZAPI que eu não enxergo pelo código*. Há. Então UAZAPI é o não-oficial daqui para frente.
+*Justificativa:* a decisão é contratual, não técnica — e D14 já previa isto ao dizer que era
+"reversível a custo baixo, porque a interface `ChannelAdapter` não conhece provedor". Foi
+exatamente isso: uma classe em `adapters/whatsapp-uazapi.ts` e uma linha no catálogo.
+**Evolution não sai.** É o que roda hoje no legado e é para onde os chips existentes apontam;
+removê-la do catálogo quebraria a chave estrangeira dessas contas no dia do backfill. Os dois
+convivem, UAZAPI aparece primeiro, e a troca de chip é operacional — conta a conta.
+**Sobre a API:** confirmado na documentação que o envio é `POST {base}/send/text` com corpo
+`{number, text}` e autenticação por header `token` (o da instância, nunca o `adminToken` — enviar
+não precisa de poder administrativo). O nome do campo que carrega o id da mensagem varia entre
+versões, então o adapter lê de uma lista de grafias em vez de um caminho fixo. Isso está comentado
+no arquivo, separando o que é confirmado do que é defensivo.
+
+### D23 — Nas APIs não oficiais, resposta só encerra enrollment se vier citando
+`registrar_evento_provedor` liga o retorno à mensagem por `provider_message_id`. Nas APIs oficiais
+isso funciona: a Meta e a Gupshup mandam o `context` da mensagem respondida. Nas não oficiais, a
+resposta do contato normalmente **não cita nada** — o payload traz o id da mensagem *dele*, que não
+existe em `messages`.
+*Decisão:* o adapter da UAZAPI só emite `respondido` quando há citação. Sem citação, não emite —
+gravar o id dele seria inventar um vínculo que nunca casa.
+**Consequência, que é um buraco aberto:** a invariante 4 (resposta encerra o enrollment inteiro)
+**não vale** para resposta sem citação no canal não-oficial. O contato responde, o motor não fica
+sabendo, e a cadência continua. Vale hoje para Evolution também — o adapter atual emite o id da
+mensagem do contato, que igualmente não casa; a diferença é que ele registra um evento inútil em vez
+de nenhum.
+*O conserto pede uma decisão que ainda não foi tomada:* casar a resposta **pelo número** exige saber
+de qual conta veio o webhook, e hoje o webhook não diz. As opções são uma URL de webhook por
+`sender_account`, ou o provedor mandar a instância no payload e o motor resolver a conta a partir
+dela. Enquanto não for decidido, campanha fria multi-toque pode tocar quem já respondeu.
 
 ---
 
