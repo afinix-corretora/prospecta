@@ -101,6 +101,12 @@ e elas têm teste automatizado obrigatório.**
   dentro da função — a UI manda o que foi preenchido e não conhece provedor nenhum (D28).
 - **Nunca** escrever segredo no comando de um job do `pg_cron`. `cron.job` é tabela comum: vai para
   backup, réplica e `pg_dump`. A chave fica no Vault e é lida na batida (D29).
+- **Nunca** abrir exceção de runtime em `adapters/`. Ali só entra `fetch` — é o que faz o mesmo
+  arquivo rodar no Deno da edge function e no Node do teste. Provedor que exige socket não vira
+  adapter; vira linha de catálogo com `tem_adapter = false` (D30).
+- **Nunca** devolver `culpa = 'destino'` por erro que não é do contato. Isso invalida
+  `contact_identities` e escreve `identidade_invalida` no CRM. Domínio não verificado e chave sem
+  permissão são culpa do remetente (D30).
 
 ---
 
@@ -125,9 +131,11 @@ e elas têm teste automatizado obrigatório.**
 > (`processar_vencidos`), decidem e reivindicam sem enviar — o que torna a Fase 3 possível sem
 > nenhum adapter. O mapa de status do backfill está fechado em `backfill/mapa_status.sql`.
 >
-> A Fase 1 tem cinco adapters em `adapters/` (Gupshup, Meta Cloud, UAZAPI, Evolution, Comtele) com a superfície de
-> despacho em SQL (`reivindicar_pendentes`, `registrar_resultado_envio`,
-> `registrar_evento_provedor`). E-mail e Instagram ainda não têm adapter, e o registro declara isso.
+> A Fase 1 tem seis adapters em `adapters/` (Gupshup, Meta Cloud, UAZAPI, Evolution, Comtele, Resend) com a
+> superfície de despacho em SQL (`reivindicar_pendentes`, `registrar_resultado_envio`,
+> `registrar_evento_provedor`). O Instagram ainda não tem adapter, e o registro declara isso; `smtp`
+> segue no catálogo sem adapter de propósito, porque socket não cabe num diretório que só usa
+> `fetch` (D30).
 > Cada chip tem a sua URL de webhook (D24), e a UAZAPI cria instância pela própria plataforma (D25).
 >
 > O worker existe (`supabase/functions/motor-worker`), roda em `simulado` por padrão, e com ele a
@@ -141,7 +149,7 @@ e elas têm teste automatizado obrigatório.**
 > domínio, chaves estrangeiras compostas `(tenant_id, id)` e RLS por papel. `tests/tenants.sql`
 > entra na pele de dois clientes diferentes e confere o SQLSTATE de cada recusa.
 >
-> O schema está **aplicado no projeto `hucuwjvihqgftdjpnych`** (18 migrations), conferido por
+> O schema está **aplicado no projeto `hucuwjvihqgftdjpnych`** (19 migrations), conferido por
 > digest estrutural contra o banco de teste — colunas, constraints, índices, políticas, corpos de
 > função e a grade de privilégios batem byte a byte.
 >

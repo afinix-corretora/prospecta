@@ -356,6 +356,39 @@ passado a depender delas, e um `CREATE EXTENSION` custa menos que descobrir o qu
 **`ultimas_passadas` existe porque shadow mode não tem sintoma.** Ninguém recebe mensagem, então um
 401 no worker pareceria exatamente igual a "não havia vencidos".
 
+### D30 — E-mail sai por provedor HTTP, não por SMTP
+O adapter de e-mail é `resend`. `smtp` continua no catálogo com `tem_adapter = false`.
+*Justificativa:* `adapters/tipos.ts` diz, na primeira linha, que ali não entra API de runtime — só
+`fetch`. É o que faz o mesmo arquivo rodar no Deno da edge function e no Node do teste, sem mock.
+SMTP precisa de socket. Ligar SMTP significaria abrir essa exceção para os quatro canais de uma vez,
+e um provedor HTTP entrega o mesmo e-mail sem cobrar esse preço.
+**`smtp` não sai do catálogo,** pelo mesmo motivo que a Evolution ficou quando a UAZAPI entrou
+(D22): sumir com a opção esconde a decisão. Fica listado, declarado sem adapter, com a descrição
+dizendo por quê — o motor recusa antes de prometer, em vez de falhar na hora do disparo.
+**O assunto vem do próprio passo, não de uma coluna nova.** `flow_steps.template` é um texto só
+porque os outros três canais não têm assunto; abrir coluna no motor para a necessidade de um canal
+contraria "canal novo = classe nova, zero mudança no motor". O passo pode começar com
+`Assunto: ...`, e quando não começa vale `assunto_padrao` — **campo obrigatório do remetente**, de
+modo que "passo de e-mail sem assunto" deixa de ser um estado possível.
+**A alternativa óbvia — "a primeira linha é o assunto" — foi recusada:** transforma todo parágrafo
+curto de abertura em assunto sem que ninguém tenha pedido, e um template já escrito viraria um
+e-mail errado sem aviso.
+**4xx do provedor é culpa do remetente, não do destino.** `culpa = 'destino'` marca
+`contact_identities.valida = false` e escreve `identidade_invalida` no CRM; um domínio não
+verificado queimaria o e-mail do contato por um erro que é da conta. Quem diz que um endereço morreu
+é o `email.bounced` do webhook.
+**`responder_para` é o que faz a invariante 4 valer no canal.** A resposta só vira `email.received`
+se cair num domínio de inbound; sem isso a pessoa responde para uma caixa que o motor não lê e a
+cadência continua andando — o mesmo furo que o D23 fechou no WhatsApp não oficial. E o casamento é
+pelo endereço, nunca pelo `email_id` do e-mail recebido, que é da mensagem dela e não existe em
+`messages`.
+**`Idempotency-Key` leva a invariante 1 para o outro lado da rede.** A chave única
+`(enrollment_id, step_id)` garante uma mensagem no banco; o lease pode expirar e a mesma mensagem
+ser reivindicada de novo, e aí quem impede o segundo envio é o provedor.
+**Junto veio a checagem de campo obrigatório em `salvar_credencial_remetente`,** que a de IA já
+tinha e esta não. Sem ela, `assunto_padrao` obrigatório seria enfeite do catálogo validado só pela
+tela — e quem valida não pode ser a tela (D28).
+
 ---
 
 ## Decisões adiadas (não decidir agora)
@@ -366,6 +399,7 @@ passado a depender delas, e um `CREATE EXTENSION` custa menos que descobrir o qu
 | Volumes-alvo e quotas por remetente | Dados virão do shadow mode. Decidir antes é chute. |
 | Telas de operação e relatórios | Reversível. Depende de como o flow se comporta em produção. |
 | Construtor visual de flows | Só faz sentido quando o time comercial precisar editar (hoje não precisa, D9). |
+| Denúncia de spam e bounce virarem supressão | Hoje `email.complained` e `email.bounced` gravam `rejeitado` e param aí. Transformar em `suppression` é decisão de produto — vale para os quatro canais, não só e-mail, e endereço suprimido não volta. Decidir com o primeiro volume real de campanha fria. |
 
 ---
 

@@ -20,8 +20,8 @@ BEGIN INSERT INTO pv.resultado (nome, ok, detalhe)
 -- O catálogo semeado
 -- ---------------------------------------------------------------------------
 
-SELECT pv.confere('o catálogo traz os sete provedores',
-  (SELECT count(*) = 7 FROM channel_provider_catalog),
+SELECT pv.confere('o catálogo traz os oito provedores',
+  (SELECT count(*) = 8 FROM channel_provider_catalog),
   (SELECT count(*)::text FROM channel_provider_catalog));
 
 SELECT pv.confere('WhatsApp tem oficial e não oficial separados',
@@ -59,6 +59,57 @@ SELECT pv.confere('quem não tem adapter está declarado, não escondido',
   (SELECT array_agg(slug ORDER BY slug) = ARRAY['instagram_oficial','smtp']
      FROM channel_provider_catalog WHERE NOT tem_adapter),
   (SELECT string_agg(slug, ', ' ORDER BY slug) FROM channel_provider_catalog WHERE NOT tem_adapter));
+
+-- D30: e-mail passa a ter adapter, e ele é HTTP. SMTP continua listado sem
+-- adapter de propósito — sumir com a opção esconderia a decisão.
+SELECT pv.confere('e-mail tem provedor com adapter',
+  (SELECT count(*) FILTER (WHERE tem_adapter) = 1
+     FROM channel_provider_catalog WHERE canal = 'email'));
+
+SELECT pv.confere('SMTP segue no catálogo, declarado sem adapter',
+  (SELECT NOT tem_adapter AND ativo FROM channel_provider_catalog WHERE slug = 'smtp'));
+
+-- O adapter lê `assunto_padrao` com `exigir`, e é este campo que faz "passo de
+-- e-mail sem assunto" não existir como estado possível.
+SELECT pv.confere('Resend exige assunto padrão, e ele não é segredo',
+  (SELECT count(*) = 1 FROM channel_provider_catalog p, jsonb_array_elements(p.campos) c
+    WHERE p.slug = 'resend' AND c ->> 'chave' = 'assunto_padrao'
+      AND (c ->> 'obrigatorio')::boolean AND NOT (c ->> 'segredo')::boolean));
+
+-- Sem `responder_para` apontando para um inbound, a resposta de e-mail cai
+-- numa caixa que o motor não lê e a invariante 4 não vale no canal.
+SELECT pv.confere('Resend declara para onde a resposta volta',
+  (SELECT EXISTS (SELECT 1 FROM channel_provider_catalog p, jsonb_array_elements(p.campos) c
+                   WHERE p.slug = 'resend' AND c ->> 'chave' = 'responder_para')));
+
+-- Conta de e-mail com provedor de WhatsApp é erro de cadastro que só apareceria
+-- na hora do disparo; quem recusa é o gatilho, não a tela.
+DO $$
+BEGIN
+  INSERT INTO sender_accounts (canal, identificador, provedor, tipo_permitido, quota_diaria)
+  VALUES ('email','frio@exemplo.com.br','uazapi','fria',200);
+  PERFORM pv.confere('provedor de outro canal é recusado no remetente de e-mail',
+    false, 'aceitou');
+EXCEPTION WHEN restrict_violation THEN
+  PERFORM pv.confere('provedor de outro canal é recusado no remetente de e-mail', true);
+WHEN others THEN
+  PERFORM pv.confere('provedor de outro canal é recusado no remetente de e-mail',
+    false, SQLSTATE || ': ' || SQLERRM);
+END;
+$$;
+
+DO $$
+BEGIN
+  INSERT INTO sender_accounts (canal, identificador, provedor, tipo_permitido, quota_diaria, config)
+  VALUES ('email','frio2@exemplo.com.br','resend','fria',200,'{"api_key":"re_123"}'::jsonb);
+  PERFORM pv.confere('chave da Resend não pode ir para config', false, 'aceitou');
+EXCEPTION WHEN restrict_violation THEN
+  PERFORM pv.confere('chave da Resend não pode ir para config', true);
+WHEN others THEN
+  PERFORM pv.confere('chave da Resend não pode ir para config',
+    false, SQLSTATE || ': ' || SQLERRM);
+END;
+$$;
 
 SELECT pv.confere('todo provedor declara ao menos um campo secreto',
   NOT EXISTS (

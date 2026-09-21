@@ -304,6 +304,37 @@ WHEN others THEN
 END;
 $$;
 
+-- Obrigatório é obrigatório no banco, não só na tela (D28/D30). `base_url` é
+-- campo obrigatório da UAZAPI, e sem esta checagem o chip nascia com uma
+-- credencial pela metade que só falharia no primeiro disparo.
+DO $$
+BEGIN
+  PERFORM set_config('request.jwt.claims','{"sub":"11111111-aaaa-0000-0000-00000000000a"}', true);
+  PERFORM salvar_credencial_remetente('ee000000-0000-0000-0000-000000000001',
+    '{"token":"t"}'::jsonb);
+  PERFORM wh.confere('campo obrigatório em branco é recusado', false, 'aceitou');
+EXCEPTION WHEN invalid_parameter_value THEN
+  PERFORM wh.confere('campo obrigatório em branco é recusado', true);
+WHEN others THEN
+  PERFORM wh.confere('campo obrigatório em branco é recusado', false, SQLSTATE || ': ' || SQLERRM);
+END;
+$$;
+
+-- E o segredo também: conta sem token guardado não passa mandando token vazio.
+DO $$
+BEGIN
+  PERFORM set_config('request.jwt.claims','{"sub":"11111111-aaaa-0000-0000-00000000000a"}', true);
+  PERFORM salvar_credencial_remetente('ee000000-0000-0000-0000-000000000001',
+    '{"token":"","base_url":"https://uaz.exemplo.com"}'::jsonb);
+  PERFORM wh.confere('segredo obrigatório em branco sem valor guardado é recusado', false, 'aceitou');
+EXCEPTION WHEN invalid_parameter_value THEN
+  PERFORM wh.confere('segredo obrigatório em branco sem valor guardado é recusado', true);
+WHEN others THEN
+  PERFORM wh.confere('segredo obrigatório em branco sem valor guardado é recusado',
+                     false, SQLSTATE || ': ' || SQLERRM);
+END;
+$$;
+
 SELECT set_config('request.jwt.claims','', true);
 
 SELECT wh.confere('as duas funções de configuração são API de usuário logado',

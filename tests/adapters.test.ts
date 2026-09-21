@@ -16,8 +16,10 @@ import { WhatsAppUazapiAdapter } from '../adapters/whatsapp-uazapi.ts';
 import { WhatsAppEvolutionAdapter } from '../adapters/whatsapp-evolution.ts';
 import { WhatsAppMetaAdapter } from '../adapters/whatsapp-meta.ts';
 import { SmsComteleAdapter } from '../adapters/sms-comtele.ts';
+import { EmailResendAdapter } from '../adapters/email-resend.ts';
 import { criarAdapter, canalTemAdapter, PROVEDORES_POR_CANAL } from '../adapters/registro.ts';
 import { normalizarTelefone, telefoneValido } from '../adapters/telefone.ts';
+import { emailValido, montarRemetente, normalizarEmail, separarAssunto } from '../adapters/email.ts';
 
 /** fetch falso que grava a chamada e devolve o que o teste mandar. */
 function fetchFalso(status: number, corpo: unknown) {
@@ -698,6 +700,242 @@ test('uazapi checkHealth bate em /instance/status', async () => {
 });
 
 // ---------------------------------------------------------------------------
+// E-mail — endereço, assunto e o adapter HTTP
+// ---------------------------------------------------------------------------
+
+test('normaliza endereço com nome de exibição', () => {
+  assert.equal(normalizarEmail('Ana Castro <Ana.Castro@Exemplo.com.BR>'), 'ana.castro@exemplo.com.br');
+});
+
+test('endereço sem domínio com ponto não é endereço', () => {
+  assert.equal(emailValido('ana@localhost'), false);
+  assert.equal(emailValido('ana@exemplo.com.br'), true);
+});
+
+test('lista disfarçada de endereço é recusada', () => {
+  // Vírgula e ponto-e-vírgula viram vários destinatários no provedor. Um
+  // `destino` com vírgula é contato mal ingerido, não um envio para dois.
+  assert.equal(emailValido('a@x.com,b@y.com'), false);
+  assert.equal(emailValido('a@x.com; b@y.com'), false);
+});
+
+test('remetente leva nome de exibição quando há um', () => {
+  assert.equal(montarRemetente('ana@x.com.br', 'Ana da Afinix'), 'Ana da Afinix <ana@x.com.br>');
+  assert.equal(montarRemetente('ana@x.com.br'), 'ana@x.com.br');
+});
+
+test('nome de exibição não injeta cabeçalho', () => {
+  assert.equal(montarRemetente('ana@x.com.br', 'Ana" <spam@mal.com>'), 'Ana spam@mal.com <ana@x.com.br>');
+});
+
+test('assunto sai da primeira linha marcada', () => {
+  const r = separarAssunto('Assunto: Comparativo do plano\n\nAna, segue o que combinamos.', 'padrão');
+  assert.equal(r.assunto, 'Comparativo do plano');
+  assert.equal(r.corpo, 'Ana, segue o que combinamos.');
+});
+
+test('parágrafo curto de abertura não vira assunto sem marcador', () => {
+  const r = separarAssunto('Ana, tudo bem?\n\nQueria te mostrar duas opções.', 'Plano de saúde');
+  assert.equal(r.assunto, 'Plano de saúde');
+  assert.equal(r.corpo, 'Ana, tudo bem?\n\nQueria te mostrar duas opções.');
+});
+
+test('marcador sem corpo não consome a única linha do template', () => {
+  const r = separarAssunto('Assunto: só isso', 'Plano de saúde');
+  assert.equal(r.assunto, 'Plano de saúde');
+  assert.equal(r.corpo, 'Assunto: só isso');
+});
+
+const CRED_RESEND = {
+  api_key: 're_123',
+  assunto_padrao: 'Plano de saúde da sua empresa',
+  nome_remetente: 'Ana da Afinix',
+  responder_para: 'respostas@inbound.afinix.com.br',
+};
+
+const PEDIDO_EMAIL: PedidoEnvio = {
+  messageId: 'aa000000-0000-0000-0000-000000000001',
+  destino: 'Ana Castro <ANA@exemplo.com.br>',
+  conteudo: 'Assunto: Comparativo\n\nAna, segue o comparativo.',
+  remetente: 'comercial@frio.afinix.com.br',
+  credenciais: CRED_RESEND,
+};
+
+test('resend: envia no formato da API, com assunto do próprio passo', async () => {
+  const { buscar, chamadas } = fetchFalso(200, { id: 'em-1' });
+  const r = await new EmailResendAdapter(buscar).send(PEDIDO_EMAIL);
+
+  assert.equal(r.ok, true);
+  assert.equal(r.providerMessageId, 'em-1');
+  assert.equal(chamadas[0].url, 'https://api.resend.com/emails');
+
+  const cab = chamadas[0].init!.headers as Record<string, string>;
+  assert.equal(cab.Authorization, 'Bearer re_123');
+
+  assert.deepEqual(JSON.parse(String(chamadas[0].init!.body)), {
+    from: 'Ana da Afinix <comercial@frio.afinix.com.br>',
+    to: ['ana@exemplo.com.br'],
+    subject: 'Comparativo',
+    text: 'Ana, segue o comparativo.',
+    reply_to: 'respostas@inbound.afinix.com.br',
+  });
+});
+
+test('resend: a invariante 1 atravessa a rede pela Idempotency-Key', () => {
+  // O lease pode expirar e a mesma mensagem ser reivindicada de novo. A chave
+  // única no banco não alcança o provedor; esta chave alcança.
+  const { buscar, chamadas } = fetchFalso(200, { id: 'em-1' });
+  return new EmailResendAdapter(buscar).send(PEDIDO_EMAIL).then(() => {
+    const cab = chamadas[0].init!.headers as Record<string, string>;
+    assert.equal(cab['Idempotency-Key'], PEDIDO_EMAIL.messageId);
+  });
+});
+
+test('resend: sem assunto no passo, vale o assunto padrão da conta', async () => {
+  const { buscar, chamadas } = fetchFalso(200, { id: 'em-2' });
+  await new EmailResendAdapter(buscar).send({ ...PEDIDO_EMAIL, conteudo: 'Ana, tudo bem?' });
+
+  const corpo = JSON.parse(String(chamadas[0].init!.body));
+  assert.equal(corpo.subject, 'Plano de saúde da sua empresa');
+  assert.equal(corpo.text, 'Ana, tudo bem?');
+});
+
+test('resend: conta sem assunto padrão é culpa do remetente, não do contato', async () => {
+  // 'destino' invalidaria `contact_identities` e escreveria identidade_invalida
+  // no CRM por um erro de configuração da conta.
+  const { buscar } = fetchFalso(200, { id: 'em-3' });
+  const r = await new EmailResendAdapter(buscar).send({
+    ...PEDIDO_EMAIL,
+    conteudo: 'Ana, tudo bem?',
+    credenciais: { api_key: 're_123' },
+  });
+
+  assert.equal(r.ok, false);
+  assert.equal(r.culpa, 'remetente');
+  assert.match(r.erro!, /assunto_padrao/);
+});
+
+test('resend: sem responder_para o campo não vai vazio', async () => {
+  const { buscar, chamadas } = fetchFalso(200, { id: 'em-4' });
+  await new EmailResendAdapter(buscar).send({
+    ...PEDIDO_EMAIL,
+    credenciais: { api_key: 're_123', assunto_padrao: 'Oi' },
+  });
+
+  assert.equal('reply_to' in JSON.parse(String(chamadas[0].init!.body)), false);
+});
+
+test('resend: endereço inválido é culpa do destino e nem chega a sair', async () => {
+  const { buscar, chamadas } = fetchFalso(200, { id: 'nao-deveria' });
+  const r = await new EmailResendAdapter(buscar).send({ ...PEDIDO_EMAIL, destino: 'ana@' });
+
+  assert.equal(r.ok, false);
+  assert.equal(r.culpa, 'destino');
+  assert.equal(chamadas.length, 0);
+});
+
+test('resend: 422 do provedor não invalida o e-mail do contato', async () => {
+  // Domínio não verificado e chave sem permissão chegam como 4xx. Quem diz que
+  // um endereço morreu é o `email.bounced`, não o retorno do POST.
+  const { buscar } = fetchFalso(422, { name: 'validation_error', message: 'domínio não verificado' });
+  const r = await new EmailResendAdapter(buscar).send(PEDIDO_EMAIL);
+
+  assert.equal(r.ok, false);
+  assert.equal(r.culpa, 'remetente');
+  assert.equal(r.erro, 'domínio não verificado');
+});
+
+test('resend: 429 e 5xx são transitórios, não derrubam a conta', async () => {
+  for (const status of [429, 500, 503]) {
+    const { buscar } = fetchFalso(status, { message: 'tente de novo' });
+    const r = await new EmailResendAdapter(buscar).send(PEDIDO_EMAIL);
+    assert.equal(r.culpa, 'transitorio', `status ${status}`);
+  }
+});
+
+test('resend: 200 sem id é falha, não sucesso mudo', async () => {
+  const { buscar } = fetchFalso(200, {});
+  const r = await new EmailResendAdapter(buscar).send(PEDIDO_EMAIL);
+  assert.equal(r.ok, false);
+});
+
+test('resend: rede caída é transitória', async () => {
+  const r = await new EmailResendAdapter(fetchQueExplode('ECONNRESET')).send(PEDIDO_EMAIL);
+  assert.equal(r.ok, false);
+  assert.equal(r.culpa, 'transitorio');
+});
+
+test('resend: evento de entrega casa pelo id da mensagem', () => {
+  const eventos = new EmailResendAdapter().normalizeWebhook({
+    type: 'email.delivered',
+    created_at: '2026-09-21T12:00:00.000Z',
+    data: { email_id: 'em-1', to: ['ana@exemplo.com.br'] },
+  });
+
+  assert.equal(eventos.length, 1);
+  assert.equal(eventos[0].providerMessageId, 'em-1');
+  assert.equal(eventos[0].tipo, 'entregue');
+  assert.equal(eventos[0].ocorridoEm, '2026-09-21T12:00:00.000Z');
+});
+
+test('resend: clique é engajamento, não resposta (D7)', () => {
+  const [e] = new EmailResendAdapter().normalizeWebhook({
+    type: 'email.clicked', created_at: '2026-09-21T12:00:00.000Z',
+    data: { email_id: 'em-1' },
+  });
+  assert.equal(e.tipo, 'clique');
+});
+
+test('resend: bounce e denúncia de spam viram rejeitado', () => {
+  for (const t of ['email.bounced', 'email.complained']) {
+    const [e] = new EmailResendAdapter().normalizeWebhook({
+      type: t, created_at: '2026-09-21T12:00:00.000Z', data: { email_id: 'em-1' },
+    });
+    assert.equal(e.tipo, 'rejeitado', t);
+  }
+});
+
+test('resend: resposta casa pelo endereço, nunca pelo id do e-mail recebido', () => {
+  // `data.email_id` no email.received é o id da mensagem DELA, que não existe
+  // em `messages`. Emitir providerMessageId aqui gravaria evento que nunca casa.
+  const [e] = new EmailResendAdapter().normalizeWebhook({
+    type: 'email.received',
+    created_at: '2026-09-21T12:05:00.000Z',
+    data: { email_id: 'in-9', from: 'Ana Castro <ANA@exemplo.com.br>', subject: 'Re: Comparativo' },
+  });
+
+  assert.equal(e.providerMessageId, undefined);
+  assert.equal(e.deNumero, 'ana@exemplo.com.br');
+  assert.equal(e.tipo, 'respondido');
+});
+
+test('resend: evento sem tipo conhecido não vira evento vizinho', () => {
+  // delivery_delayed ainda pode entregar; virar 'falha' estragaria o status
+  // derivado de uma mensagem que está viva.
+  const a = new EmailResendAdapter();
+  assert.deepEqual(a.normalizeWebhook({ type: 'email.delivery_delayed', data: { email_id: 'em-1' } }), []);
+  assert.deepEqual(a.normalizeWebhook({ type: 'email.scheduled', data: { email_id: 'em-1' } }), []);
+  assert.deepEqual(a.normalizeWebhook({ nada: true }), []);
+});
+
+test('resend: evento sem id de mensagem é descartado', () => {
+  assert.deepEqual(new EmailResendAdapter().normalizeWebhook({ type: 'email.delivered', data: {} }), []);
+});
+
+test('resend: saúde é a chave respondendo, não um ping qualquer', async () => {
+  const { buscar, chamadas } = fetchFalso(200, { data: [] });
+  const s = await new EmailResendAdapter(buscar).checkHealth({ api_key: 're_123' });
+
+  assert.equal(s.ok, true);
+  assert.equal(chamadas[0].url, 'https://api.resend.com/domains');
+});
+
+test('resend: chave recusada é saúde ruim', async () => {
+  const { buscar } = fetchFalso(401, { name: 'missing_api_key' });
+  assert.equal((await new EmailResendAdapter(buscar).checkHealth({ api_key: 'x' })).ok, false);
+});
+
+// ---------------------------------------------------------------------------
 // Registro
 // ---------------------------------------------------------------------------
 
@@ -705,6 +943,7 @@ test('registro devolve o adapter de cada provedor', () => {
   assert.equal(criarAdapter('evolution').provedor, 'evolution');
   assert.equal(criarAdapter('meta_cloud').canal, 'whatsapp');
   assert.equal(criarAdapter('comtele').canal, 'sms');
+  assert.equal(criarAdapter('resend').canal, 'email');
 });
 
 test('provedor sem adapter falha alto, não silencioso', () => {
@@ -714,8 +953,13 @@ test('provedor sem adapter falha alto, não silencioso', () => {
 test('canais sem adapter são declarados, não descobertos em produção', () => {
   assert.equal(canalTemAdapter('whatsapp'), true);
   assert.equal(canalTemAdapter('sms'), true);
-  assert.equal(canalTemAdapter('email'), false);
+  assert.equal(canalTemAdapter('email'), true);
   assert.equal(canalTemAdapter('instagram'), false);
+});
+
+test('smtp está no catálogo e fora do registro, de propósito (D30)', () => {
+  assert.equal(PROVEDORES_POR_CANAL.email.includes('smtp' as never), false);
+  assert.throws(() => criarAdapter('smtp'), /provedor sem adapter/);
 });
 
 test('todo provedor listado no registro tem adapter construível', () => {

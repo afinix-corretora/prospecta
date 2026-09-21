@@ -15,7 +15,7 @@ import type { Familia } from '../componentes/Rail';
 
 const DESC_CANAL: Record<string, string> = {
   whatsapp: 'Oficial pela Gupshup, não oficial pela UAZAPI. Cada conta tem quota e segredo próprios.',
-  email: 'Caixa de saída própria. Campanha fria usa domínio separado do institucional.',
+  email: 'Envio por API. Campanha fria usa domínio separado do institucional, e a resposta volta pelo inbound.',
   sms: 'Uma linha, 160 caracteres. Confirma intenção e move a conversa de canal.',
   instagram: 'Direct só dentro da janela de 24h aberta pela própria pessoa.',
 };

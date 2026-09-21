@@ -98,9 +98,11 @@ provedor.
 | `evolution` | whatsapp (não-oficial) | `send-evolution-message` + `evolution-webhook` |
 | `meta_cloud` | whatsapp (oficial) | `meta-send-via-bsp` + `meta-webhook` |
 | `comtele` | sms | `comtele-send-sms` |
+| `resend` | email | nada — é novo (D30) |
 
-E-mail e Instagram ainda não têm adapter, e o registro **declara isso** em
-`PROVEDORES_POR_CANAL` — melhor do que descobrir em produção.
+O Instagram ainda não tem adapter, e o registro **declara isso** em `PROVEDORES_POR_CANAL` — melhor
+do que descobrir em produção. `smtp` está no catálogo e fora do registro de propósito: socket não
+cabe na primeira regra abaixo (D30).
 
 Três regras que valem para qualquer adapter novo:
 
@@ -239,7 +241,8 @@ inexistente é recusado no cadastro, não na hora do envio.
 | WhatsApp | **UAZAPI** (não oficial) | adapter pronto — é o não-oficial escolhido (D22), campanha fria |
 | WhatsApp | Evolution API (não oficial) | adapter pronto — é o que roda no legado; contas novas vão para UAZAPI |
 | SMS | Comtele | adapter pronto |
-| E-mail | SMTP | declarado sem adapter |
+| E-mail | **Resend** (API HTTP) | adapter pronto (D30) |
+| E-mail | SMTP | declarado sem adapter — precisa de socket, o motor só fala HTTP |
 | Instagram | Graph API | declarado sem adapter |
 
 **Múltiplas contas é o caso normal.** Cada app da Gupshup é um `sender_account` com o seu
@@ -251,6 +254,21 @@ confundem porque o app vem da credencial da conta, nunca de constante no adapter
 segredo e um gatilho recusa gravá-los em `sender_accounts.config`. Não existe coluna para a chave.
 
 Provedor sem adapter aparece na tela e **não** vira opção de envio: o motor recusa antes de prometer.
+
+**Campo obrigatório é cobrado pelo banco**, não pela tela: `salvar_credencial_remetente` lê o
+catálogo e recusa credencial pela metade. É o que faz `assunto_padrao` do e-mail ser uma garantia —
+sem ele, "passo de e-mail sem assunto" voltaria a ser um estado possível. Na edição, segredo em
+branco mantém o que já está no Vault; campo não-secreto em branco limpa.
+
+### E-mail: assunto e resposta
+
+O passo de e-mail pode começar com uma linha `Assunto: ...`, seguida de linha em branco; quando não
+começa, vale o **Assunto padrão** da conta. Não existe coluna de assunto no motor, porque os outros
+três canais não têm assunto — o dialeto do e-mail mora no adapter, como todo dialeto aqui.
+
+**Preencha "Responder para" com um endereço de inbound.** É por ele que a resposta vira
+`email.received` e encerra o enrollment (invariante 4). Sem isso a pessoa responde para uma caixa
+que o motor não lê, e a cadência continua tocando — o mesmo furo que o D23 fechou no WhatsApp.
 
 ### Como a resposta encerra a cadência
 
