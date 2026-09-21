@@ -389,6 +389,30 @@ ser reivindicada de novo, e aí quem impede o segundo envio é o provedor.
 tinha e esta não. Sem ela, `assunto_padrao` obrigatório seria enfeite do catálogo validado só pela
 tela — e quem valida não pode ser a tela (D28).
 
+### D31 — O pool pergunta ao catálogo antes de escolher remetente
+`remetentes_disponiveis` passa a exigir `tem_adapter` e `ativo` do provedor.
+*Justificativa:* `tem_adapter` existia desde o D17 e **nenhum SQL o lia**. O README, o comentário da
+tabela e a própria migration do D30 afirmavam "provedor sem adapter não vira opção de envio: o motor
+recusa antes de prometer" — e não era verdade. Reproduzido antes de corrigir: conta de e-mail em
+`smtp` devolvia `mensagem_criada`.
+**O estrago não era o erro, era o passo queimado.** O roteador escolhia a conta, `processar_vencidos`
+criava a mensagem e avançava `passo_atual` e `next_run_at`, e só o despachante estourava — virando
+`culpa = 'remetente'`, falha registrada e health score derrubado. A pessoa nunca recebia o toque, a
+cadência andava como se tivesse recebido, e o console mostrava uma conta boa adoecendo por um
+provedor que nunca soube enviar.
+**Adiar é recuperável; queimar não.** Sem candidato o roteador já fazia a coisa certa —
+`adiado_sem_remetente` — e no dia em que o adapter existir os enrollments parados andam sozinhos.
+**Cadastrar a conta continua permitido.** Os chips do legado apontam para provedores que podem não
+ter adapter no dia do backfill; foi por isso que o D22 manteve a Evolution no catálogo. Quem filtra
+é o pool, não a chave estrangeira.
+**`ativo` entra junto pela mesma razão:** o gatilho só olha o INSERT, então nada impedia uma conta já
+criada de continuar sendo escolhida depois de o provedor ser desligado no catálogo.
+**`proximo_horario_de_pool` não muda.** Ela só responde "quando vale a pena reperguntar", e
+reperguntar cedo demais não machuca ninguém.
+**O demo era o cenário defeituoso.** `demo/preview.sql` tinha justamente uma conta de e-mail em
+`smtp` — mais uma vez foi o cenário completo, e não o teste unitário, que expôs a diferença entre o
+que estava escrito e o que o motor fazia (como no D15).
+
 ---
 
 ## Decisões adiadas (não decidir agora)

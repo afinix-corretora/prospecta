@@ -107,6 +107,9 @@ e elas têm teste automatizado obrigatório.**
 - **Nunca** devolver `culpa = 'destino'` por erro que não é do contato. Isso invalida
   `contact_identities` e escreve `identidade_invalida` no CRM. Domínio não verificado e chave sem
   permissão são culpa do remetente (D30).
+- **Nunca** deixar o roteador prometer um envio que o despachante não tem como fazer. Coluna de
+  catálogo que ninguém lê não é garantia: o pool pergunta `tem_adapter` e `ativo` antes de escolher,
+  e sem candidato o passo é adiado, nunca queimado (D31).
 
 ---
 
@@ -149,7 +152,7 @@ e elas têm teste automatizado obrigatório.**
 > domínio, chaves estrangeiras compostas `(tenant_id, id)` e RLS por papel. `tests/tenants.sql`
 > entra na pele de dois clientes diferentes e confere o SQLSTATE de cada recusa.
 >
-> O schema está **aplicado no projeto `hucuwjvihqgftdjpnych`** (19 migrations), conferido por
+> O schema está **aplicado no projeto `hucuwjvihqgftdjpnych`** (20 migrations), conferido por
 > digest estrutural contra o banco de teste — colunas, constraints, índices, políticas, corpos de
 > função e a grade de privilégios batem byte a byte.
 >

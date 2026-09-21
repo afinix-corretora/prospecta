@@ -86,8 +86,12 @@ INSERT INTO sender_accounts
    'gupshup','morna',200,'{"app_name":"afinix-comercial","source":"5511990000001"}'::jsonb),
   ('dd000000-0000-0000-0000-000000000004','whatsapp','+55 11 99000-0002','Retenção',
    'gupshup','morna',200,'{"app_name":"afinix-retencao","source":"5511990000002"}'::jsonb),
+  -- Resend, não SMTP: `smtp` é declarado sem adapter (D30) e desde o D31 o pool
+  -- nem enxerga conta assim. O demo com uma conta dessas era o cenário que o
+  -- D31 conserta — mostrava e-mail saindo por um provedor que não envia.
   ('dd000000-0000-0000-0000-000000000002','email','resgate@afinix-relaciona.com.br','Domínio de relacionamento',
-   'smtp','morna',300,'{"host":"smtp.afinix-relaciona.com.br","porta":"587","usuario":"resgate"}'::jsonb),
+   'resend','morna',300,
+   '{"assunto_padrao":"Seu plano de saúde na Afinix","nome_remetente":"Afinix Corretora","responder_para":"resgate@inbound.afinix-relaciona.com.br"}'::jsonb),
   -- Chip frio com quota baixa de propósito: é o que faz o freio aparecer.
   ('dd000000-0000-0000-0000-000000000003','whatsapp','+55 11 98000-0009','Chip frio SP',
    'uazapi','fria',2,'{"base_url":"https://afinix.uazapi.com","instancia":"fria-sp"}'::jsonb);

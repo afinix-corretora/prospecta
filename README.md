@@ -253,7 +253,10 @@ confundem porque o app vem da credencial da conta, nunca de constante no adapter
 **O segredo é verificado pelo banco**, como em `ai_credentials`: o catálogo marca quais campos são
 segredo e um gatilho recusa gravá-los em `sender_accounts.config`. Não existe coluna para a chave.
 
-Provedor sem adapter aparece na tela e **não** vira opção de envio: o motor recusa antes de prometer.
+Provedor sem adapter aparece na tela e **não** vira opção de envio: `remetentes_disponiveis` exige
+`tem_adapter` e `ativo` do catálogo, então o roteador adia o passo (`adiado_sem_remetente`) em vez de
+criar uma mensagem que vai falhar no disparo. Cadastrar a conta continua permitido — os chips do
+legado precisam disso (D31).
 
 **Campo obrigatório é cobrado pelo banco**, não pela tela: `salvar_credencial_remetente` lê o
 catálogo e recusa credencial pela metade. É o que faz `assunto_padrao` do e-mail ser uma garantia —

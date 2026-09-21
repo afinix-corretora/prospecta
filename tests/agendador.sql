@@ -85,7 +85,7 @@ INSERT INTO flow_steps (id, flow_version_id, ordem, canal, atraso_horas, templat
 
 INSERT INTO sender_accounts (id, canal, identificador, provedor, tipo_permitido, quota_diaria) VALUES
   ('b7000000-0000-0000-0000-000000000001','whatsapp','5513988801','evolution','morna',100),
-  ('b7000000-0000-0000-0000-000000000002','email','morno@ex.com','smtp','morna',100);
+  ('b7000000-0000-0000-0000-000000000002','email','morno@ex.com','resend','morna',100);
 -- De propósito: nenhum remetente de campanha fria.
 
 -- ---------------------------------------------------------------------------
@@ -441,6 +441,51 @@ SELECT a.confere('adiamento: pool vazio tenta de novo em uma hora',
   proximo_horario_de_pool('00000000-0000-0000-0000-0000000000aa','email','fria') BETWEEN now() + interval '59 minutes'
                                               AND now() + interval '61 minutes',
   proximo_horario_de_pool('00000000-0000-0000-0000-0000000000aa','email','fria')::text);
+
+-- ---------------------------------------------------------------------------
+-- D31: provedor sem adapter adia o passo, não o queima
+-- ---------------------------------------------------------------------------
+--
+-- O ramo que faltava. Antes disto o roteador escolhia a conta, criava a
+-- mensagem e avançava a cadência; a pessoa não recebia nada e o passo estava
+-- gasto. Adiar é recuperável: no dia em que o adapter existir, o enrollment
+-- parado anda sozinho.
+
+DO $$
+DECLARE v_contato uuid; v_enr uuid; v_campanha uuid; v_flow uuid; v_versao uuid;
+BEGIN
+  INSERT INTO sender_accounts (canal, identificador, apelido, provedor, tipo_permitido, quota_diaria, config)
+  VALUES ('email','frio@sem-adapter.com.br','Sem adapter','smtp','fria',300,
+          '{"host":"smtp.sem-adapter.com.br","porta":"587","usuario":"r"}'::jsonb);
+
+  INSERT INTO campaigns (nome, tipo, base_legal, canais_habilitados)
+  VALUES ('Fria por e-mail','fria','legítimo interesse','{email}') RETURNING id INTO v_campanha;
+  INSERT INTO flows (nome) VALUES ('Resgate por e-mail') RETURNING id INTO v_flow;
+  INSERT INTO flow_versions (flow_id, versao) VALUES (v_flow, 1) RETURNING id INTO v_versao;
+  INSERT INTO flow_steps (flow_version_id, ordem, canal, atraso_horas, template)
+  VALUES (v_versao, 1, 'email', 0, 'Oi {{nome}}');
+
+  v_contato := gen_random_uuid();
+  INSERT INTO contacts (id, nome, origem) VALUES (v_contato,'Marina','planilha');
+  INSERT INTO contact_identities (contact_id, canal, valor, valor_norm, origem)
+  VALUES (v_contato,'email','marina@exemplo.com','marina@exemplo.com','planilha');
+  v_enr := inscrever(v_contato, v_campanha, v_versao, now() - interval '1 minute');
+
+  PERFORM a.confere('sem adapter: o passo é adiado, não prometido',
+    a.acao_de(v_enr, 'real') = 'adiado_sem_remetente',
+    a.acao_de(v_enr, 'real'));
+
+  PERFORM a.confere('sem adapter: nenhuma mensagem nasce para falhar depois',
+    NOT EXISTS (SELECT 1 FROM messages WHERE enrollment_id = v_enr));
+
+  PERFORM a.confere('sem adapter: o enrollment continua vivo e volta depois',
+    (SELECT status = 'ativo' AND next_run_at > now() FROM enrollments WHERE id = v_enr));
+
+  PERFORM a.confere('sem adapter: o passo não foi consumido',
+    (SELECT passo_atual = 0 FROM enrollments WHERE id = v_enr),
+    (SELECT passo_atual::text FROM enrollments WHERE id = v_enr));
+END;
+$$;
 
 -- ---------------------------------------------------------------------------
 -- Relatório

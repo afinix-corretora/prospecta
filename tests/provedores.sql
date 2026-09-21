@@ -176,6 +176,46 @@ SELECT pv.confere('a mesma Gupshup serve pool morno e frio sem misturar',
      WHERE provedor = 'gupshup'));
 
 -- ---------------------------------------------------------------------------
+-- D31: provedor que não sabe enviar não é opção de envio
+-- ---------------------------------------------------------------------------
+--
+-- `tem_adapter` existia desde o D17 e ninguém em SQL lia. O sintoma não era
+-- erro, era passo queimado: o roteador escolhia a conta, a mensagem nascia, a
+-- cadência avançava, e a falha só aparecia no despachante — com o health score
+-- de uma conta boa caindo por um provedor que nunca soube enviar.
+
+INSERT INTO sender_accounts
+  (id, canal, identificador, apelido, provedor, tipo_permitido, quota_diaria, config) VALUES
+  ('ff000000-0000-0000-0000-000000000001','email','resgate@exemplo.com.br','Sem adapter',
+   'smtp','morna',300,'{"host":"smtp.exemplo.com.br","porta":"587","usuario":"r"}'::jsonb),
+  ('ff000000-0000-0000-0000-000000000002','email','frio@exemplo.com.br','Com adapter',
+   'resend','fria',300,'{"assunto_padrao":"Plano de saúde"}'::jsonb);
+
+SELECT pv.confere('conta em provedor sem adapter fica fora do pool',
+  NOT EXISTS (SELECT 1 FROM remetentes_disponiveis(tenant_padrao(), 'email', 'morna')),
+  (SELECT string_agg(provedor, ', ')
+     FROM remetentes_disponiveis(tenant_padrao(), 'email', 'morna')));
+
+SELECT pv.confere('e a conta do provedor que envia continua no pool',
+  (SELECT count(*) = 1 FROM remetentes_disponiveis(tenant_padrao(), 'email', 'fria')
+    WHERE provedor = 'resend'));
+
+-- Cadastrar continua permitido: os chips do legado apontam para provedores que
+-- podem não ter adapter no dia do backfill, e foi por isso que a Evolution
+-- ficou no catálogo (D22). Quem filtra é o pool, não a chave estrangeira.
+SELECT pv.confere('cadastrar a conta continua permitido, só enviar é que não',
+  (SELECT count(*) = 1 FROM sender_accounts WHERE provedor = 'smtp'));
+
+-- Provedor desligado no catálogo depois das contas criadas: o gatilho só olha
+-- o INSERT, então sem isto a conta seguia sendo escolhida.
+UPDATE channel_provider_catalog SET ativo = false WHERE slug = 'resend';
+
+SELECT pv.confere('provedor desligado no catálogo também sai do pool',
+  NOT EXISTS (SELECT 1 FROM remetentes_disponiveis(tenant_padrao(), 'email', 'fria')));
+
+UPDATE channel_provider_catalog SET ativo = true WHERE slug = 'resend';
+
+-- ---------------------------------------------------------------------------
 -- Segredo não tem onde ser gravado errado
 -- ---------------------------------------------------------------------------
 
