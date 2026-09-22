@@ -566,6 +566,34 @@ entrou na linha do tempo por causa disso.
 o `least`, porque o cenário tinha três eventos — mesmo formato do `tem_adapter` do D31. Agora o
 teste insere 600 eventos e cobra os 500.
 
+### D37 — Os pendentes passam a rebalancear de verdade
+`reivindicar_pendentes` vira plpgsql: antes de entregar uma mensagem ao despachante, confere se o
+remetente gravado ainda despacha. Se não, troca por outro do mesmo pool; se não houver nenhum,
+devolve a mensagem à fila em vez de entregá-la a uma conta morta.
+*Justificativa:* a invariante 3 do `CLAUDE.md` promete "conta com erro sai do pool sozinha (circuit
+breaker) e **os pendentes rebalanceiam**" — e o comentário do `registrar_falha_remetente` dizia até
+por quê: *"os pendentes rebalanceiam porque remetentes_disponiveis deixa de retorná-la"*. **O
+raciocínio estava escrito e estava errado.** `remetentes_disponiveis` decide para quem vão as
+mensagens **futuras**; quem a consulta é o roteador, ao criar a mensagem. Uma mensagem que já existe
+carrega o remetente na própria linha, e `reivindicar_pendentes` nunca reperguntava ao pool.
+Reproduzido antes de corrigir, com duas contas boas no mesmo pool: com o circuito de A aberto,
+`remetentes_disponiveis` devolvia B (certo) e `reivindicar_pendentes` devolvia a mensagem com A
+(errado). O estrago é um laço: o despachante tenta por uma conta morta, falha, a falha volta como
+`culpa = 'remetente'` e afunda A mais um pouco, a mensagem segue `pendente`, e na próxima expiração
+do lease tudo se repete — com B parado ao lado.
+**A reserva do remetente antigo não é devolvida.** Não dá para saber se ele chegou a entregar antes
+de adoecer, e devolver o crédito é o único jeito de furar a invariante 3: contar a mais aperta o
+envio, contar a menos ultrapassa a quota.
+**Quota não entra na checagem do remetente atual.** A reserva daquela mensagem já foi paga quando o
+roteador a criou; recobrar seria negar o mesmo envio duas vezes.
+**Circuito vencido passa a fechar na borda do lote.** Antes só fechava dentro de `reservar_envio`,
+que só roda para quem já foi escolhido — e o pool não escolhe conta de circuito aberto. A conta
+ficava presa até alguém tentar usá-la, e ninguém tentava.
+**O meta-teste pegou um erro meu no arquivo de reversão.** O `down` refazia a função com
+`CREATE OR REPLACE` sem `SET search_path`, que é exatamente o que o D19 aplica por ALTER em massa e
+o que `CREATE OR REPLACE` descarta — terceira vez que essa armadilha aparece no projeto, e a
+primeira em que foi um teste, e não uma leitura atenta, que a pegou.
+
 ---
 
 ## Decisões adiadas (não decidir agora)

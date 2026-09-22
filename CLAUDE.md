@@ -60,7 +60,9 @@ e elas têm teste automatizado obrigatório.**
 2. **Supressão.** Contato em `suppression` nunca recebe nada, por nenhum caminho de código.
    A checagem acontece no roteador, antes do adapter — não dentro de cada adapter.
 3. **Rate limit por remetente.** Nenhum `sender_account` ultrapassa sua quota. Conta com erro sai do
-   pool sozinha (circuit breaker) e os pendentes rebalanceiam.
+   pool sozinha (circuit breaker), e os pendentes rebalanceiam — o que exige duas coisas, não uma:
+   `remetentes_disponiveis` deixa de oferecê-la às mensagens **futuras**, e `reivindicar_pendentes`
+   troca o remetente das que **já existem** (D37).
 4. **Encerramento global.** Resposta em qualquer canal encerra o enrollment inteiro, não só o passo.
 
 ---
@@ -143,6 +145,11 @@ e elas têm teste automatizado obrigatório.**
   reserva** remetente igual — quem diz que nada saiu é o `status` da mensagem (D36).
 - **Nunca** escrever asserção que o cenário não consegue violar. Teto de 500 com três linhas no
   banco passa com e sem o teto — é o `tem_adapter` do D31 outra vez (D36).
+- **Nunca** supor que tirar a conta do pool move as mensagens que já existem. `remetentes_disponiveis`
+  decide o **futuro**; a mensagem pendente carrega o remetente na linha, e quem a move é
+  `reivindicar_pendentes` (D37).
+- **Nunca** devolver a reserva de quota de um envio que não se sabe se saiu. Contar a mais aperta o
+  envio; contar a menos fura a invariante 3 (D37).
 
 ---
 
