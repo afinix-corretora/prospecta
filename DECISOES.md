@@ -673,6 +673,33 @@ Mesma lógica do D37: adiar é recuperável, queimar não é.
 **`falha_permanente` entra em "cancelar"** junto com os outros. Nada no motor o produz hoje — só o
 mapa do backfill — e enrollment que terminou em falha permanente não ganha nada com mais um toque.
 
+### D41 — A supressão ganha porta de entrada
+Tela `app/src/telas/Supressao.tsx`: lista quem está suprimido, adiciona um endereço, importa uma
+lista de opt-out. Suprimir o contato inteiro fica na linha da pessoa, na tela de contatos.
+*Justificativa:* a invariante 2 se apoia inteira nesta tabela, e o D39 e o D40 a tornaram
+autoritativa até no despacho — mas **nada no motor, no app ou no webhook escrevia nela**. Só SQL à
+mão. É o mesmo buraco que o D32 achou na ingestão: a garantia existia, a porta de entrada não.
+**Sem função nova em `public`.** `authenticated` já tem INSERT e a política de RLS já carrega a
+regra; criar uma função só para repetir o que a política diz aumentaria a superfície do PostgREST
+sem ganhar garantia. O teste passou a exercitar esse caminho **no papel de quem usa o produto**:
+operador insere, leitor é recusado com 42501, e operador da A não suprime no cliente B. As duas
+negativas foram conferidas contra a versão que passaria.
+**O canal é deduzido do que foi digitado, pelos normalizadores dos adapters.** Telefone entra em
+whatsapp **e** sms — quem pediu para parar não pediu só num canal. É a leitura da coluna genérica
+do D33 com a consequência invertida, e por isso segura: suprimir a mais nunca machuca ninguém.
+**A importação de lista reusa `PlanilhaSource`.** Normalizar em outro lugar é exatamente como a
+supressão fica furada (D32), e o primeiro dia de qualquer migração é justamente a lista de opt-out
+que já existia antes do motor.
+**Duplicata não é erro.** `23505` do índice único vira "já estava lá" — do ponto de vista de quem
+pediu para sair, o resultado é o mesmo.
+**Não há remover, e a tela diz por quê.** A tabela é imutável por gatilho; tirar alguém dali seria
+voltar a falar com quem pediu para parar. Suprimir um contato pede confirmação pela mesma razão.
+
+**O que isto NÃO resolve, e continua aberto:** quem responde "PARE" numa cadência tem o enrollment
+encerrado por resposta (invariante 4), **mas não entra na supressão** — então a campanha seguinte
+volta a falar com ele. Detectar opt-out em texto livre é decisão de produto (e há agentes de IA no
+schema para isso); está anotado junto com a pergunta de bounce e denúncia.
+
 ---
 
 ## Decisões adiadas (não decidir agora)
@@ -683,6 +710,7 @@ mapa do backfill — e enrollment que terminou em falha permanente não ganha na
 | Volumes-alvo e quotas por remetente | Dados virão do shadow mode. Decidir antes é chute. |
 | Telas de operação e relatórios | Reversível. Depende de como o flow se comporta em produção. |
 | Construtor visual de flows | Só faz sentido quando o time comercial precisar editar (hoje não precisa, D9). |
+| Resposta "PARE" virar supressão | Hoje a resposta encerra o enrollment (invariante 4) mas **não** suprime, então a campanha seguinte volta a falar com a pessoa. Detectar opt-out em texto livre é decisão de produto, e há agentes de IA no schema para isso. A porta de entrada manual já existe (D41). |
 | Denúncia de spam e bounce virarem supressão | Hoje `email.complained` e `email.bounced` gravam `rejeitado` e param aí. Transformar em `suppression` é decisão de produto — vale para os quatro canais, não só e-mail, e endereço suprimido não volta. Decidir com o primeiro volume real de campanha fria. |
 
 ---

@@ -246,6 +246,62 @@ SELECT tn.confere('opt-out na A NÃO suprime o mesmo telefone na B',
   NOT esta_suprimido('bbbbbbbb-0000-0000-0000-00000000000b',
                      'b0000000-0000-0000-0000-00000000000b', 'whatsapp', '5511999990000'));
 
+-- D41: a tela de supressão insere DIRETO na tabela, sem função intermediária.
+-- Quem autoriza é a política de RLS, e é ela que este bloco exercita — no
+-- papel de quem usa o produto, não com privilégio de manutenção.
+DO $$
+BEGIN
+  SET LOCAL role authenticated;
+  SET LOCAL request.jwt.claims = '{"sub":"33333333-aaaa-0000-0000-00000000000a"}';
+  INSERT INTO suppression (tenant_id, canal, valor_norm, motivo)
+  VALUES ('aaaaaaaa-0000-0000-0000-00000000000a', 'email',
+          'optout@exemplo.com.br', 'pediu por telefone');
+  RESET role;
+  PERFORM tn.confere('operador suprime um endereço pela tela', true);
+EXCEPTION WHEN insufficient_privilege THEN
+  RESET role;
+  PERFORM tn.confere('operador suprime um endereço pela tela', false, '42501');
+END;
+$$;
+
+SELECT tn.confere('e o endereço suprimido pela tela vale para quem nem é contato',
+  esta_suprimido('aaaaaaaa-0000-0000-0000-00000000000a', NULL,
+                 'email', 'optout@exemplo.com.br'));
+
+DO $$
+BEGIN
+  SET LOCAL role authenticated;
+  SET LOCAL request.jwt.claims = '{"sub":"22222222-aaaa-0000-0000-00000000000a"}';
+  BEGIN
+    INSERT INTO suppression (tenant_id, canal, valor_norm, motivo)
+    VALUES ('aaaaaaaa-0000-0000-0000-00000000000a', 'email',
+            'leitor@exemplo.com.br', 'não devia passar');
+    RESET role;
+    PERFORM tn.confere('leitor não suprime ninguém', false, '(o INSERT passou)');
+  EXCEPTION WHEN insufficient_privilege THEN
+    RESET role;
+    PERFORM tn.confere('leitor não suprime ninguém (42501)', true);
+  END;
+END;
+$$;
+
+DO $$
+BEGIN
+  SET LOCAL role authenticated;
+  SET LOCAL request.jwt.claims = '{"sub":"33333333-aaaa-0000-0000-00000000000a"}';
+  BEGIN
+    INSERT INTO suppression (tenant_id, canal, valor_norm, motivo)
+    VALUES ('bbbbbbbb-0000-0000-0000-00000000000b', 'email',
+            'vizinho@exemplo.com.br', 'no cliente errado');
+    RESET role;
+    PERFORM tn.confere('operador da A não suprime no cliente B', false, '(o INSERT passou)');
+  EXCEPTION WHEN insufficient_privilege THEN
+    RESET role;
+    PERFORM tn.confere('operador da A não suprime no cliente B (42501)', true);
+  END;
+END;
+$$;
+
 SELECT tn.confere('inscrever na A é recusado depois do opt-out',
   inscrever('a0000000-0000-0000-0000-00000000000a',
             (SELECT id FROM campaigns WHERE nome = 'Campanha da A'),

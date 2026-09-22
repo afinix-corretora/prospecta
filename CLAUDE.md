@@ -173,6 +173,8 @@ e elas têm teste automatizado obrigatório.**
   cancelada não é recriável, porque `(enrollment_id, step_id)` é única (D40).
 - **Sempre** perguntar, ao alargar o tempo de vida de um estado: *o que mais assume que ele é
   curto?* O D37 alargou a janela `pendente` e só o D39 e o D40 foram atrás do que ela quebrou.
+- **Nunca** criar função em `public` para repetir o que a política de RLS já diz. A tela de
+  supressão insere direto; o teste é que passa a rodar no papel de quem usa o produto (D41).
 
 ---
 

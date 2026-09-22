@@ -14,7 +14,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useSessao } from '../sessao';
 import { Aviso, Kpi, NOME_CANAL, Secao, corCanal } from '../componentes/base';
 import {
-  inscrever, lerCampanhas, lerContatos, lerVersoesDeFlow, preverInscricao,
+  inscrever, lerCampanhas, lerContatos, lerVersoesDeFlow, preverInscricao, suprimirContato,
 } from '../dados';
 import type { Campanha, Contato, ContatoPrevisto, VersaoDeFlow } from '../dados';
 import { mensagemDeErro } from '../supabase';
@@ -93,6 +93,7 @@ export function Contatos() {
                 <th>Nome</th>
                 <th>Como falar</th>
                 <th>Origem</th>
+                <th />
               </tr>
             </thead>
             <tbody>
@@ -108,6 +109,12 @@ export function Contatos() {
                   <td style={{ color: 'var(--ink)' }}>{c.nome ?? <i>(sem nome)</i>}</td>
                   <td><Identidades lista={c.contact_identities} /></td>
                   <td>{c.origem}{c.origem_ref ? ` · ${c.origem_ref}` : ''}</td>
+                  <td>
+                    {opera && tenant && (
+                      <Suprimir tenant={tenant.tenant_id} contato={c}
+                                aoSuprimir={() => void recarregar(busca)} />
+                    )}
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -123,6 +130,56 @@ export function Contatos() {
         />
       )}
     </>
+  );
+}
+
+/**
+ * Suprimir a pessoa inteira, da linha dela.
+ *
+ * Pede confirmação porque **não tem volta**: `suppression` é imutável por
+ * gatilho, e voltar atrás exigiria mexer no banco por fora. Confirmar aqui é
+ * mais barato do que descobrir depois que não dá.
+ */
+function Suprimir({ tenant, contato, aoSuprimir }: {
+  tenant: string; contato: Contato; aoSuprimir(): void;
+}) {
+  const [confirmando, setConfirmando] = useState(false);
+  const [erro, setErro] = useState('');
+
+  async function gravar() {
+    setErro('');
+    try {
+      await suprimirContato({
+        tenant, contato: contato.id, motivo: 'opt-out registrado pelo operador',
+      });
+      setConfirmando(false);
+      aoSuprimir();
+    } catch (e) { setErro(mensagemDeErro(e)); }
+  }
+
+  if (erro) return <span style={{ color: 'var(--erro, crimson)', fontSize: 11 }}>{erro}</span>;
+
+  if (!confirmando) {
+    return (
+      <button className="btn" style={{ fontSize: 11, padding: '3px 8px' }}
+              onClick={() => setConfirmando(true)}>
+        Suprimir
+      </button>
+    );
+  }
+
+  return (
+    <span style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}>
+      <span style={{ fontSize: 11, color: 'var(--ink-3)' }}>não tem volta:</span>
+      <button className="btn prim" style={{ fontSize: 11, padding: '3px 8px' }}
+              onClick={() => void gravar()}>
+        confirmar
+      </button>
+      <button className="btn" style={{ fontSize: 11, padding: '3px 8px' }}
+              onClick={() => setConfirmando(false)}>
+        não
+      </button>
+    </span>
   );
 }
 

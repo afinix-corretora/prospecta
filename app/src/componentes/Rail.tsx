@@ -61,6 +61,11 @@ export function Rail({ provedores }: { provedores: ProvedorCanal[] }) {
         >
           Importar
         </button>
+        {/* Primeiro nível junto dos contatos: é a outra metade da base — quem
+            está dentro e quem nunca pode ser tocado. */}
+        <button aria-current={atual('/supressao')} onClick={() => nav('/supressao')}>
+          Supressão
+        </button>
 
         <button
           className="grupo"

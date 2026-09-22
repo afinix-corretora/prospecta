@@ -507,3 +507,61 @@ export async function lerEventosDaCampanha(
   if (error) throw error;
   return (data ?? []) as EventoDaCampanha[];
 }
+
+// ---------------------------------------------------------------------------
+// Supressão (D41)
+// ---------------------------------------------------------------------------
+
+export interface Supressao {
+  id: string;
+  contact_id: string | null;
+  canal: ProvedorCanal['canal'] | null;
+  valor_norm: string | null;
+  motivo: string;
+  criado_em: string;
+  contacts: { nome: string | null } | null;
+}
+
+export const lerSupressoes = (limite = 500) =>
+  tabela<Supressao>('suppression',
+    'id, contact_id, canal, valor_norm, motivo, criado_em, contacts(nome)', 'criado_em')
+    .then((l) => l.slice(-limite).reverse());
+
+/**
+ * Uma supressão por endereço: vale para quem já está na base e para quem
+ * ainda vai entrar, porque `esta_suprimido` casa por `(canal, valor_norm)`
+ * independentemente de existir contato.
+ *
+ * Não há função de remover, e não é esquecimento: `suppression` é imutável
+ * por gatilho. Tirar alguém de lá seria voltar a falar com quem pediu para
+ * parar, e isso não é operação de tela.
+ */
+export async function suprimirEndereco(dados: {
+  tenant: string; canal: string; valorNorm: string; motivo: string;
+}): Promise<'nova' | 'ja_existia'> {
+  const { error } = await sb.from('suppression').insert({
+    tenant_id: dados.tenant,
+    canal: dados.canal,
+    valor_norm: dados.valorNorm,
+    motivo: dados.motivo,
+  });
+  // 23505 é violação de índice único: já estava suprimido, que é sucesso do
+  // ponto de vista de quem pediu — o endereço não recebe nada de qualquer jeito.
+  if (error && (error as { code?: string }).code === '23505') return 'ja_existia';
+  if (error) throw error;
+  return 'nova';
+}
+
+/** Supressão do contato inteiro: nenhum canal, nunca mais. */
+export async function suprimirContato(dados: {
+  tenant: string; contato: string; motivo: string;
+}): Promise<'nova' | 'ja_existia'> {
+  const { error } = await sb.from('suppression').insert({
+    tenant_id: dados.tenant,
+    contact_id: dados.contato,
+    motivo: dados.motivo,
+  });
+  if (error && (error as { code?: string }).code === '23505') return 'ja_existia';
+  if (error) throw error;
+  return 'nova';
+}
