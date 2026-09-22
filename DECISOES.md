@@ -412,6 +412,15 @@ reperguntar cedo demais não machuca ninguém.
 **O demo era o cenário defeituoso.** `demo/preview.sql` tinha justamente uma conta de e-mail em
 `smtp` — mais uma vez foi o cenário completo, e não o teste unitário, que expôs a diferença entre o
 que estava escrito e o que o motor fazia (como no D15).
+**A mesma varredura achou o formato de falha repetido nos meta-testes.** `tests/tenants.sql`
+conferia RLS contra uma **lista de tabelas escrita à mão**, e a lista já tinha ficado para trás:
+`provider_servers` entrou com o D24 e nunca foi adicionada — tinha RLS por sorte, não por
+verificação. Pior: a FK composta `(tenant_id, id)`, que o D18 chama de camada 2 e é a única que
+vale contra o worker (service key, RLS não alcança), era a garantia mais citada do projeto e não
+tinha asserção nenhuma. Os três meta-testes agora são derivados do schema: tabela nova nasce
+obrigada a ter `tenant_id`, RLS e FK composta, e isentá-la exige entrar numa lista curta de exceções
+e dizer por quê. Cada um foi verificado contra uma violação real antes de entrar — asserção que
+nunca falha é do mesmo tamanho de coluna que ninguém lê.
 
 ---
 

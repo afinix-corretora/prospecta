@@ -277,17 +277,63 @@ COMMIT;
 -- Toda tabela de domínio tem RLS ligado
 -- ---------------------------------------------------------------------------
 
-SELECT tn.confere('nenhuma tabela de domínio ficou sem RLS',
+-- Estes três meta-testes são derivados do schema, não de uma lista escrita à
+-- mão. A versão anterior enumerava as tabelas, e a lista já tinha ficado para
+-- trás: `provider_servers` entrou com o D24 e nunca foi adicionada — passou a
+-- ter RLS por sorte, não por verificação. É o mesmo formato de falha do D31,
+-- onde `tem_adapter` existia e ninguém lia.
+--
+-- A exceção é uma lista curta e explícita, e é isso que faz o teste servir: a
+-- tabela nova nasce obrigada, e quem quiser isentá-la tem que vir aqui dizer
+-- por quê. `tenants` é o próprio cliente; os dois catálogos são software, não
+-- dado de cliente — iguais para todos, como o comentário deles já declara.
+
+CREATE VIEW tn.sem_dono AS SELECT unnest(ARRAY[
+  'tenants', 'channel_provider_catalog', 'ai_provider_catalog'
+]) AS tabela;
+
+CREATE VIEW tn.dominio AS
+  SELECT c.oid, c.relname
+    FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+   WHERE n.nspname = 'public' AND c.relkind = 'r'
+     AND c.relname NOT IN (SELECT tabela FROM tn.sem_dono);
+
+SELECT tn.confere('nenhuma tabela de domínio ficou sem tenant_id',
   NOT EXISTS (
-    SELECT 1 FROM pg_tables t
-     WHERE t.schemaname = 'public'
-       AND t.tablename IN ('contacts','contact_identities','campaigns','flows','flow_versions',
-         'flow_steps','enrollments','messages','message_events','sender_accounts','suppression',
-         'outbox','agents','ai_credentials','campaign_agents','campaign_templates',
-         'tenants','tenant_users')
-       AND NOT t.rowsecurity),
-  (SELECT string_agg(tablename, ', ') FROM pg_tables
-    WHERE schemaname='public' AND NOT rowsecurity));
+    SELECT 1 FROM tn.dominio d
+     WHERE NOT EXISTS (SELECT 1 FROM pg_attribute a
+                        WHERE a.attrelid = d.oid AND a.attname = 'tenant_id'
+                          AND NOT a.attisdropped)),
+  (SELECT string_agg(d.relname, ', ') FROM tn.dominio d
+    WHERE NOT EXISTS (SELECT 1 FROM pg_attribute a
+                       WHERE a.attrelid = d.oid AND a.attname = 'tenant_id'
+                         AND NOT a.attisdropped)));
+
+SELECT tn.confere('nenhuma tabela de public ficou sem RLS',
+  NOT EXISTS (
+    SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+     WHERE n.nspname = 'public' AND c.relkind = 'r' AND NOT c.relrowsecurity),
+  (SELECT string_agg(c.relname, ', ') FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+    WHERE n.nspname='public' AND c.relkind='r' AND NOT c.relrowsecurity));
+
+-- A camada 2 do D18, e a única que vale contra o worker: ele roda com service
+-- key e o RLS não o alcança, então é a FK composta que impede um enrollment do
+-- cliente A apontar para a campanha do cliente B. Era a garantia mais citada do
+-- projeto e a única sem asserção nenhuma.
+SELECT tn.confere('toda FK entre tabelas de domínio carrega tenant_id',
+  NOT EXISTS (
+    SELECT 1 FROM pg_constraint con
+      JOIN tn.dominio src ON src.oid = con.conrelid
+      JOIN tn.dominio alvo ON alvo.oid = con.confrelid
+     WHERE con.contype = 'f'
+       AND NOT con.conkey @> (SELECT array_agg(a.attnum) FROM pg_attribute a
+                               WHERE a.attrelid = con.conrelid AND a.attname = 'tenant_id')),
+  (SELECT string_agg(con.conname, ', ') FROM pg_constraint con
+     JOIN tn.dominio src ON src.oid = con.conrelid
+     JOIN tn.dominio alvo ON alvo.oid = con.confrelid
+    WHERE con.contype = 'f'
+      AND NOT con.conkey @> (SELECT array_agg(a.attnum) FROM pg_attribute a
+                              WHERE a.attrelid = con.conrelid AND a.attname = 'tenant_id')));
 
 SELECT tn.confere('toda tabela com tenant_id tem índice por tenant',
   NOT EXISTS (

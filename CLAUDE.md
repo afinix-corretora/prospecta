@@ -150,7 +150,9 @@ e elas têm teste automatizado obrigatório.**
 >
 > O schema é **multi-tenant desde a primeira migration** (D18): `tenant_id` em toda tabela de
 > domínio, chaves estrangeiras compostas `(tenant_id, id)` e RLS por papel. `tests/tenants.sql`
-> entra na pele de dois clientes diferentes e confere o SQLSTATE de cada recusa.
+> entra na pele de dois clientes diferentes e confere o SQLSTATE de cada recusa, e três meta-testes
+> **derivados do schema** cobram `tenant_id`, RLS e FK composta de toda tabela nova — lista escrita
+> à mão envelhece sem avisar, e essa já tinha perdido a `provider_servers` (D31).
 >
 > O schema está **aplicado no projeto `hucuwjvihqgftdjpnych`** (20 migrations), conferido por
 > digest estrutural contra o banco de teste — colunas, constraints, índices, políticas, corpos de
