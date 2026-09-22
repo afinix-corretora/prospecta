@@ -460,6 +460,34 @@ Sem `ultimas_passadas`, um 401 no worker pareceria exatamente igual a "não havi
 As cinco funções moram em `privado`, sem EXECUTE para `anon` nem `authenticated`: agendar o motor é
 operação da plataforma, não do cliente. Nenhum tenant agenda o motor de ninguém.
 
+## Antes de ligar: republicar as edge functions
+
+As três edge functions no projeto `hucuwjvihqgftdjpnych` estão na **versão 1**, de 18/09. O
+repositório andou muito desde então, e o código publicado está atrás do schema em dois pontos que
+importam:
+
+| O que mudou no repositório | O que a versão publicada faz |
+|---|---|
+| **D38** trocou a assinatura de `registrar_evento_provedor`, que agora exige o chip | `canal-webhook` chama a versão de 4 argumentos, **que não existe mais** — todo evento casado por `provider_message_id` falharia |
+| **D30** acrescentou o adapter da Resend | o pacote publicado não tem `email-resend.ts`; despachar e-mail daria "provedor sem adapter" |
+
+Hoje o raio disso é **zero**: nenhum chip está cadastrado, nenhum provedor aponta para a URL de
+webhook, e o `pg_cron` não está agendado. Mas é uma armadilha para o dia em que estiver.
+
+```bash
+supabase functions deploy motor-worker          --project-ref hucuwjvihqgftdjpnych
+supabase functions deploy canal-webhook         --project-ref hucuwjvihqgftdjpnych
+supabase functions deploy provisionar-instancia --project-ref hucuwjvihqgftdjpnych
+```
+
+O `verify_jwt` de cada uma vem do `supabase/config.toml` e **não** é para ser mexido na mão: o
+`canal-webhook` é `false` de propósito, porque provedor não tem JWT para mandar (D24). Sem essa
+declaração, todo webhook voltaria 401 — e o efeito não seria um erro visível, seria o D23 de volta.
+
+Republicar pela CLI, a partir de um checkout, e não colando arquivo por arquivo: os adapters são
+cheios de expressão regular, e foi exatamente um transporte mexendo numa barra invertida que
+produziu o incidente do D32.
+
 ## Navegação do console
 
 Configurações e Canais são grupos de submenu, não páginas empilhadas. Abrir um grupo mostra o
