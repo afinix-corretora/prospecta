@@ -645,6 +645,34 @@ PostgreSQL, e recriar o tipo obrigaria a reescrever a coluna de toda mensagem. V
 **O enrollment continua sendo encerrado pelo agendador,** na batida seguinte, que já faz isso e tem
 teste. O assunto aqui é só não deixar a mensagem sair.
 
+### D40 — O despachante concorda com o agendador
+`reivindicar_pendentes` passa a olhar o estado do enrollment e da campanha. Parada definitiva
+cancela a mensagem; parada temporária a segura na fila; `fim_dos_passos` despacha normalmente.
+*Justificativa:* é a pergunta que o D39 deveria ter provocado na hora. Se a supressão precisava de
+portão no despacho porque a janela `pendente` é ilimitada, **o que mais assume que essa janela é
+curta?** Três coisas, todas reproduzidas:
+
+| situação | enrollment | despachava |
+|---|---|---|
+| pessoa respondeu | `encerrado` / `resposta` | sim |
+| operador pausou | `pausado` | sim |
+| campanha desligada | `ativo`, campanha `ativa = false` | sim |
+
+A primeira é a **invariante 4 furada pela borda**: "resposta em qualquer canal encerra o enrollment
+inteiro, não só o passo" — e a mensagem já enfileirada saía mesmo assim, ou seja, quem acabou de
+responder levava mais um toque. As outras duas são o despachante discordando do agendador sobre o
+mesmo fato: `processar_vencidos` já pula campanha inativa e só olha enrollment ativo.
+**A regra óbvia está errada, e o experimento mostrou por quê.** "Só despacha enrollment ativo"
+mataria a última mensagem de **todas** as cadências: no último passo o agendador cria a mensagem e
+encerra o enrollment com `fim_dos_passos` na mesma passada. Foi um cenário de um passo só que
+expôs isso — e, quando sabotei a função com a regra ingênua, quem reprovou foi um teste que já
+existia (`tests/rebalanceamento.sql`, seis asserções), não o novo.
+**Parada temporária segura, não cancela.** Pausa e campanha desligada voltam atrás; cancelar
+perderia o passo para sempre, porque a chave única `(enrollment_id, step_id)` impede recriá-lo.
+Mesma lógica do D37: adiar é recuperável, queimar não é.
+**`falha_permanente` entra em "cancelar"** junto com os outros. Nada no motor o produz hoje — só o
+mapa do backfill — e enrollment que terminou em falha permanente não ganha nada com mais um toque.
+
 ---
 
 ## Decisões adiadas (não decidir agora)

@@ -65,7 +65,9 @@ e elas têm teste automatizado obrigatório.**
    pool sozinha (circuit breaker), e os pendentes rebalanceiam — o que exige duas coisas, não uma:
    `remetentes_disponiveis` deixa de oferecê-la às mensagens **futuras**, e `reivindicar_pendentes`
    troca o remetente das que **já existem** (D37).
-4. **Encerramento global.** Resposta em qualquer canal encerra o enrollment inteiro, não só o passo.
+4. **Encerramento global.** Resposta em qualquer canal encerra o enrollment inteiro, não só o passo
+   — inclusive a mensagem que já estava na fila esperando despacho (D40). Encerrar a cadência e
+   mandar mais um toque é a invariante furada pela borda.
 
 ---
 
@@ -162,6 +164,15 @@ e elas têm teste automatizado obrigatório.**
   o despacho precisa do seu próprio portão, porque a janela entre um e outro é ilimitada (D39).
 - **Nunca** marcar como `falha` uma mensagem que não saiu por opt-out. Opt-out honrado não é defeito
   do motor nem da conta que ia enviar — é `cancelado` (D39).
+- **Nunca** deixar o despachante discordar do agendador sobre o mesmo fato. Se `processar_vencidos`
+  pula campanha inativa e enrollment encerrado, `reivindicar_pendentes` também pula (D40).
+- **Nunca** filtrar despacho por "enrollment ativo". O último passo de toda cadência encerra o
+  enrollment na mesma passada que cria a mensagem: o filtro mataria o último toque de todas as
+  campanhas. O que distingue é o **motivo** do encerramento (D40).
+- **Nunca** cancelar por parada que volta atrás. Pausa e campanha desligada seguram a mensagem;
+  cancelada não é recriável, porque `(enrollment_id, step_id)` é única (D40).
+- **Sempre** perguntar, ao alargar o tempo de vida de um estado: *o que mais assume que ele é
+  curto?* O D37 alargou a janela `pendente` e só o D39 e o D40 foram atrás do que ela quebrou.
 
 ---
 

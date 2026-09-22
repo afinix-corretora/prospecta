@@ -29,15 +29,16 @@ const MOTIVO: Record<string, string> = {
 /** Contagem de mensagens: concorda com "mensagens". */
 const STATUS_PLURAL: Record<string, string> = {
   simulado: 'em shadow mode', pendente: 'na fila', enviado: 'enviadas', falha: 'com falha',
-  // Canceladas são opt-out honrado depois de a mensagem já existir (D39).
-  // Ficam longe de "com falha" de propósito: não são defeito do motor.
-  cancelado: 'canceladas por supressão',
+  // Cancelada é mensagem que não saiu porque o estado mudou enquanto ela
+  // esperava: opt-out (D39), ou cadência encerrada por resposta (D40). Fica
+  // longe de "com falha" de propósito — não é defeito do motor.
+  cancelado: 'canceladas antes de sair',
 };
 
 /** Etiqueta de uma mensagem só, no evento. */
 const STATUS: Record<string, string> = {
   simulado: 'shadow mode', pendente: 'na fila', enviado: 'enviado', falha: 'falha',
-  cancelado: 'cancelada por supressão',
+  cancelado: 'cancelada antes de sair',
 };
 
 export function Campanha() {
@@ -95,9 +96,11 @@ export function Campanha() {
 
       {canceladas > 0 && (
         <Aviso tipo="neutro">
-          <b>{canceladas}</b> {canceladas === 1 ? 'mensagem foi cancelada' : 'mensagens foram canceladas'}{' '}
-          porque o contato entrou na supressão <b>depois</b> de a mensagem ser criada. O opt-out foi
-          honrado; não é falha do motor nem da conta que ia enviar (D39).
+          <b>{canceladas}</b> {canceladas === 1 ? 'mensagem não saiu' : 'mensagens não saíram'}{' '}
+          porque o estado mudou enquanto ela esperava na fila: o contato entrou na supressão
+          (D39), ou a cadência foi encerrada por resposta antes de o envio acontecer (D40).
+          Nos dois casos a decisão foi respeitada — não é falha do motor nem da conta que ia
+          enviar, e por isso não conta como tal.
         </Aviso>
       )}
 
