@@ -19,3 +19,19 @@ export function telefoneValido(bruto: string): boolean {
   const n = normalizarTelefone(bruto);
   return n.length >= 12 && n.length <= 15;
 }
+
+/**
+ * Distingue celular de fixo, para a ingestão não prometer WhatsApp num número
+ * que não tem WhatsApp.
+ *
+ * A regra vale só para o DDI 55, onde ela é confiável: depois do DDD, celular
+ * tem nove dígitos e começa com 9; fixo tem oito. Fora do Brasil não se
+ * adivinha — devolve `true` e deixa o provedor recusar, que é melhor do que
+ * descartar em silêncio um número internacional bom.
+ */
+export function celularBrasileiro(bruto: string): boolean {
+  const n = normalizarTelefone(bruto);
+  if (!n.startsWith('55')) return telefoneValido(bruto);
+  const assinante = n.slice(4);
+  return assinante.length === 9 && assinante.startsWith('9');
+}

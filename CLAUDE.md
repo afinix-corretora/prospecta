@@ -110,6 +110,17 @@ e elas têm teste automatizado obrigatório.**
 - **Nunca** deixar o roteador prometer um envio que o despachante não tem como fazer. Coluna de
   catálogo que ninguém lê não é garantia: o pool pergunta `tem_adapter` e `ativo` antes de escolher,
   e sem candidato o passo é adiado, nunca queimado (D31).
+- **Nunca** normalizar identidade em dois lugares. Quem normaliza é `adapters/telefone.ts`,
+  `adapters/email.ts` e `adapters/instagram.ts`; o banco **confere** (`privado.normalizada`). Duas
+  normalizações divergentes é, literalmente, como a supressão fica furada (D32).
+- **Nunca** fundir contatos numa importação. Identidades de uma linha que já pertencem a pessoas
+  diferentes param a importação; fundir é destrutivo e é decisão de operação (D32).
+- **Nunca** deixar a ingestão prometer um canal que o número não tem. Coluna genérica de telefone só
+  vira WhatsApp quando é celular — fixo não vira identidade nenhuma, porque prometê-lo é o roteador
+  escolhendo um destino que não existe (D33).
+- **Nunca** descartar em silêncio um valor que parecia identidade. Linha aceita com telefone ruim
+  sai em `ignorados` com coluna, valor e motivo: o contato entrar sem que ninguém saiba que o
+  telefone se perdeu é pior do que a recusa (D33).
 - **Nunca** normalizar identidade em dois lugares. Quem normaliza é `adapters/telefone.ts` e
   `adapters/email.ts`; o banco **confere** (`privado.normalizada`) e recusa o que não veio
   normalizado. Duas normalizações divergentes é como a supressão fica furada (D32).
@@ -149,6 +160,12 @@ e elas têm teste automatizado obrigatório.**
 > O worker existe (`supabase/functions/motor-worker`), roda em `simulado` por padrão, e com ele a
 > **Fase 3 está completa de ponta a ponta**: agendador, roteador, adapters e despacho rodam sem
 > enviar nada.
+>
+> A **entrada** existe desde o D32: `ingerir_contato` em SQL, `ContactSource` em `adapters/fonte.ts`
+> e a primeira implementação em `adapters/planilha.ts`, sobre um leitor de CSV próprio
+> (`adapters/csv.ts`) — biblioteca não entra aqui pela mesma regra que vale para os adapters.
+> Colher é **puro**: a fonte lê e normaliza, não escreve e não sabe o que é tenant, e é isso que
+> torna a prévia da importação possível antes de qualquer gravação (D33).
 >
 > Falta da Fase 2: o backfill em si, que depende de acesso aos dados do projeto legado
 > `gtivnngoeccqbvfjiyne` — e com ele a comparação contra o Disparador.

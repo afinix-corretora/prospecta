@@ -453,6 +453,41 @@ o arquivo, onde estava certo. Quem pegou foi o digesto estrutural contra o banco
 correção foi escrever o ponto como classe de caractere. É o argumento do digesto ganhando sozinho o
 seu custo.
 
+### D33 — A planilha decide o canal pelo cabeçalho, e fixo não vira WhatsApp
+`PlanilhaSource` lê o CSV que a operação exporta e devolve contatos normalizados sem escrever nada.
+Coluna cujo cabeçalho declara o canal (`WhatsApp`, `SMS`) produz identidade só naquele canal. Coluna
+genérica (`Telefone`, `Celular`, `Fone 2`) produz **whatsapp e sms** quando o número é celular, e
+**nenhuma identidade** quando é fixo.
+*Justificativa:* planilha de operação não tem esquema, e exigir que a pessoa renomeie a coluna antes
+de importar é o atrito que faz a importação voltar a ser INSERT à mão. Mas "telefone" não diz canal,
+e as duas saídas fáceis são erradas: emitir só `sms` perde o WhatsApp, que é o canal principal;
+emitir os dois para qualquer número promete WhatsApp num fixo — e aí o roteador escolhe um destino
+que não existe, gasta o passo e derruba a saúde do remetente com uma falha que não era dele. É o
+mesmo erro do D31, uma camada acima: o pool não pode prometer o que o despachante não faz, e a
+ingestão não pode prometer o que o número não tem. Para o DDI 55 a distinção é confiável (nove
+dígitos começando em 9 depois do DDD); fora dele não se adivinha, e o número entra — quem recusa é
+o provedor, que é melhor do que descartar em silêncio um internacional bom.
+**O que não vira identidade continua visível.** Um telefone com dígito a menos numa linha que tem
+e-mail bom não recusa a linha, mas sai em `ignorados` com coluna, valor e motivo. Silêncio aqui é
+caro: o contato entraria sem que ninguém soubesse que o telefone se perdeu. Coluna que o motor não
+conhece (`Plano atual`, `Corretor`) vira metadado em vez de sumir.
+**O número da linha é o que o Excel mostra.** `lerCsv` deixa a linha em branco na lista de
+propósito: descartá-la faria o índice andar, e é por esse número que a pessoa acha na planilha dela
+a linha que foi recusada.
+**Colher é puro, e é isso que torna a prévia possível.** A fonte não escreve, não sabe o que é
+tenant e não decide dedup — então a tela consegue mostrar "entram 480, 12 são reimportação, 3 não
+têm identidade" antes de qualquer gravação. Mesma ideia do shadow mode: o caminho inteiro roda sem
+efeito.
+**`adapters/instagram.ts` nasce antes do adapter de Instagram.** O handle precisa ser normalizado
+hoje, e `instagram_oficial` ainda está com `tem_adapter = false` (D30). O que não pode acontecer é a
+normalização nascer dentro da tela de importação e depois divergir da que o adapter usar — pela
+mesma regra do D32, endereço normalizado é chave de dedup e de supressão.
+**O teste de ponta a ponta existe porque os outros dois usam cópias.** `tests/fontes.test.ts` repete
+as expressões da trava; `tests/ingestao.sql` usa identidades escritas à mão. Nenhum roda a saída
+real da `PlanilhaSource` contra a `ingerir_contato` real — e é o par que roda em produção, não cada
+metade. Renomear `valor_norm` no JSON deixa os dois verdes e mata a importação inteira, porque a
+trava recusa a chamada toda, não a linha.
+
 ---
 
 ## Decisões adiadas (não decidir agora)

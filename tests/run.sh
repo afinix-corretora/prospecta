@@ -100,6 +100,23 @@ echo "→ motor: despachante e webhooks (TypeScript)"
 node --experimental-strip-types --test "$RAIZ/tests/motor.test.ts" \
   | grep -E "^# (tests|pass|fail)|^not ok"
 
+echo ""
+echo "→ fontes de contato: CSV, dialetos e PlanilhaSource (TypeScript)"
+node --experimental-strip-types --test "$RAIZ/tests/fontes.test.ts" \
+  | grep -E "^# (tests|pass|fail)|^not ok"
+
+# ---------------------------------------------------------------------------
+# A fronteira. Os testes acima trabalham com cópias — o de TypeScript repete
+# as expressões da trava, o de SQL usa identidades escritas à mão. Aqui a
+# saída real da PlanilhaSource entra pela `ingerir_contato` real, que é o par
+# que roda em produção.
+# ---------------------------------------------------------------------------
+echo ""
+echo "→ planilha ponta a ponta (PlanilhaSource → ingerir_contato)"
+BANCO_FONTE="$(novo_banco fonte)"
+node --experimental-strip-types "$RAIZ/tests/planilha_para_sql.ts" \
+  | psql -v ON_ERROR_STOP=1 -d "$BANCO_FONTE" -f -
+
 # ---------------------------------------------------------------------------
 # Concorrência: o agendador precisa de SKIP LOCKED de verdade, não só no texto
 # da função. Duas sessões simultâneas têm que pegar lotes disjuntos.
