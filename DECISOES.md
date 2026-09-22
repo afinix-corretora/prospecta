@@ -488,6 +488,36 @@ real da `PlanilhaSource` contra a `ingerir_contato` real — e é o par que roda
 metade. Renomear `valor_norm` no JSON deixa os dois verdes e mata a importação inteira, porque a
 trava recusa a chamada toda, não a linha.
 
+### D34 — Prévia antes de gravar, e o motor passa a ter tipo
+A tela de importação lê o arquivo com `PlanilhaSource`, mostra o que a fonte entendeu, chama
+`prever_ingestao` para saber o que aconteceria, e só então grava — uma chamada de
+`ingerir_contato` por linha.
+*Justificativa:* sem prévia só há duas opções e as duas são ruins: importar e ver o que aconteceu,
+ou abrir transação e desfazer, que o PostgREST não permite. É a mesma ideia do shadow mode — o
+caminho inteiro roda sem efeito.
+**A prévia é linha a linha porque a trava recusa a chamada, não a linha.** Uma identidade malformada
+no meio de 500 mata a importação inteira; quem importa merece saber disso antes, e escolher.
+**O canal não é convertido com cast.** Vem como texto do cliente, e um cast direto aborta a prévia
+inteira num valor inválido — exatamente o que ela existe para evitar. Casa contra os rótulos do
+enum e recusa só a linha. Verificado: com o cast, a chamada morre em `invalid input value for enum`.
+**A gravação é uma chamada por linha, de propósito.** Um laço no servidor seria uma viagem só, mas
+poria as 500 linhas na mesma transação: uma recusa no meio desfaz as 499 que já passaram. Assim cada
+linha é a sua própria transação, o progresso é real, e a que falha não leva as outras. O custo é a
+latência, e é o custo certo — importação é operação de uma vez por dia, não caminho quente.
+**A tela conferência número um é "o que virou o quê".** É a pergunta que ninguém pensa em fazer: uma
+planilha com a coluna "Fone Comercial" importa 500 contatos sem telefone nenhum e sem erro nenhum.
+**`app/` importa `adapters/` por alias, em vez de copiar.** Copiar o leitor de CSV e os
+normalizadores para dentro do app seria a segunda normalização que o D32 proíbe — e a divergência
+entre as duas cópias não apareceria em teste, apareceria em supressão furada.
+**E foi aí que apareceu o achado:** ao puxar `adapters/` para dentro do `tsc` do app, **oito erros de
+tipo reais** surgiram de uma vez. `adapters/` e `motor/` **nunca tinham sido checados por tipo** —
+`node --experimental-strip-types` **apaga** os tipos, não os confere, e o `tsconfig.json` do app
+olhava só `app/src`. As anotações do motor inteiro valiam de comentário. Nenhum dos oito quebrava
+hoje; todos eram do tipo que quebra num payload diferente do do teste (acesso a índice que podia ser
+`undefined`, um `flatMap` cujos ramos o compilador não unificava). Agora há `tsconfig.json` na raiz,
+com `noUncheckedIndexedAccess`, e `tests/run.sh` roda o `tsc` antes dos testes. Mesmo formato do D31
+e do D32: a garantia estava escrita, a verificação não existia.
+
 ---
 
 ## Decisões adiadas (não decidir agora)

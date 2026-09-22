@@ -84,11 +84,11 @@ export class PlanilhaSource implements ContactSource {
    */
   colherAgora(): Colheita {
     const linhas = lerCsv(this.texto, this.separador ?? separadorDe(this.texto));
-    if (linhas.length === 0) {
+    const cabecalho = linhas[0];
+    if (!cabecalho) {
       throw new Error('planilha vazia: nem cabeçalho');
     }
 
-    const cabecalho = linhas[0];
     const papeis = cabecalho.map((c) => papelDe(c));
 
     // Arquivo sem nenhuma coluna de identidade é problema do arquivo, não das
@@ -107,7 +107,7 @@ export class PlanilhaSource implements ContactSource {
     for (let i = 1; i < linhas.length; i += 1) {
       // Numeração como a planilha mostra: o cabeçalho é a linha 1.
       const linha = i + 1;
-      const celulas = linhas[i];
+      const celulas = linhas[i] ?? [];
       if (vazia(celulas)) continue;
 
       const valores: Record<string, string> = {};

@@ -255,3 +255,25 @@ button.item:hover { border-color: var(--line-strong); transform: translateX(2px)
   .cabeca { flex-direction: column; gap: 10px }
   .cabeca .cta { margin-left: 0 }
 }
+
+/* Tabela de conferência da importação: linha, valor, motivo. Nada de
+   ordenação nem paginação — ela existe para a pessoa achar a linha na
+   planilha dela, e some assim que a importação termina. */
+.tab { width: 100%; border-collapse: collapse; font-size: 12.5px; margin-top: 10px }
+.tab th {
+  text-align: left; font-weight: 600; color: var(--ink-3); font-size: 11px;
+  text-transform: uppercase; letter-spacing: .04em;
+  padding: 0 10px 6px 0; border-bottom: 1px solid var(--line);
+}
+.tab td {
+  padding: 6px 10px 6px 0; border-bottom: 1px solid var(--line);
+  vertical-align: top; color: var(--ink-2);
+}
+.tab tr:last-child td { border-bottom: 0 }
+.tab td:first-child { color: var(--ink-3); white-space: nowrap; width: 1% }
+
+/* Telas que empilham painéis seguidos — a importação é a primeira. Até aqui o
+   espaçamento vertical vinha sempre de `.sec`, que só aparece entre seções, e
+   dois painéis vizinhos encostavam um no outro. */
+.painel + .painel, .kpis + .painel, .painel + .aviso, .aviso + .painel,
+.kpis + .aviso, .painel + .btn, .aviso + .btn { margin-top: 12px }

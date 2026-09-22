@@ -96,6 +96,21 @@ rodar previa      "$RAIZ/tests/previa.sql"
 # ---------------------------------------------------------------------------
 # Adapters de canal — TypeScript, sem rede (fetch injetado).
 # ---------------------------------------------------------------------------
+# ---------------------------------------------------------------------------
+# Tipos. `node --experimental-strip-types` apaga os tipos em vez de conferi-los,
+# então sem esta passada as anotações de `adapters/` e `motor/` valem de
+# comentário — foi assim que oito erros reais ficaram anos escondidos.
+# ---------------------------------------------------------------------------
+echo ""
+echo "→ tipos de adapters/ e motor/"
+TSC="$RAIZ/app/node_modules/.bin/tsc"
+if [ -x "$TSC" ]; then
+  "$TSC" --noEmit -p "$RAIZ/tsconfig.json"
+  echo "PASS  adapters/ e motor/ compilam sem erro de tipo"
+else
+  echo "PULADO (rode 'npm i' em app/ para ter o tsc)"
+fi
+
 echo ""
 echo "→ adapters de canal (TypeScript)"
 node --experimental-strip-types --test "$RAIZ/tests/adapters.test.ts" \

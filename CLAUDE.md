@@ -121,11 +121,16 @@ e elas têm teste automatizado obrigatório.**
 - **Nunca** descartar em silêncio um valor que parecia identidade. Linha aceita com telefone ruim
   sai em `ignorados` com coluna, valor e motivo: o contato entrar sem que ninguém saiba que o
   telefone se perdeu é pior do que a recusa (D33).
-- **Nunca** normalizar identidade em dois lugares. Quem normaliza é `adapters/telefone.ts` e
-  `adapters/email.ts`; o banco **confere** (`privado.normalizada`) e recusa o que não veio
-  normalizado. Duas normalizações divergentes é como a supressão fica furada (D32).
-- **Nunca** fundir contatos numa importação. Identidades da mesma linha pertencendo a pessoas
-  diferentes é `restrict_violation`, não escolha silenciosa (D32).
+- **Nunca** gravar importação sem prévia. `prever_ingestao` diz o que aconteceria sem escrever nada,
+  e a trava recusa a *chamada* inteira — uma linha ruim no meio de 500 mata a importação (D34).
+- **Nunca** converter com cast um valor que veio do cliente dentro da prévia. Cast inválido aborta a
+  prévia toda, que é justamente o que ela existe para evitar: casa contra os rótulos do enum e
+  recusa só a linha (D34).
+- **Nunca** copiar código de `adapters/` para dentro de `app/`. O app importa por alias; cópia é a
+  segunda normalização do D32, e a divergência aparece em supressão furada, não em teste (D34).
+- **Nunca** confiar que `node --experimental-strip-types` confere tipo. Ele **apaga** o tipo. Quem
+  confere é o `tsc` do `tsconfig.json` da raiz, que `tests/run.sh` roda — foi ele que achou oito
+  erros que o motor carregava sem saber (D34).
 
 ---
 
@@ -166,6 +171,13 @@ e elas têm teste automatizado obrigatório.**
 > (`adapters/csv.ts`) — biblioteca não entra aqui pela mesma regra que vale para os adapters.
 > Colher é **puro**: a fonte lê e normaliza, não escreve e não sabe o que é tenant, e é isso que
 > torna a prévia da importação possível antes de qualquer gravação (D33).
+>
+> A **tela de importação** fecha o caminho (D34): lê o arquivo, mostra o que cada coluna virou,
+> chama `prever_ingestao` — que diz o que aconteceria sem gravar nada — e só então grava, uma
+> chamada por linha. `app/` importa `adapters/` por alias; copiar seria a segunda normalização.
+> Puxar `adapters/` para dentro do `tsc` do app revelou que **`adapters/` e `motor/` nunca tinham
+> sido checados por tipo**: `--experimental-strip-types` apaga o tipo em vez de conferi-lo. Agora há
+> `tsconfig.json` na raiz e `tests/run.sh` roda o `tsc` antes dos testes.
 >
 > Falta da Fase 2: o backfill em si, que depende de acesso aos dados do projeto legado
 > `gtivnngoeccqbvfjiyne` — e com ele a comparação contra o Disparador.

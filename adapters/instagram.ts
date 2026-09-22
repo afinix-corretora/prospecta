@@ -17,8 +17,8 @@ export function normalizarHandle(bruto: string): string {
   let s = (bruto ?? '').trim();
   if (!s) return '';
   // `https://instagram.com/fulano/?hl=pt` e `instagram.com/fulano` são o mesmo.
-  const url = s.match(/(?:^|[/.])instagram[.]com\/([^/?#]+)/i);
-  if (url) s = url[1];
+  const url = s.match(/(?:^|[/.])instagram[.]com\/([^/?#]+)/i)?.[1];
+  if (url) s = url;
   return s.replace(/^@+/, '').replace(/\/+$/, '').trim().toLowerCase();
 }
 

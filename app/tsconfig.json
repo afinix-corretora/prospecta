@@ -14,7 +14,9 @@
     "verbatimModuleSyntax": true,
     "skipLibCheck": true,
     "noEmit": true,
+    "allowImportingTsExtensions": true,
+    "paths": { "@adapters/*": ["../adapters/*"] },
     "types": ["vite/client"]
   },
-  "include": ["src"]
+  "include": ["src", "../adapters"]
 }

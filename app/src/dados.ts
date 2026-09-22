@@ -275,3 +275,64 @@ export async function criarTenant(nome: string, slug: string): Promise<string> {
   if (error) throw error;
   return data as string;
 }
+
+// ---------------------------------------------------------------------------
+// Importação de contatos (D32, D34)
+// ---------------------------------------------------------------------------
+
+export interface LinhaPrevista {
+  linha: number;
+  acao: 'criar' | 'atualizar' | 'recusar';
+  contact_id: string | null;
+  nome_atual: string | null;
+  identidades_novas: number;
+  identidades_existentes: number;
+  identidades_suprimidas: number;
+  problema: string | null;
+}
+
+/** O que `ingerir_contato` faria, sem gravar nada. */
+export async function preverIngestao(
+  tenant: string,
+  linhas: { linha: number; identidades: { canal: string; valor_norm: string }[] }[],
+): Promise<LinhaPrevista[]> {
+  const { data, error } = await sb.rpc('prever_ingestao', {
+    p_tenant: tenant,
+    p_linhas: linhas,
+  });
+  if (error) throw error;
+  return (data ?? []) as LinhaPrevista[];
+}
+
+export interface ContatoIngerido {
+  contact_id: string;
+  acao: 'criado' | 'atualizado';
+  identidades_novas: number;
+  identidades_existentes: number;
+  identidades_suprimidas: number;
+}
+
+/**
+ * Uma chamada por linha, de propósito.
+ *
+ * Um laço no servidor seria uma viagem só, mas colocaria as 500 linhas na
+ * mesma transação: uma recusa no meio desfaz as 499 que já tinham passado.
+ * Assim cada linha é a sua própria transação, o progresso é real e a linha que
+ * falha não leva as outras junto. O custo é a latência, e é o custo certo —
+ * importação é operação de uma vez por dia, não caminho quente.
+ */
+export async function ingerirContato(dados: {
+  tenant: string; origem: string; identidades: unknown[];
+  nome?: string; origemRef?: string; metadados?: Record<string, string>;
+}): Promise<ContatoIngerido> {
+  const { data, error } = await sb.rpc('ingerir_contato', {
+    p_tenant: dados.tenant,
+    p_origem: dados.origem,
+    p_identidades: dados.identidades,
+    p_nome: dados.nome ?? null,
+    p_origem_ref: dados.origemRef ?? null,
+    p_metadados: dados.metadados ?? {},
+  });
+  if (error) throw error;
+  return (data ?? [])[0] as ContatoIngerido;
+}

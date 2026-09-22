@@ -31,7 +31,7 @@ function forasDeAspas(linha: string, sep: string): number {
 /** O separador que mais aparece no cabeçalho. Empate resolve pela ordem. */
 export function separadorDe(texto: string): string {
   const cabecalho = texto.replace(/^﻿/, '').split(/\r?\n/)[0] ?? '';
-  let melhor = SEPARADORES[0];
+  let melhor = ',';
   let maior = -1;
   for (const s of SEPARADORES) {
     const n = forasDeAspas(cabecalho, s);

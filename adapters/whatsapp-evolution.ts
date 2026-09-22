@@ -147,7 +147,7 @@ const TIPO_POR_STATUS: Record<string, TipoEvento> = {
 function numeroDoJid(jid: unknown): string | null {
   if (typeof jid !== 'string' || !jid) return null;
   if (jid.includes('@g.us')) return null;
-  return normalizarTelefone(jid.split('@')[0]) || null;
+  return normalizarTelefone(jid.split('@')[0] ?? jid) || null;
 }
 
 function instante(bruto: unknown): string {

@@ -89,7 +89,7 @@ export class WhatsAppUazapiAdapter implements ChannelAdapter {
 
     const itens = Array.isArray(bruto) ? bruto : [bruto];
 
-    return itens.flatMap((item) => {
+    return itens.flatMap((item): EventoNormalizado[] => {
       // Eco: o que a própria instância mandou. Tratar como resposta do contato
       // encerraria o enrollment no próprio disparo.
       if (item.fromMe === true || item.wasSentByApi === true) return [];
@@ -240,7 +240,7 @@ function numeroDe(item: Record<string, unknown>): string | null {
   // Vem como JID: 5511900000001@s.whatsapp.net. Grupo não é conversa de
   // cadência — o motor nunca mandou para um, então não pode ser resposta.
   if (bruto.includes('@g.us')) return null;
-  return normalizarTelefone(bruto.split('@')[0]) || null;
+  return normalizarTelefone(bruto.split('@')[0] ?? bruto) || null;
 }
 
 const TIPO_POR_STATUS: Record<string, TipoEvento> = {

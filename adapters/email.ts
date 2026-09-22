@@ -9,8 +9,8 @@
 export function normalizarEmail(bruto: string): string {
   const s = (bruto ?? '').trim();
   if (!s) return '';
-  const entreSinais = s.match(/<([^>]+)>\s*$/);
-  return (entreSinais ? entreSinais[1] : s).trim().toLowerCase();
+  const entreSinais = s.match(/<([^>]+)>\s*$/)?.[1];
+  return (entreSinais ?? s).trim().toLowerCase();
 }
 
 /** Uma arroba, um domínio com ponto, e nada que separe lista. */
@@ -57,11 +57,11 @@ export interface AssuntoECorpo {
 export function separarAssunto(conteudo: string, padrao: string): AssuntoECorpo {
   const texto = (conteudo ?? '').replace(/\r\n/g, '\n').trim();
   const linhas = texto.split('\n');
-  const marcador = linhas[0]?.match(/^\s*assunto\s*:\s*(.+?)\s*$/i);
+  const assunto = linhas[0]?.match(/^\s*assunto\s*:\s*(.+?)\s*$/i)?.[1];
 
-  if (marcador) {
+  if (assunto) {
     const resto = linhas.slice(1).join('\n').trim();
-    if (resto) return { assunto: marcador[1], corpo: resto };
+    if (resto) return { assunto, corpo: resto };
   }
 
   return { assunto: (padrao ?? '').trim(), corpo: texto };
