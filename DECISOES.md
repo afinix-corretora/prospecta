@@ -518,6 +518,32 @@ hoje; todos eram do tipo que quebra num payload diferente do do teste (acesso a 
 com `noUncheckedIndexedAccess`, e `tests/run.sh` roda o `tsc` antes dos testes. Mesmo formato do D31
 e do D32: a garantia estava escrita, a verificação não existia.
 
+### D35 — Prévia da inscrição, porque o erro aqui é silencioso
+`prever_inscricao(tenant, campanha, flow_version, contatos[])` diz, por contato, se ele entra, se
+já está inscrito, se está suprimido ou se não há como alcançá-lo — sem gravar nada. A tela de
+contatos seleciona quem, escolhe onde, confere, e só então inscreve.
+*Justificativa:* das três formas de a inscrição dar errado, a pior **não dá erro nenhum**.
+Inscrever um contato sem identidade no canal dos passos é aceito; o roteador faz
+`passo_pulado_sem_identidade` e empurra o enrollment adiante, passo a passo, até encerrar em
+`fim_dos_passos`. O relatório mostra **"campanha concluída"** para quem nunca recebeu nada.
+Inscrever 500 e descobrir isso depois custa o tempo e, pior, a confiança no número.
+As outras duas dão erro, e erro que mata a chamada inteira: reinscrever quem já está inscrito bate
+no índice parcial `enrollments_contato_campanha_ativo_uk`; e contato suprimido faz `inscrever`
+devolver **NULL em silêncio** — quem chamou recebe um nulo sem motivo e não sabe se foi supressão,
+campanha inexistente ou bug.
+**Alcançável são três coisas ao mesmo tempo:** identidade `valida`, num canal que o flow usa **e**
+que a campanha habilita, e que não esteja suprimida. Qualquer uma sozinha engana.
+**O bug que o teste pegou:** `array_agg(DISTINCT ci.canal)` numa junção externa sem par produz
+`{NULL}`, e `array_length` devolve **1** — "não tem canal nenhum" passava por "tem um canal", e a
+prévia dizia `inscrever` exatamente para quem o motor encerraria sem mandar nada. O `FILTER (WHERE
+ci.canal IS NOT NULL)` é o conserto. A prévia estava reproduzindo o silêncio que ela existe para
+quebrar.
+**Campanha e flow são escolhidos separadamente porque o schema não liga os dois.** `campaigns` não
+tem `flow_version_id`; a dupla só existe dentro de `enrollments`. A tela mostra os canais de cada
+lado e avisa, antes de qualquer chamada, quando eles não se cruzam — mas isso é contorno de uma
+lacuna de modelagem, não solução. Registrar em vez de inventar coluna: a decisão de como ligar
+campanha a flow (uma? várias? versionada junto?) é de produto.
+
 ---
 
 ## Decisões adiadas (não decidir agora)

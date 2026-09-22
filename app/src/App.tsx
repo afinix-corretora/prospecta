@@ -6,6 +6,7 @@ import { Aviso, Campo } from './componentes/base';
 import { Entrar } from './telas/Entrar';
 import { Canal } from './telas/Canal';
 import { Importar } from './telas/Importar';
+import { Contatos } from './telas/Contatos';
 import {
   Canais, Config, ConfigAgentes, ConfigIA, ConfigModelos, ConfigPlataformas, Hub,
 } from './telas/Telas';
@@ -91,6 +92,7 @@ function Casca() {
       <main>
         <Routes>
           <Route path="/" element={<Hub />} />
+          <Route path="/contatos" element={<Contatos />} />
           <Route path="/contatos/importar" element={<Importar />} />
           <Route path="/canais" element={<Canais />} />
           <Route path="/canais/:canal" element={<Canal />} />

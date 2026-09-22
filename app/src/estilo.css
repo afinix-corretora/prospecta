@@ -135,7 +135,7 @@ body::after { width: 38vw; height: 38vw; right: -10vw; bottom: -12vw; background
 .sec span { font-size: 12px; color: var(--ink-3) }
 
 /* ---------- blocos ---------- */
-.kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 12px }
+.kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 12px }
 .kpi {
   background: var(--surface); border: 1px solid var(--line); border-radius: var(--r);
   padding: 15px 16px;
@@ -277,3 +277,11 @@ button.item:hover { border-color: var(--line-strong); transform: translateX(2px)
    dois painéis vizinhos encostavam um no outro. */
 .painel + .painel, .kpis + .painel, .painel + .aviso, .aviso + .painel,
 .kpis + .aviso, .painel + .btn, .aviso + .btn { margin-top: 12px }
+
+/* Campo de busca — mesma caixa do `.campo input`, sem o rótulo acima. */
+.busca {
+  border: 1.5px solid var(--line); border-radius: 9px; padding: 9px 11px;
+  font: inherit; font-size: 14px; background: var(--surface); color: var(--ink); width: 100%;
+}
+.busca:focus { outline: none; border-color: var(--accent) }
+.tab td input[type="checkbox"] { margin: 2px 0 0 }

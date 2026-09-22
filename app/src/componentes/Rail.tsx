@@ -50,13 +50,16 @@ export function Rail({ provedores }: { provedores: ProvedorCanal[] }) {
       <nav className="nav">
         <button aria-current={atual('/')} onClick={() => nav('/')}>Campanhas</button>
 
-        {/* Entrada de contato. Item de primeiro nível porque é o primeiro
-            quadro do diagrama: sem ele o motor não tem sobre o que rodar. */}
+        {/* Entrada de contato. Primeiro nível porque é o primeiro quadro do
+            diagrama: sem ela o motor não tem sobre o que rodar. */}
+        <button aria-current={atual('/contatos')} onClick={() => nav('/contatos')}>
+          Contatos
+        </button>
         <button
           aria-current={atual('/contatos/importar')}
           onClick={() => nav('/contatos/importar')}
         >
-          Importar contatos
+          Importar
         </button>
 
         <button

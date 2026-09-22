@@ -131,6 +131,12 @@ e elas têm teste automatizado obrigatório.**
 - **Nunca** confiar que `node --experimental-strip-types` confere tipo. Ele **apaga** o tipo. Quem
   confere é o `tsc` do `tsconfig.json` da raiz, que `tests/run.sh` roda — foi ele que achou oito
   erros que o motor carregava sem saber (D34).
+- **Nunca** inscrever em lote sem prévia. Inscrever sem identidade no canal dos passos **não dá
+  erro**: o motor pula passo a passo e encerra como concluído sem mandar nada. Silêncio é pior que
+  exceção (D35).
+- **Nunca** contar `array_length` de `array_agg` sobre junção externa sem `FILTER`. Sem par, o
+  agregado vira `{NULL}` e "nenhum" passa por "um" — foi assim que a prévia quase repetiu o
+  silêncio que existe para quebrar (D35).
 
 ---
 
@@ -178,6 +184,10 @@ e elas têm teste automatizado obrigatório.**
 > Puxar `adapters/` para dentro do `tsc` do app revelou que **`adapters/` e `motor/` nunca tinham
 > sido checados por tipo**: `--experimental-strip-types` apaga o tipo em vez de conferi-lo. Agora há
 > `tsconfig.json` na raiz e `tests/run.sh` roda o `tsc` antes dos testes.
+>
+> A **tela de contatos** (D35) lista, busca por nome ou número, e inscreve em campanha — também com
+> prévia (`prever_inscricao`), porque aqui o erro é silencioso: inscrever quem não tem identidade no
+> canal dos passos não dá erro, dá uma campanha "concluída" sem mensagem nenhuma.
 >
 > Falta da Fase 2: o backfill em si, que depende de acesso aos dados do projeto legado
 > `gtivnngoeccqbvfjiyne` — e com ele a comparação contra o Disparador.

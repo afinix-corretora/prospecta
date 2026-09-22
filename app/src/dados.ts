@@ -336,3 +336,127 @@ export async function ingerirContato(dados: {
   if (error) throw error;
   return (data ?? [])[0] as ContatoIngerido;
 }
+
+// ---------------------------------------------------------------------------
+// Contatos e inscrição em campanha (D35)
+// ---------------------------------------------------------------------------
+
+export interface IdentidadeDoContato {
+  canal: ProvedorCanal['canal'];
+  valor: string;
+  valor_norm: string;
+  valida: boolean;
+}
+
+export interface Contato {
+  id: string;
+  nome: string | null;
+  origem: string;
+  origem_ref: string | null;
+  criado_em: string;
+  contact_identities: IdentidadeDoContato[];
+}
+
+/**
+ * A busca é por nome e por identidade, porque as duas são como se procura
+ * alguém: pelo nome que a planilha trouxe, ou pelo número que apareceu no
+ * WhatsApp. `valor_norm` está no filtro de propósito — quem digita
+ * "(15) 99123-4567" não acha nada procurando pelo que está gravado.
+ */
+export async function lerContatos(busca = '', limite = 200): Promise<Contato[]> {
+  const colunas = 'id, nome, origem, origem_ref, criado_em, '
+    + 'contact_identities(canal, valor, valor_norm, valida)';
+  let q = sb.from('contacts').select(colunas).order('criado_em', { ascending: false }).limit(limite);
+
+  const termo = busca.trim();
+  if (termo) {
+    const digitos = termo.replace(/\D/g, '');
+    const alvos = [`nome.ilike.%${termo}%`];
+    if (digitos.length >= 4) alvos.push(`contact_identities.valor_norm.ilike.%${digitos}%`);
+    else alvos.push(`contact_identities.valor_norm.ilike.%${termo.toLowerCase()}%`);
+    q = q.or(alvos.join(','));
+  }
+
+  const { data, error } = await q;
+  if (error) throw error;
+  return (data ?? []) as unknown as Contato[];
+}
+
+export interface VersaoDeFlow {
+  id: string;
+  versao: number;
+  flow_nome: string;
+  canais: ProvedorCanal['canal'][];
+  passos: number;
+}
+
+/**
+ * As versões de flow publicadas, com os canais que cada uma usa.
+ *
+ * O canal aparece aqui porque é o que decide se a inscrição vale: flow de
+ * e-mail numa campanha só de WhatsApp não manda nada para ninguém, e o
+ * operador não tem como saber isso olhando o nome.
+ */
+export async function lerVersoesDeFlow(): Promise<VersaoDeFlow[]> {
+  const { data, error } = await sb
+    .from('flow_versions')
+    .select('id, versao, flows(nome), flow_steps(canal, ordem)')
+    .order('publicado_em', { ascending: false });
+  if (error) throw error;
+
+  return (data ?? []).map((v) => {
+    const linha = v as unknown as {
+      id: string; versao: number;
+      flows: { nome: string } | { nome: string }[] | null;
+      flow_steps: { canal: ProvedorCanal['canal'] }[] | null;
+    };
+    const flow = Array.isArray(linha.flows) ? linha.flows[0] : linha.flows;
+    const passos = linha.flow_steps ?? [];
+    return {
+      id: linha.id,
+      versao: linha.versao,
+      flow_nome: flow?.nome ?? '(sem nome)',
+      canais: [...new Set(passos.map((p) => p.canal))],
+      passos: passos.length,
+    };
+  });
+}
+
+export interface ContatoPrevisto {
+  contact_id: string;
+  nome: string | null;
+  acao: 'inscrever' | 'ja_inscrito' | 'suprimido' | 'sem_canal' | 'desconhecido';
+  canais_alcancaveis: ProvedorCanal['canal'][] | null;
+  problema: string | null;
+}
+
+/** O que `inscrever` faria com cada contato, sem inscrever ninguém. */
+export async function preverInscricao(dados: {
+  tenant: string; campanha: string; versao: string; contatos: string[];
+}): Promise<ContatoPrevisto[]> {
+  const { data, error } = await sb.rpc('prever_inscricao', {
+    p_tenant: dados.tenant,
+    p_campaign_id: dados.campanha,
+    p_flow_version_id: dados.versao,
+    p_contatos: dados.contatos,
+  });
+  if (error) throw error;
+  return (data ?? []) as ContatoPrevisto[];
+}
+
+/**
+ * Devolve o id do enrollment, ou `null` quando o contato está suprimido — e o
+ * nulo mudo é exatamente o motivo de a prévia existir. Uma chamada por
+ * contato, pela mesma razão da importação: a que falha não leva as outras.
+ */
+export async function inscrever(dados: {
+  contato: string; campanha: string; versao: string;
+}): Promise<string | null> {
+  const { data, error } = await sb.rpc('inscrever', {
+    p_contact_id: dados.contato,
+    p_campaign_id: dados.campanha,
+    p_flow_version_id: dados.versao,
+  });
+  if (error) throw error;
+  return (data ?? null) as string | null;
+}
