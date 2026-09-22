@@ -493,7 +493,7 @@ export interface EventoDaCampanha {
   contato: string;
   canal: ProvedorCanal['canal'];
   tipo: string;
-  status: 'pendente' | 'simulado' | 'enviado' | 'falha';
+  status: 'pendente' | 'simulado' | 'enviado' | 'falha' | 'cancelado';
   remetente: string;
   destino: string;
 }

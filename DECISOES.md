@@ -620,6 +620,31 @@ motivo que não era o delas; e chamar a função e conferir o efeito dela **na m
 não funciona, porque o `EXISTS` ao lado lê o snapshot do início da instrução e não vê a linha que a
 função acabou de gravar.
 
+### D39 — A supressão vale também depois da mensagem criada
+`reivindicar_pendentes` repergunta a supressão antes de entregar cada mensagem ao despachante. Quem
+entrou na lista depois de a mensagem existir tem a mensagem marcada `cancelado` e não sai.
+*Justificativa:* a invariante 2 diz "contato em `suppression` nunca recebe nada, **por nenhum
+caminho de código**". O gatilho `messages_respeita_supressao` guarda o INSERT em `messages`, ou
+seja, o momento em que o roteador cria. O despacho não tinha portão nenhum, e entre criar e
+despachar existe uma janela: a mensagem nasce `pendente` e espera. Se a pessoa pede para sair nesse
+meio — por telefone, por outro canal, por importação de lista de opt-out — a mensagem saía assim
+mesmo. E **desde o D37 a janela é ilimitada**, porque sem remetente disponível a mensagem fica
+pendente indefinidamente.
+Reproduzido antes de corrigir: mensagem pendente, `suppression` inserida, `esta_suprimido`
+devolvendo true, e `reivindicar_pendentes` entregando a mensagem ao despachante mesmo assim.
+Num produto de prospecção fria no Brasil é o defeito mais caro da varredura: o opt-out está
+registrado e a mensagem vai embora.
+**`cancelado` é estado novo, não sinônimo de `falha`.** Mesmo argumento do D13, que criou
+`cancelado_operacional`: forçar isto em `falha` faria o painel contar opt-out honrado como falha do
+motor, e faria a conta que ia enviar levar a culpa no health score. O valor entra por
+`ALTER TYPE ... ADD VALUE`, aditivo, e o `down` não o remove — `DROP VALUE` não existe no
+PostgreSQL, e recriar o tipo obrigaria a reescrever a coluna de toda mensagem. Valor de enum a mais
+é inerte.
+**O portão vem antes de tudo na função,** antes de quota, de pool e de rebalanceamento: é o que
+"acima de qualquer regra do cliente" quer dizer.
+**O enrollment continua sendo encerrado pelo agendador,** na batida seguinte, que já faz isso e tem
+teste. O assunto aqui é só não deixar a mensagem sair.
+
 ---
 
 ## Decisões adiadas (não decidir agora)

@@ -58,7 +58,9 @@ e elas têm teste automatizado obrigatório.**
 1. **Idempotência.** Toda mensagem tem chave única `(enrollment_id, step_id)`. Reprocessar nunca
    duplica disparo. Batch do agendador usa `SELECT ... FOR UPDATE SKIP LOCKED`.
 2. **Supressão.** Contato em `suppression` nunca recebe nada, por nenhum caminho de código.
-   A checagem acontece no roteador, antes do adapter — não dentro de cada adapter.
+   A checagem acontece no roteador, antes do adapter — não dentro de cada adapter. E **de novo no
+   despacho** (D39): entre criar a mensagem e mandá-la existe uma janela, e quem pede para sair
+   dentro dela também não recebe. Mensagem assim vira `cancelado`, não `falha`.
 3. **Rate limit por remetente.** Nenhum `sender_account` ultrapassa sua quota. Conta com erro sai do
    pool sozinha (circuit breaker), e os pendentes rebalanceiam — o que exige duas coisas, não uma:
    `remetentes_disponiveis` deixa de oferecê-la às mensagens **futuras**, e `reivindicar_pendentes`
@@ -156,6 +158,10 @@ e elas têm teste automatizado obrigatório.**
   asserções que já tinham passado e o teste encolhe sem avisar (D38).
 - **Nunca** chamar a função e conferir o efeito dela na mesma expressão SQL. O `EXISTS` ao lado lê o
   snapshot do início da instrução e não enxerga a linha recém-gravada (D38).
+- **Nunca** tratar a supressão como pergunta de uma vez só. O gatilho guarda a criação da mensagem;
+  o despacho precisa do seu próprio portão, porque a janela entre um e outro é ilimitada (D39).
+- **Nunca** marcar como `falha` uma mensagem que não saiu por opt-out. Opt-out honrado não é defeito
+  do motor nem da conta que ia enviar — é `cancelado` (D39).
 
 ---
 

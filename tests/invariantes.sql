@@ -155,6 +155,68 @@ SELECT t.recusa(
   'inv2: supressão é imutável (DELETE recusado)',
   $$DELETE FROM suppression$$);
 
+-- D39: a supressão vale depois da mensagem criada, não só antes.
+--
+-- O gatilho guarda o INSERT em `messages`, que é quando o roteador cria a
+-- mensagem. Entre criar e despachar existe uma janela — e desde o D37 ela é
+-- ilimitada, porque sem remetente disponível a mensagem fica pendente. Se a
+-- pessoa pede para sair nesse meio, a mensagem saía assim mesmo.
+DO $$
+DECLARE
+  v_contato uuid; v_ident uuid; v_enr uuid; v_msg uuid; v_chip uuid;
+  v_status text; v_no_lote boolean;
+BEGIN
+  -- Cenário próprio, inclusive o remetente: `processar_vencidos` varre o
+  -- banco inteiro e colidiria com as mensagens que a invariante 1 inseriu à
+  -- mão. Aqui a mensagem entra como o roteador a criaria — e o gatilho de
+  -- supressão roda neste INSERT, com o contato ainda livre, que é justamente
+  -- o ponto: a guarda da criação passa, e é o despacho que precisa de portão.
+  v_chip := gen_random_uuid();
+  INSERT INTO sender_accounts (id, canal, identificador, apelido, provedor,
+                               tipo_permitido, quota_diaria, config)
+  VALUES (v_chip, 'whatsapp', '+5514900999', 'Chip D39', 'gupshup', 'morna', 50,
+          '{"app_name":"d39","source":"5514900999"}'::jsonb);
+
+  v_contato := gen_random_uuid();
+  INSERT INTO contacts (id, nome, origem) VALUES (v_contato, 'Desistente', 'planilha');
+  INSERT INTO contact_identities (contact_id, canal, valor, valor_norm, origem)
+  VALUES (v_contato, 'whatsapp', '+5514900777', '5514900777', 'planilha')
+  RETURNING id INTO v_ident;
+
+  v_enr := inscrever(v_contato, 'c1000000-0000-0000-0000-000000000001',
+                     'fb000000-0000-0000-0000-000000000001', now() + interval '1 day');
+
+  INSERT INTO messages (enrollment_id, step_id, contact_identity_id, sender_account_id,
+                        canal, status, conteudo)
+  VALUES (v_enr, 'fc000000-0000-0000-0000-000000000001', v_ident, v_chip,
+          'whatsapp', 'pendente', 'Oi')
+  RETURNING id INTO v_msg;
+
+  PERFORM t.confere('D39: a mensagem nasceu pendente, com o contato ainda livre',
+    (SELECT status FROM messages WHERE id = v_msg) = 'pendente',
+    coalesce((SELECT status::text FROM messages WHERE id = v_msg), '(sem mensagem)'));
+
+  -- A janela: a pessoa pede para sair depois de a mensagem existir.
+  INSERT INTO suppression (contact_id, motivo)
+  VALUES (v_contato, 'pediu para sair por telefone');
+
+  -- Chamar e conferir em instruções separadas (D38): numa expressão só, o
+  -- efeito da função não é visível para o teste ao lado.
+  SELECT EXISTS (SELECT 1 FROM reivindicar_pendentes(100) r WHERE r.message_id = v_msg)
+    INTO v_no_lote;
+  PERFORM t.confere('D39: mensagem de quem pediu para sair não vai ao despachante',
+    NOT v_no_lote);
+
+  SELECT status::text INTO v_status FROM messages WHERE id = v_msg;
+  PERFORM t.confere('D39: ela fica cancelada, não falha — opt-out não é defeito do motor',
+    v_status = 'cancelado', v_status);
+
+  SELECT EXISTS (SELECT 1 FROM reivindicar_pendentes(100) r WHERE r.message_id = v_msg)
+    INTO v_no_lote;
+  PERFORM t.confere('D39: e cancelada não volta à fila na batida seguinte', NOT v_no_lote);
+END;
+$$;
+
 -- ===========================================================================
 -- INVARIANTE 3 — rate limit por remetente
 -- ===========================================================================

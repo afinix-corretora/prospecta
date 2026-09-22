@@ -29,11 +29,15 @@ const MOTIVO: Record<string, string> = {
 /** Contagem de mensagens: concorda com "mensagens". */
 const STATUS_PLURAL: Record<string, string> = {
   simulado: 'em shadow mode', pendente: 'na fila', enviado: 'enviadas', falha: 'com falha',
+  // Canceladas são opt-out honrado depois de a mensagem já existir (D39).
+  // Ficam longe de "com falha" de propósito: não são defeito do motor.
+  cancelado: 'canceladas por supressão',
 };
 
 /** Etiqueta de uma mensagem só, no evento. */
 const STATUS: Record<string, string> = {
   simulado: 'shadow mode', pendente: 'na fila', enviado: 'enviado', falha: 'falha',
+  cancelado: 'cancelada por supressão',
 };
 
 export function Campanha() {
@@ -68,6 +72,7 @@ export function Campanha() {
   if (!campanha || !resumo) return <Aviso tipo="erro">Campanha não encontrada.</Aviso>;
 
   const simuladas = resumo.por_status.simulado ?? 0;
+  const canceladas = resumo.por_status.cancelado ?? 0;
   const soShadow = resumo.mensagens > 0 && simuladas === resumo.mensagens;
 
   return (
@@ -87,6 +92,14 @@ export function Campanha() {
         <Kpi rotulo="Respostas" valor={resumo.respostas} sub="encerram a cadência" />
         <Kpi rotulo="Cliques" valor={resumo.cliques} sub="engajamento, não resposta" />
       </div>
+
+      {canceladas > 0 && (
+        <Aviso tipo="neutro">
+          <b>{canceladas}</b> {canceladas === 1 ? 'mensagem foi cancelada' : 'mensagens foram canceladas'}{' '}
+          porque o contato entrou na supressão <b>depois</b> de a mensagem ser criada. O opt-out foi
+          honrado; não é falha do motor nem da conta que ia enviar (D39).
+        </Aviso>
+      )}
 
       {soShadow && (
         <Aviso tipo="neutro">
