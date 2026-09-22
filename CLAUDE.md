@@ -110,6 +110,11 @@ e elas têm teste automatizado obrigatório.**
 - **Nunca** deixar o roteador prometer um envio que o despachante não tem como fazer. Coluna de
   catálogo que ninguém lê não é garantia: o pool pergunta `tem_adapter` e `ativo` antes de escolher,
   e sem candidato o passo é adiado, nunca queimado (D31).
+- **Nunca** normalizar identidade em dois lugares. Quem normaliza é `adapters/telefone.ts` e
+  `adapters/email.ts`; o banco **confere** (`privado.normalizada`) e recusa o que não veio
+  normalizado. Duas normalizações divergentes é como a supressão fica furada (D32).
+- **Nunca** fundir contatos numa importação. Identidades da mesma linha pertencendo a pessoas
+  diferentes é `restrict_violation`, não escolha silenciosa (D32).
 
 ---
 
@@ -154,7 +159,8 @@ e elas têm teste automatizado obrigatório.**
 > **derivados do schema** cobram `tenant_id`, RLS e FK composta de toda tabela nova — lista escrita
 > à mão envelhece sem avisar, e essa já tinha perdido a `provider_servers` (D31).
 >
-> O schema está **aplicado no projeto `hucuwjvihqgftdjpnych`** (20 migrations), conferido por
+> O schema está **aplicado no projeto `hucuwjvihqgftdjpnych`** (21 migrations no repositório, 22
+> registros no projeto — uma corretiva de texto, ver D32), conferido por
 > digest estrutural contra o banco de teste — colunas, constraints, índices, políticas, corpos de
 > função e a grade de privilégios batem byte a byte.
 >

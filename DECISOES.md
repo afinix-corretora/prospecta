@@ -422,6 +422,37 @@ obrigada a ter `tenant_id`, RLS e FK composta, e isentá-la exige entrar numa li
 e dizer por quê. Cada um foi verificado contra uma violação real antes de entrar — asserção que
 nunca falha é do mesmo tamanho de coluna que ninguém lê.
 
+### D32 — A ingestão existe, e o dedup mora no banco
+`ingerir_contato(tenant, origem, identidades, nome, origem_ref, metadados)` é a entrada de contato.
+`ContactSource` no TypeScript lê a fonte e normaliza; o SQL dedup e grava.
+*Justificativa:* o `CLAUDE.md` diz "entrada implementa `ContactSource`" e o D1 nomeia
+`PlanilhaSource` e `PipefySource` — **nada disso existia, nem a interface**. Em SQL havia só
+`inscrever()`, que inscreve um contato que já existe. Não havia como pôr contato no sistema a não
+ser escrevendo INSERT à mão, e portanto o motor completo nunca pôde rodar sobre dado real, nem em
+shadow mode. Terceiro achado da mesma varredura do D31: o documento afirmava, o código não fazia.
+**O dedup fica no banco porque precisa ser atômico** com o índice único
+`(tenant_id, canal, valor_norm)`. Duas linhas para a mesma pessoa é o que o D2 proíbe, e separar o
+SELECT do INSERT entre processos reabre a corrida — mesmo argumento que manteve o roteador em SQL.
+**A normalização NÃO fica no banco,** e essa é a parte contraintuitiva. Ela já mora em
+`adapters/telefone.ts` e `adapters/email.ts`, e é de lá que o webhook casa resposta pelo número
+(D23). Um segundo normalizador em SQL produziria duas normalizações divergentes — que é, literalmente,
+como a supressão fica furada. Então o chamador manda `valor` e `valor_norm`, e `privado.normalizada`
+**confere em vez de normalizar**: é trava contra chamador desatento, não um segundo normalizador.
+**Fundir dois contatos existentes é recusado, não decidido.** Quando as identidades de uma linha já
+pertencem a pessoas diferentes, a importação para com `restrict_violation`. Fundir é destrutivo e não
+tem volta; escolher um dos dois em silêncio seria pior do que falhar.
+**Identidade suprimida é gravada e contada,** não escondida. O gate é o roteador (invariante 2), e o
+cadastro completo é o que faz o writeback no CRM fazer sentido — o que ela ganha na ingestão é
+visibilidade: quem importa 500 linhas merece saber que 12 nunca serão tocadas.
+**Nome só preenche, metadados só mesclam.** Reimportar uma planilha sem a coluna de nome não pode
+apagar o nome que já estava lá, e a segunda fonte acrescenta em vez de substituir.
+**O regex não tem barra invertida, de propósito.** A primeira aplicação no projeto passou por um
+transporte que duplicou o `\` do ponto escapado, e no banco o padrão virou "exija uma barra
+invertida literal no e-mail" — o que recusaria **todo** endereço. O suite não podia pegar: ele roda
+o arquivo, onde estava certo. Quem pegou foi o digesto estrutural contra o banco de teste, e a
+correção foi escrever o ponto como classe de caractere. É o argumento do digesto ganhando sozinho o
+seu custo.
+
 ---
 
 ## Decisões adiadas (não decidir agora)

@@ -85,6 +85,7 @@ rodar tenants     "$RAIZ/tests/tenants.sql"
 rodar provedores  "$RAIZ/tests/provedores.sql"
 rodar webhook     "$RAIZ/tests/webhook.sql"
 rodar agendamento "$RAIZ/tests/agendamento.sql"
+rodar ingestao    "$RAIZ/tests/ingestao.sql"
 
 # ---------------------------------------------------------------------------
 # Adapters de canal — TypeScript, sem rede (fetch injetado).
