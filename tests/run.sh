@@ -51,8 +51,13 @@ GRANT ALL ON ALL TABLES IN SCHEMA public TO authenticated;
 GRANT SELECT ON ALL TABLES IN SCHEMA public TO anon;
 GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO authenticated;
 -- Sem GRANT EXECUTE em massa: a migration de endurecimento decide, nominalmente,
--- o que `authenticated` pode chamar. Conceder tudo aqui faria o teste rodar
--- numa superfície mais larga que a de produção.
+-- o que o papel authenticated pode chamar. Conceder tudo aqui faria o teste
+-- rodar numa superfície mais larga que a de produção.
+--
+-- Sem crase neste bloco, de propósito: o heredoc é \`<<SQL\` sem aspas, porque
+-- precisa expandir \$nome — e aí a crase vira substituição de comando. Este
+-- comentário rodava \`authenticated\` como programa a cada banco criado, o que
+-- só não fez estrago porque o nome não existe.
 INSERT INTO tenants (id, nome, slug)
 VALUES ('00000000-0000-0000-0000-0000000000aa','Afinix Corretora','afinix');
 ALTER DATABASE $nome SET app.tenant = '00000000-0000-0000-0000-0000000000aa';
@@ -86,6 +91,7 @@ rodar provedores  "$RAIZ/tests/provedores.sql"
 rodar webhook     "$RAIZ/tests/webhook.sql"
 rodar agendamento "$RAIZ/tests/agendamento.sql"
 rodar ingestao    "$RAIZ/tests/ingestao.sql"
+rodar previa      "$RAIZ/tests/previa.sql"
 
 # ---------------------------------------------------------------------------
 # Adapters de canal — TypeScript, sem rede (fetch injetado).
