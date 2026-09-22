@@ -215,7 +215,7 @@ $$;
 DO $$
 DECLARE
   r record; v_passada integer := 0; v_nome text;
-  v_msg uuid; v_prov text;
+  v_msg uuid; v_prov text; v_chip uuid;
 BEGIN
   WHILE v_passada < 40 LOOP
     v_passada := v_passada + 1;
@@ -237,13 +237,14 @@ BEGIN
     IF p.agora() >= interval '3 hours' AND NOT EXISTS (
       SELECT 1 FROM p.linha WHERE contato = 'Otávio Lima' AND acao = 'respondeu')
     THEN
-      SELECT m.id, m.provider_message_id INTO v_msg, v_prov FROM messages m
+      SELECT m.id, m.provider_message_id, m.sender_account_id
+        INTO v_msg, v_prov, v_chip FROM messages m
         JOIN enrollments e ON e.id = m.enrollment_id
        WHERE e.contact_id = p.quem('Otávio Lima')
          AND m.provider_message_id IS NOT NULL
        ORDER BY m.criado_em DESC LIMIT 1;
       IF v_prov IS NOT NULL THEN
-        PERFORM registrar_evento_provedor(v_prov, 'respondido', now(),
+        PERFORM registrar_evento_provedor(v_chip, v_prov, 'respondido', now(),
           '{"texto":"oi, pode me mandar os valores?"}'::jsonb);
         PERFORM p.registrar('pessoa','Otávio Lima','respondeu',
           'oi, pode me mandar os valores?','whatsapp');
@@ -254,13 +255,13 @@ BEGIN
     IF p.agora() >= interval '50 hours' AND NOT EXISTS (
       SELECT 1 FROM p.linha WHERE contato = 'Marina Alves' AND acao = 'clicou')
     THEN
-      SELECT m.provider_message_id INTO v_prov FROM messages m
+      SELECT m.provider_message_id, m.sender_account_id INTO v_prov, v_chip FROM messages m
         JOIN enrollments e ON e.id = m.enrollment_id
        WHERE e.contact_id = p.quem('Marina Alves')
          AND m.canal = 'email' AND m.provider_message_id IS NOT NULL
        ORDER BY m.criado_em DESC LIMIT 1;
       IF v_prov IS NOT NULL THEN
-        PERFORM registrar_evento_provedor(v_prov, 'clique', now(), '{}'::jsonb);
+        PERFORM registrar_evento_provedor(v_chip, v_prov, 'clique', now(), '{}'::jsonb);
         PERFORM p.registrar('pessoa','Marina Alves','clicou',
           'abriu o link do e-mail — engajamento, não resposta','email');
       END IF;

@@ -128,6 +128,124 @@ SELECT wh.confere('chip de outro cliente não encerra enrollment alheio',
                                     '5511970000001', now(), '{}'::jsonb));
 
 -- ---------------------------------------------------------------------------
+-- D38: o evento casado por id do provedor também não atravessa clientes
+-- ---------------------------------------------------------------------------
+
+-- `provider_message_id` é do provedor, não nosso, e nada garante que dois
+-- clientes não recebam o mesmo. Antes do D38 a busca era
+-- `WHERE provider_message_id = ?` em todos os tenants, pegando a mais nova —
+-- e `respondido` encerra a cadência de quem não respondeu. Mesmo dano do D24,
+-- na outra via de casamento.
+
+-- O cliente B ganha uma cadência sua, para a colisão ser de verdade.
+INSERT INTO campaigns (id, tenant_id, nome, tipo, base_legal, canais_habilitados)
+VALUES ('ee000000-0000-0000-0000-0000000000c2','bbbbbbbb-0000-0000-0000-00000000000b',
+        'Fria da B','fria','legítimo interesse','{whatsapp}');
+INSERT INTO flows (id, tenant_id, nome)
+VALUES ('ee000000-0000-0000-0000-0000000000f3','bbbbbbbb-0000-0000-0000-00000000000b','Fria da B');
+INSERT INTO flow_versions (id, tenant_id, flow_id, versao)
+VALUES ('ee000000-0000-0000-0000-0000000000f4','bbbbbbbb-0000-0000-0000-00000000000b',
+        'ee000000-0000-0000-0000-0000000000f3',1);
+INSERT INTO flow_steps (tenant_id, flow_version_id, ordem, canal, atraso_horas, template)
+VALUES ('bbbbbbbb-0000-0000-0000-00000000000b','ee000000-0000-0000-0000-0000000000f4',
+        1,'whatsapp',0,'Olá da B');
+INSERT INTO contacts (id, tenant_id, nome, origem) VALUES
+  ('ee000000-0000-0000-0000-0000000000a2','bbbbbbbb-0000-0000-0000-00000000000b',
+   'Cliente da B','planilha'),
+  ('ee000000-0000-0000-0000-0000000000a3','00000000-0000-0000-0000-0000000000aa',
+   'Outro da A','planilha');
+INSERT INTO contact_identities (tenant_id, contact_id, canal, valor, valor_norm, origem) VALUES
+  ('bbbbbbbb-0000-0000-0000-00000000000b','ee000000-0000-0000-0000-0000000000a2',
+   'whatsapp','+5511970000002','5511970000002','planilha'),
+  ('00000000-0000-0000-0000-0000000000aa','ee000000-0000-0000-0000-0000000000a3',
+   'whatsapp','+5511970000003','5511970000003','planilha');
+
+DO $$
+DECLARE
+  v_enr_a uuid; v_enr_b uuid; v_msg_a uuid; v_msg_b uuid; v_ok boolean;
+  v_chip_a uuid := 'ee000000-0000-0000-0000-000000000001';
+  v_chip_b uuid := 'ee000000-0000-0000-0000-0000000000b1';
+BEGIN
+  INSERT INTO enrollments (tenant_id, contact_id, campaign_id, flow_version_id, next_run_at)
+  VALUES ('bbbbbbbb-0000-0000-0000-00000000000b','ee000000-0000-0000-0000-0000000000a2',
+          'ee000000-0000-0000-0000-0000000000c2','ee000000-0000-0000-0000-0000000000f4',
+          now() - interval '1 minute')
+  RETURNING id INTO v_enr_b;
+
+  INSERT INTO messages (tenant_id, enrollment_id, step_id, contact_identity_id,
+                        sender_account_id, canal, status, conteudo, provider_message_id)
+  SELECT 'bbbbbbbb-0000-0000-0000-00000000000b', v_enr_b, fs.id, ci.id, v_chip_b,
+         'whatsapp', 'enviado', 'Olá da B', 'PROV-COLISAO'
+    FROM flow_steps fs, contact_identities ci
+   WHERE fs.flow_version_id = 'ee000000-0000-0000-0000-0000000000f4'
+     AND ci.contact_id = 'ee000000-0000-0000-0000-0000000000a2'
+  RETURNING id INTO v_msg_b;
+
+  -- O cliente A ganha uma mensagem própria para esta colisão, em vez de
+  -- reaproveitar a do cenário de cima: aquela já foi respondida e encerrada
+  -- pelos testes do D24, e um teste que depende do estado deixado por outro
+  -- falha por motivo que não é o dele.
+  INSERT INTO enrollments (tenant_id, contact_id, campaign_id, flow_version_id, next_run_at)
+  VALUES ('00000000-0000-0000-0000-0000000000aa','ee000000-0000-0000-0000-0000000000a3',
+          'ee000000-0000-0000-0000-0000000000c1','ee000000-0000-0000-0000-0000000000f2',
+          now() - interval '1 minute')
+  RETURNING id INTO v_enr_a;
+
+  INSERT INTO messages (tenant_id, enrollment_id, step_id, contact_identity_id,
+                        sender_account_id, canal, status, conteudo, provider_message_id)
+  SELECT '00000000-0000-0000-0000-0000000000aa', v_enr_a, fs.id, ci.id, v_chip_a,
+         'whatsapp', 'enviado', 'Olá da A', 'PROV-COLISAO'
+    FROM flow_steps fs, contact_identities ci
+   WHERE fs.flow_version_id = 'ee000000-0000-0000-0000-0000000000f2' AND fs.ordem = 1
+     AND ci.contact_id = 'ee000000-0000-0000-0000-0000000000a3'
+  RETURNING id INTO v_msg_a;
+
+  -- Chamar a função e conferir o efeito dela têm que ser instruções
+  -- separadas. Numa expressão só, o `EXISTS` ao lado enxerga o snapshot do
+  -- início da instrução e não vê a linha que a função acabou de gravar — o
+  -- teste falhava com a função certa.
+  v_ok := registrar_evento_provedor(v_chip_a, 'PROV-COLISAO', 'entregue');
+  PERFORM wh.confere('D38: o chip de A casa com a mensagem de A, não com a de B',
+    v_ok
+    AND EXISTS (SELECT 1 FROM message_events WHERE message_id = v_msg_a AND tipo = 'entregue')
+    AND NOT EXISTS (SELECT 1 FROM message_events WHERE message_id = v_msg_b));
+
+  v_ok := registrar_evento_provedor(v_chip_b, 'PROV-COLISAO', 'entregue');
+  PERFORM wh.confere('D38: o chip de B casa com a mensagem de B',
+    v_ok
+    AND EXISTS (SELECT 1 FROM message_events WHERE message_id = v_msg_b AND tipo = 'entregue'));
+
+  -- A negativa que importa: id que só existe no outro cliente não é alcançável.
+  UPDATE messages SET provider_message_id = 'SO-DO-A' WHERE id = v_msg_a;
+  PERFORM wh.confere('D38: chip de B não alcança id que só existe em A',
+    registrar_evento_provedor(v_chip_b, 'SO-DO-A', 'respondido') = false);
+
+  PERFORM wh.confere('D38: e a cadência de A segue de pé',
+    (SELECT e.status FROM enrollments e
+      JOIN messages m ON m.enrollment_id = e.id WHERE m.id = v_msg_a) <> 'encerrado');
+
+END;
+$$;
+
+-- Em bloco próprio, de propósito: um EXCEPTION envolvendo o bloco inteiro
+-- desfaz tudo o que ele já tinha feito, e as asserções anteriores somem sem
+-- avisar. Foi o que aconteceu na primeira versão deste teste — quatro
+-- `wh.confere` registrados viraram um.
+DO $$
+DECLARE v_erro text;
+BEGIN
+  BEGIN
+    PERFORM registrar_evento_provedor(
+      '00000000-0000-0000-0000-0000000000ff', 'SO-DO-A', 'entregue');
+    v_erro := '(não levantou)';
+  EXCEPTION WHEN no_data_found THEN v_erro := 'no_data_found';
+  END;
+  PERFORM wh.confere('D38: chip inexistente levanta em vez de adivinhar tenant',
+    v_erro = 'no_data_found', v_erro);
+END;
+$$;
+
+-- ---------------------------------------------------------------------------
 -- Superfície
 -- ---------------------------------------------------------------------------
 

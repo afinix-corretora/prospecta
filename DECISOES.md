@@ -594,6 +594,32 @@ ficava presa até alguém tentar usá-la, e ninguém tentava.
 o que `CREATE OR REPLACE` descarta — terceira vez que essa armadilha aparece no projeto, e a
 primeira em que foi um teste, e não uma leitura atenta, que a pegou.
 
+### D38 — O evento do provedor passa a dizer de qual chip veio
+`registrar_evento_provedor` recebe o chip (`p_sender_id`), tira o tenant dele e filtra a busca.
+A assinatura antiga foi derrubada, não mantida ao lado.
+*Justificativa:* a função procurava assim, em todos os clientes:
+`SELECT id FROM messages WHERE provider_message_id = ? ORDER BY criado_em DESC LIMIT 1`.
+`provider_message_id` é do provedor, não nosso, e nada garante que dois clientes não recebam o
+mesmo. Com o id colidido, o evento cai na mensagem mais nova — e se o evento é `respondido`,
+**encerra a cadência do cliente errado**; se é `rejeitado`, invalida a identidade de outro cliente e
+escreve `identidade_invalida` no CRM dele. Reproduzido antes de corrigir: dois clientes com o mesmo
+`provider_message_id`, um webhook de resposta, e o enrollment do Cliente B encerrado por um evento
+que podia ter vindo do chip do Cliente A.
+É o dano do D24 na outra via de casamento, e é literalmente a anti-regra: *"Nunca deixar tenant
+implícito em assinatura de função. É como bug entre clientes acontece."* A irmã dela,
+`registrar_resposta_por_numero`, já fazia certo desde o D24 — e o comentário do `motor/webhooks.ts`
+explicava a razão no ramo de baixo enquanto o ramo de cima cometia o erro: *"Sem chip não há tenant,
+e sem tenant casar pelo número escolheria a mensagem de outro cliente."*
+**`senderId` deixa de ser opcional em `receberWebhook`.** Como opcional, esquecê-lo casava errado;
+como obrigatório, quem cobra é o compilador. E há guarda em tempo de execução junto, porque a edge
+function roda JavaScript e um chamador sem tipos passaria `{}`.
+**Três armadilhas de teste apareceram escrevendo este teste**, e valem mais que a correção:
+um `EXCEPTION` envolvendo o bloco inteiro **desfaz as asserções anteriores** — quatro `confere`
+viraram um, em silêncio; reaproveitar o cenário de outro teste fez três asserções falharem por
+motivo que não era o delas; e chamar a função e conferir o efeito dela **na mesma expressão SQL**
+não funciona, porque o `EXISTS` ao lado lê o snapshot do início da instrução e não vê a linha que a
+função acabou de gravar.
+
 ---
 
 ## Decisões adiadas (não decidir agora)

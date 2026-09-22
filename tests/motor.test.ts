@@ -24,7 +24,7 @@ function bancoFalso(pendentes: MensagemParaEnviar[], opcoes: {
   respostaAceita?: boolean;
 } = {}) {
   const registros: Registro[] = [];
-  const eventos: { id: string; tipo: string }[] = [];
+  const eventos: { id: string; tipo: string; senderId: string }[] = [];
   const porNumero: { senderId: string; numero: string; tipo: string }[] = [];
   let agendadas = 0;
 
@@ -42,8 +42,8 @@ function bancoFalso(pendentes: MensagemParaEnviar[], opcoes: {
       if (opcoes.erroAoRegistrar) throw new Error(opcoes.erroAoRegistrar);
       registros.push({ messageId, ok, providerMessageId, erro, culpa });
     },
-    async registrarEventoProvedor(providerMessageId, tipo) {
-      eventos.push({ id: providerMessageId, tipo });
+    async registrarEventoProvedor(senderId, providerMessageId, tipo) {
+      eventos.push({ id: providerMessageId, tipo, senderId });
       return opcoes.eventoAceito ? opcoes.eventoAceito(providerMessageId) : true;
     },
     async registrarRespostaPorNumero(senderId, valorNorm, _ocorridoEm, _payload) {
@@ -248,7 +248,7 @@ test('webhook normaliza e grava os eventos', async () => {
     { providerMessageId: 'P2', tipo: 'respondido', ocorridoEm: '2026-09-17T00:00:01Z', payload: {} },
   ]);
 
-  const r = await receberWebhook(banco, 'falso', {}, { criar: criar as never });
+  const r = await receberWebhook(banco, 'falso', {}, { senderId: 'chip-1', criar: criar as never });
 
   assert.deepEqual(r, { normalizados: 2, gravados: 2, descartados: 0 });
   assert.deepEqual(eventos.map((e) => e.tipo), ['entregue', 'respondido']);
@@ -262,7 +262,7 @@ test('webhook conta o que o banco descartou', async () => {
     { providerMessageId: 'ECO', tipo: 'respondido', ocorridoEm: 'x', payload: {} },
   ]);
 
-  const r = await receberWebhook(banco, 'falso', {}, { criar: criar as never });
+  const r = await receberWebhook(banco, 'falso', {}, { senderId: 'chip-1', criar: criar as never });
 
   assert.deepEqual(r, { normalizados: 2, gravados: 1, descartados: 1 });
 });
@@ -270,7 +270,7 @@ test('webhook conta o que o banco descartou', async () => {
 test('webhook sem evento reconhecível não grava nada', async () => {
   const { banco, eventos } = bancoFalso([]);
   const { criar } = adapterFalso('whatsapp', { ok: true }, []);
-  const r = await receberWebhook(banco, 'falso', { lixo: true }, { criar: criar as never });
+  const r = await receberWebhook(banco, 'falso', { lixo: true }, { senderId: 'chip-1', criar: criar as never });
   assert.deepEqual(r, { normalizados: 0, gravados: 0, descartados: 0 });
   assert.equal(eventos.length, 0);
 });
@@ -278,7 +278,7 @@ test('webhook sem evento reconhecível não grava nada', async () => {
 test('webhook de provedor desconhecido falha alto', async () => {
   const { banco } = bancoFalso([]);
   await assert.rejects(
-    () => receberWebhook(banco, 'inexistente', {}),
+    () => receberWebhook(banco, 'inexistente', {}, { senderId: 'chip-1' }),
     /provedor sem adapter/,
   );
 });
@@ -302,21 +302,26 @@ test('evento sem id casa pelo número, usando o chip que recebeu o webhook', asy
   assert.deepEqual(eventos, []);
 });
 
-test('sem chip, evento por número é descartado em vez de casar errado', async () => {
-  // Sem chip não há tenant, e casar pelo número escolheria a mensagem de outro
-  // cliente. Errar de tenant é pior que perder o evento.
-  const { banco, porNumero } = bancoFalso([]);
+test('webhook sem chip falha alto, em vez de casar com outro cliente', async () => {
+  // Sem chip não há tenant, e casar sem ele escolheria a mensagem de outro
+  // cliente — nas duas vias, por número (D23) e por id do provedor (D38).
+  //
+  // Antes isto era um descarte silencioso, e só para a via do número. Agora o
+  // tipo exige o chip e a função recusa: o endpoint resolve o chip antes de
+  // chegar aqui (D24), então chegar sem ele é bug, não caso de borda.
+  const { banco, porNumero, eventos } = bancoFalso([]);
   const { criar } = adapterFalso('whatsapp', { ok: true }, [
     { deNumero: '5511900000001', tipo: 'respondido',
       ocorridoEm: '2026-09-18T12:00:00Z', payload: {} },
   ]);
 
-  const r = await receberWebhook(banco, 'falso', {}, { criar });
+  await assert.rejects(
+    () => receberWebhook(banco, 'falso', {}, { criar } as never),
+    /webhook sem chip/,
+  );
 
-  assert.equal(r.normalizados, 1);
-  assert.equal(r.gravados, 0);
-  assert.equal(r.descartados, 1);
   assert.deepEqual(porNumero, []);
+  assert.deepEqual(eventos, []);
 });
 
 test('número que nunca recebeu nada conta como descartado', async () => {
@@ -339,6 +344,7 @@ test('id do provedor continua tendo precedência sobre número', async () => {
   ]);
 
   await receberWebhook(banco, 'falso', {}, { criar, senderId: 'chip-1' });
-  assert.deepEqual(eventos, [{ id: 'prov-1', tipo: 'entregue' }]);
+  // O chip viaja junto do id: é ele que diz o tenant nas duas vias (D38).
+  assert.deepEqual(eventos, [{ id: 'prov-1', tipo: 'entregue', senderId: 'chip-1' }]);
   assert.deepEqual(porNumero, []);
 });

@@ -175,21 +175,22 @@ $$;
 -- ---------------------------------------------------------------------------
 
 DO $$
-DECLARE v_msg uuid;
+DECLARE v_msg uuid; v_chip uuid;
 BEGIN
-  SELECT id INTO v_msg FROM messages WHERE provider_message_id = 'EVO-ABC';
+  SELECT id, sender_account_id INTO v_msg, v_chip
+    FROM messages WHERE provider_message_id = 'EVO-ABC';
 
   PERFORM d.confere('evento do provedor casa pelo id e é gravado',
-    registrar_evento_provedor('EVO-ABC', 'entregue') = true);
+    registrar_evento_provedor(v_chip, 'EVO-ABC', 'entregue') = true);
   PERFORM d.confere('evento entregue existe',
     EXISTS (SELECT 1 FROM message_events WHERE message_id = v_msg AND tipo = 'entregue'));
 
   PERFORM d.confere('evento com id desconhecido é descartado',
-    registrar_evento_provedor('NAO-EXISTE', 'entregue') = false);
+    registrar_evento_provedor(v_chip, 'NAO-EXISTE', 'entregue') = false);
 
   -- Prevenção de loop de eco: o que o próprio motor escreveu volta marcado.
   PERFORM d.confere('eco do próprio motor é descartado',
-    registrar_evento_provedor('EVO-ABC', 'respondido', now(),
+    registrar_evento_provedor(v_chip, 'EVO-ABC', 'respondido', now(),
       '{"autoria":"motor-prospeccao"}'::jsonb) = false);
   PERFORM d.confere('eco descartado não virou evento',
     NOT EXISTS (SELECT 1 FROM message_events
@@ -197,7 +198,7 @@ BEGIN
 
   -- Resposta de verdade: invariante 4 encerra o enrollment inteiro.
   PERFORM d.confere('resposta do provedor é aceita',
-    registrar_evento_provedor('EVO-ABC', 'respondido', now(),
+    registrar_evento_provedor(v_chip, 'EVO-ABC', 'respondido', now(),
       '{"de":"5514900001"}'::jsonb) = true);
   PERFORM d.confere('inv4: resposta vinda do provedor encerra o enrollment',
     (SELECT e.status = 'encerrado' AND e.motivo_encerramento = 'resposta'
@@ -208,7 +209,7 @@ $$;
 
 -- Clique continua não encerrando, mesmo vindo do provedor (D7).
 DO $$
-DECLARE v_contato uuid; v_enr uuid; v_msg uuid;
+DECLARE v_contato uuid; v_enr uuid; v_msg uuid; v_chip uuid;
 BEGIN
   v_contato := gen_random_uuid();
   INSERT INTO contacts (id, nome, origem) VALUES (v_contato,'Cleo','planilha');
@@ -218,9 +219,9 @@ BEGIN
                      'd5000000-0000-0000-0000-000000000001', now() - interval '1 minute');
   PERFORM processar_vencidos(100,'real');
 
-  SELECT id INTO v_msg FROM messages WHERE enrollment_id = v_enr;
+  SELECT id, sender_account_id INTO v_msg, v_chip FROM messages WHERE enrollment_id = v_enr;
   PERFORM registrar_resultado_envio(v_msg, true, 'EVO-CLIQUE');
-  PERFORM registrar_evento_provedor('EVO-CLIQUE', 'clique');
+  PERFORM registrar_evento_provedor(v_chip, 'EVO-CLIQUE', 'clique');
 
   PERFORM d.confere('D7: clique vindo do provedor não encerra',
     (SELECT status = 'encerrado' FROM enrollments WHERE id = v_enr) = false);

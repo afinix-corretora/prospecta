@@ -62,8 +62,9 @@ export function bancoSupabase(sb: SupabaseClient): Banco {
       });
     },
 
-    async registrarEventoProvedor(providerMessageId, tipo: TipoEvento, ocorridoEm, payload) {
+    async registrarEventoProvedor(senderId, providerMessageId, tipo: TipoEvento, ocorridoEm, payload) {
       const gravado = await rpc('registrar_evento_provedor', {
+        p_sender_id: senderId,
         p_provider_id: providerMessageId,
         p_tipo: tipo,
         p_ocorrido_em: ocorridoEm,

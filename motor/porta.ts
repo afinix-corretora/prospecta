@@ -43,8 +43,20 @@ export interface Banco {
     culpa?: Culpa,
   ): Promise<void>;
 
-  /** Devolve true se o evento foi gravado; false se foi eco ou id desconhecido. */
+  /**
+   * Evento que o provedor ligou a uma mensagem nossa, pelo id dele.
+   *
+   * O chip vem junto porque é ele que diz o tenant. Sem isso, um
+   * `provider_message_id` repetido entre dois clientes casa com a mensagem
+   * mais recente de qualquer um deles — e um evento `respondido` encerra a
+   * cadência do cliente errado (D38). Mesma razão do `senderId` na irmã de
+   * baixo, só que aqui a lição chegou depois.
+   *
+   * Devolve true se o evento foi gravado; false se foi eco, id desconhecido
+   * ou id de outro cliente.
+   */
   registrarEventoProvedor(
+    senderId: string,
     providerMessageId: string,
     tipo: TipoEvento,
     ocorridoEm: string,

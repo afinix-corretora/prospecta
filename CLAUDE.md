@@ -150,6 +150,12 @@ e elas têm teste automatizado obrigatório.**
   `reivindicar_pendentes` (D37).
 - **Nunca** devolver a reserva de quota de um envio que não se sabe se saiu. Contar a mais aperta o
   envio; contar a menos fura a invariante 3 (D37).
+- **Nunca** casar evento de provedor sem o chip. `provider_message_id` é do provedor e pode repetir
+  entre clientes; sem o tenant do chip, `respondido` encerra a cadência de quem não respondeu (D38).
+- **Nunca** pôr `EXCEPTION` em volta de um bloco de asserções. Quando dispara, ele desfaz as
+  asserções que já tinham passado e o teste encolhe sem avisar (D38).
+- **Nunca** chamar a função e conferir o efeito dela na mesma expressão SQL. O `EXISTS` ao lado lê o
+  snapshot do início da instrução e não enxerga a linha recém-gravada (D38).
 
 ---
 
