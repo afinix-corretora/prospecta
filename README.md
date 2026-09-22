@@ -13,7 +13,8 @@ Mapa de `status` legado → modelo novo em [`MAPA-STATUS.md`](MAPA-STATUS.md).
 ```
 supabase/migrations/   schema, incremental
 supabase/down/         reversão de cada migration
-adapters/              ChannelAdapter por provedor (TypeScript, sem I/O de runtime)
+adapters/              ChannelAdapter por provedor e ContactSource por fonte
+                       (TypeScript, sem I/O de runtime — o app importa daqui, não copia)
 motor/                 despachante e webhooks — lógica pura, banco atrás de uma porta
 supabase/functions/    edge functions: só fiação, a única camada sem teste
 demo/                  cenário de demonstração: roda o motor e exporta o que ele decidiu
@@ -54,10 +55,58 @@ O que o suite cobre:
 Também cobre D2 (dedup de identidade), D3 (contrato estreito da outbox), D4 (isolamento morna/fria),
 D9 (`flow_versions` imutáveis) e `message_events` append-only.
 
+**E roda o `tsc`.** `node --experimental-strip-types` **apaga** os tipos em vez de conferi-los, e o
+`tsconfig.json` do app olhava só `app/src` — então `adapters/` e `motor/` rodaram todo esse tempo com
+as anotações valendo de comentário. Quando a tela de importação passou a importar `adapters/`,
+apareceram **oito erros de tipo reais** de uma vez. Nenhum quebrava naquele dia; todos eram do tipo
+que quebra num payload diferente do do teste. Agora há `tsconfig.json` na raiz, com
+`noUncheckedIndexedAccess`, e o suite roda o `tsc` antes dos testes (D34).
+
 O mapa de status do backfill (`backfill/mapa_status.sql`) tem suite própria: os 27 valores dos três
 vocabulários legados, mais as propriedades que importam — `sent` significa coisas opostas conforme a
 origem, status desconhecido derruba o backfill em vez de inventar estado, todo encerrado tem motivo,
 e só quem tem registro de saída pede supressão.
+
+## A entrada de contato
+
+O primeiro quadro do diagrama tem duas metades, e cada uma mora onde consegue garantir o que
+promete.
+
+**A normalização mora no TypeScript.** `adapters/telefone.ts`, `adapters/email.ts` e
+`adapters/instagram.ts` são os únicos lugares que normalizam identidade — é de lá que o webhook casa
+resposta pelo número (D23), e um segundo normalizador em SQL seria, literalmente, como a supressão
+fica furada. `adapters/fonte.ts` define `ContactSource`; `adapters/planilha.ts` é a primeira
+implementação, sobre um leitor de CSV próprio (`adapters/csv.ts`) que trata as três coisas que o
+`split(',')` erra em planilha brasileira: o `;` do Excel pt-BR, aspas com `""` e quebra de linha
+dentro, e o BOM.
+
+**O dedup mora no SQL.** `ingerir_contato(tenant, origem, identidades, nome, origem_ref, metadados)`
+precisa ser atômico com o índice único `(tenant_id, canal, valor_norm)` — separar o SELECT do INSERT
+entre processos reabre a corrida. Ela **não normaliza**: `privado.normalizada` confere que o chamador
+normalizou, e é trava contra chamador desatento, não um segundo normalizador.
+
+Duas regras que surpreendem e são de propósito:
+
+- **Fundir contatos é recusa, não escolha.** Se as identidades de uma linha já pertencem a pessoas
+  diferentes, a chamada para com `restrict_violation`. Fundir é destrutivo e não tem volta.
+- **Coluna genérica de telefone não promete WhatsApp em fixo.** `Telefone` vira whatsapp **e** sms
+  quando é celular, e nada quando é fixo — prometer WhatsApp num fixo faz o roteador escolher um
+  destino que não existe, queima o passo e derruba a saúde de um remetente que não tinha culpa. Uma
+  coluna que declara o canal (`WhatsApp`, `SMS`) decide sozinha.
+
+### Prévia antes de gravar
+
+`prever_ingestao(tenant, linhas)` diz o que `ingerir_contato` faria — quantos entram, quantos são
+reimportação, quantos endereços estão suprimidos, quais linhas seriam recusadas — **sem escrever
+nada**. Mesma ideia do shadow mode.
+
+É linha a linha porque a trava recusa a *chamada*, não a linha: uma identidade malformada no meio de
+500 mata a importação inteira, e quem importa merece decidir antes. Pelo mesmo motivo o canal não é
+convertido com cast — um valor inválido abortaria a prévia toda, que é o que ela existe para evitar.
+
+A tela (`app/src/telas/Importar.tsx`) encadeia os três passos, e o primeiro é o que ninguém pensa em
+conferir: **o que cada coluna virou**. Uma planilha cuja coluna se chama "Fone Comercial" importa
+500 contatos sem telefone nenhum e sem erro nenhum.
 
 ## O agendador
 

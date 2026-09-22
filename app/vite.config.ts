@@ -16,6 +16,12 @@ const carimbo = {
 // `adapters/` mora fora de `app/` porque não é do app: é do motor, e o worker
 // usa os mesmos arquivos. Importar de lá em vez de copiar é o que impede uma
 // segunda normalização de telefone nascer dentro da tela (D32).
+//
+// Isto parece frágil porque a raiz do projeto na Vercel é `app/`, e a correção
+// instintiva seria copiar os arquivos para cá — que é justamente o erro.
+// Conferido: o build da Vercel enxerga acima da raiz, e o primeiro deploy que
+// depende disso (4ed539e) ficou READY. Se um dia parar de enxergar, a saída é
+// mudar a raiz do projeto, nunca duplicar o normalizador.
 const adapters = fileURLToPath(new URL('../adapters', import.meta.url));
 
 export default defineConfig({
