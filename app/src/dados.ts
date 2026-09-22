@@ -460,3 +460,50 @@ export async function inscrever(dados: {
   if (error) throw error;
   return (data ?? null) as string | null;
 }
+
+// ---------------------------------------------------------------------------
+// Painel da campanha (D36)
+// ---------------------------------------------------------------------------
+
+export interface ResumoDaCampanha {
+  inscritos_ativos: number;
+  inscritos_pausados: number;
+  encerrados: number;
+  por_motivo: Record<string, number>;
+  mensagens: number;
+  por_status: Record<string, number>;
+  respostas: number;
+  cliques: number;
+  vencidos_agora: number;
+  proximo_disparo: string | null;
+}
+
+export async function lerResumoDaCampanha(
+  tenant: string, campanha: string,
+): Promise<ResumoDaCampanha | null> {
+  const { data, error } = await sb.rpc('resumo_da_campanha', {
+    p_tenant: tenant, p_campaign_id: campanha,
+  });
+  if (error) throw error;
+  return ((data ?? [])[0] as ResumoDaCampanha) ?? null;
+}
+
+export interface EventoDaCampanha {
+  ocorrido_em: string;
+  contato: string;
+  canal: ProvedorCanal['canal'];
+  tipo: string;
+  status: 'pendente' | 'simulado' | 'enviado' | 'falha';
+  remetente: string;
+  destino: string;
+}
+
+export async function lerEventosDaCampanha(
+  tenant: string, campanha: string, limite = 100,
+): Promise<EventoDaCampanha[]> {
+  const { data, error } = await sb.rpc('eventos_da_campanha', {
+    p_tenant: tenant, p_campaign_id: campanha, p_limite: limite,
+  });
+  if (error) throw error;
+  return (data ?? []) as EventoDaCampanha[];
+}

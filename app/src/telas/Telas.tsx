@@ -46,6 +46,7 @@ function Moldura({ titulo, sub, voltar, children }: {
 // ---------------------------------------------------------------------------
 
 export function Hub() {
+  const nav = useNavigate();
   const { tenant, opera } = useSessao();
   const { dados, erro, carregando, recarregar } = useDados(
     async () => ({
@@ -87,6 +88,7 @@ export function Hub() {
             titulo={c.nome}
             descricao={`${c.objetivo ?? '—'} · pool ${c.tipo} · ${c.canais_habilitados.map((x) => NOME_CANAL[x] ?? x).join(', ')}`}
             contagem={c.ativa ? 'ativa' : 'pausada'}
+            aoClicar={() => nav(`/campanhas/${c.id}`)}
           />
         )) : (
           <div className="item" style={{ cursor: 'default' }}><span className="txt">

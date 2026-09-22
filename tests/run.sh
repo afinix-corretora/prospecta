@@ -93,6 +93,7 @@ rodar agendamento "$RAIZ/tests/agendamento.sql"
 rodar ingestao    "$RAIZ/tests/ingestao.sql"
 rodar previa      "$RAIZ/tests/previa.sql"
 rodar previa_insc "$RAIZ/tests/previa_inscricao.sql"
+rodar painel      "$RAIZ/tests/painel.sql"
 
 # ---------------------------------------------------------------------------
 # Adapters de canal — TypeScript, sem rede (fetch injetado).

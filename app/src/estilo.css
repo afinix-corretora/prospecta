@@ -285,3 +285,8 @@ button.item:hover { border-color: var(--line-strong); transform: translateX(2px)
 }
 .busca:focus { outline: none; border-color: var(--accent) }
 .tab td input[type="checkbox"] { margin: 2px 0 0 }
+
+/* Cinco KPIs não cabem na largura mínima padrão — sobra um sozinho na linha
+   de baixo, que parece defeito. O painel da campanha precisa dos cinco:
+   resposta e clique são coisas diferentes (D7) e não dá para fundir. */
+.kpis.cinco { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)) }

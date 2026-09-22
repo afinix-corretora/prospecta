@@ -544,6 +544,28 @@ lado e avisa, antes de qualquer chamada, quando eles não se cruzam — mas isso
 lacuna de modelagem, não solução. Registrar em vez de inventar coluna: a decisão de como ligar
 campanha a flow (uma? várias? versionada junto?) é de produto.
 
+### D36 — O shadow mode precisa de tela, senão parece defeito
+`resumo_da_campanha` e `eventos_da_campanha` alimentam `app/src/telas/Campanha.tsx`: quantos em
+cadência, quantos encerrados e por quê, quantas mensagens e em que status, respostas, cliques, e
+quando é a próxima batida.
+*Justificativa:* depois de inscrever, o app não mostrava nada. O console (`ui/console.html`) mostra
+o **demo**, não o cliente. E o momento em que isso mais dói é exatamente o primeiro: shadow mode
+roda o caminho completo e **não envia nada** — sem uma tela dizendo "12 mensagens, todas em shadow
+mode", o modo que de-risca o projeto inteiro é indistinguível de estar quebrado.
+**Contar no banco, não no cliente.** Milhares de enrollments não passam pelo PostgREST linha a
+linha. E `min(next_run_at)` responde a única pergunta que a pessoa realmente faz na primeira semana:
+"quando é a próxima?".
+**Resposta e clique são KPIs separados, e vêm do evento.** `message_events` é append-only e o status
+é derivado; contar pelo evento é o que faz o número bater com a invariante 4 e com o D7 — clique
+aparece e **não** encerra.
+**O que o teste me corrigiu:** eu tinha assumido que em shadow mode não há remetente, e ia rotular a
+coluna como `(shadow mode)`. Falso: `processar_vencidos` **escolhe e reserva** remetente igual, só
+não envia. A coluna teria mentido. Quem diz que nada saiu de casa é o `status` da mensagem, e ele
+entrou na linha do tempo por causa disso.
+**E um teto que era enfeite.** O `least(p_limite, 500)` da linha do tempo passava no teste com e sem
+o `least`, porque o cenário tinha três eventos — mesmo formato do `tem_adapter` do D31. Agora o
+teste insere 600 eventos e cobra os 500.
+
 ---
 
 ## Decisões adiadas (não decidir agora)

@@ -137,6 +137,12 @@ e elas têm teste automatizado obrigatório.**
 - **Nunca** contar `array_length` de `array_agg` sobre junção externa sem `FILTER`. Sem par, o
   agregado vira `{NULL}` e "nenhum" passa por "um" — foi assim que a prévia quase repetiu o
   silêncio que existe para quebrar (D35).
+- **Nunca** deixar o shadow mode invisível. Ele roda o caminho inteiro e não envia; sem tela que
+  diga "todas em shadow mode", o modo que de-risca o projeto parece defeito (D36).
+- **Nunca** rotular ausência de remetente como shadow mode. Em `simulado` o motor **escolhe e
+  reserva** remetente igual — quem diz que nada saiu é o `status` da mensagem (D36).
+- **Nunca** escrever asserção que o cenário não consegue violar. Teto de 500 com três linhas no
+  banco passa com e sem o teto — é o `tem_adapter` do D31 outra vez (D36).
 
 ---
 
@@ -188,6 +194,10 @@ e elas têm teste automatizado obrigatório.**
 > A **tela de contatos** (D35) lista, busca por nome ou número, e inscreve em campanha — também com
 > prévia (`prever_inscricao`), porque aqui o erro é silencioso: inscrever quem não tem identidade no
 > canal dos passos não dá erro, dá uma campanha "concluída" sem mensagem nenhuma.
+>
+> A **tela da campanha** (D36) fecha o laço: o que o motor fez, contado no banco
+> (`resumo_da_campanha`) e lido de `message_events` (`eventos_da_campanha`). É ela que torna o
+> shadow mode legível — sem ela, "rodou tudo e não enviou nada" é igual a "está quebrado".
 >
 > Falta da Fase 2: o backfill em si, que depende de acesso aos dados do projeto legado
 > `gtivnngoeccqbvfjiyne` — e com ele a comparação contra o Disparador.
