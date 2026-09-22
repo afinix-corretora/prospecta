@@ -5,7 +5,7 @@
             "ator": "operador",
             "canal": null,
             "contato": null,
-            "detalhe": "7 entrariam como novos, 0 seriam reimportação — conferido antes de gravar",
+            "detalhe": "8 entrariam como novos, 0 seriam reimportação — conferido antes de gravar",
             "momento": 0,
             "remetente": null
         },
@@ -73,11 +73,20 @@
             "remetente": null
         },
         {
+            "acao": "importada",
+            "ator": "operador",
+            "canal": null,
+            "contato": "(sem nome)",
+            "detalhe": "criado com 2 identidade(s)",
+            "momento": 0,
+            "remetente": null
+        },
+        {
             "acao": "linha_recusada",
             "ator": "operador",
             "canal": null,
             "contato": "Escritório Central",
-            "detalhe": "linha 9: nenhum contato utilizável: o que havia não passou na conferência",
+            "detalhe": "linha 10: nenhum contato utilizável: o que havia não passou na conferência",
             "momento": 0,
             "remetente": null
         },
@@ -86,7 +95,7 @@
             "ator": "operador",
             "canal": null,
             "contato": "Cliente Sem Contato",
-            "detalhe": "linha 10: linha sem telefone, e-mail ou @ preenchido",
+            "detalhe": "linha 11: linha sem telefone, e-mail ou @ preenchido",
             "momento": 0,
             "remetente": null
         },
@@ -95,7 +104,7 @@
             "ator": "operador",
             "canal": null,
             "contato": null,
-            "detalhe": "linha 9, coluna Telefone: 11 3251-4000 — telefone fixo não recebe WhatsApp nem SMS",
+            "detalhe": "linha 10, coluna Telefone: 11 3251-4000 — telefone fixo não recebe WhatsApp nem SMS",
             "momento": 0,
             "remetente": null
         },
@@ -163,6 +172,15 @@
             "remetente": null
         },
         {
+            "acao": "inscrito",
+            "ator": "motor",
+            "canal": null,
+            "contato": "(sem nome)",
+            "detalhe": "Lista fria SP",
+            "momento": 0,
+            "remetente": null
+        },
+        {
             "acao": "mensagem_criada",
             "ator": "motor",
             "canal": "whatsapp",
@@ -217,20 +235,56 @@
             "remetente": "+55 11 98000-0009"
         },
         {
+            "acao": "adiado_sem_remetente",
+            "ator": "motor",
+            "canal": null,
+            "contato": "(sem nome)",
+            "detalhe": "whatsapp até 23/09 00:00",
+            "momento": 0,
+            "remetente": null
+        },
+        {
+            "acao": "circuito_aberto",
+            "ator": "operador",
+            "canal": "whatsapp",
+            "contato": null,
+            "detalhe": "a conta Comercial acumulou 5 falhas e saiu do pool",
+            "momento": 0,
+            "remetente": "+55 11 99000-0001"
+        },
+        {
+            "acao": "remetente_trocado",
+            "ator": "motor",
+            "canal": "whatsapp",
+            "contato": "Marina Alves",
+            "detalhe": "a conta Comercial saiu do pool depois de a mensagem existir; o pendente foi para outra",
+            "momento": 0,
+            "remetente": "+55 11 99000-0002"
+        },
+        {
             "acao": "entregue_ao_provedor",
             "ator": "provedor",
             "canal": "whatsapp",
             "contato": "Marina Alves",
-            "detalhe": "PROV-d94c54ad",
+            "detalhe": "PROV-9e41b36c",
             "momento": 0,
-            "remetente": "+55 11 99000-0001"
+            "remetente": "+55 11 99000-0002"
         },
         {
             "acao": "entregue_ao_provedor",
             "ator": "provedor",
             "canal": "whatsapp",
             "contato": "Otávio Lima",
-            "detalhe": "PROV-f99f42e5",
+            "detalhe": "PROV-1c5b3845",
+            "momento": 0,
+            "remetente": "+55 11 99000-0002"
+        },
+        {
+            "acao": "remetente_trocado",
+            "ator": "motor",
+            "canal": "whatsapp",
+            "contato": "Paula Ribeiro",
+            "detalhe": "a conta Comercial saiu do pool depois de a mensagem existir; o pendente foi para outra",
             "momento": 0,
             "remetente": "+55 11 99000-0002"
         },
@@ -239,16 +293,16 @@
             "ator": "provedor",
             "canal": "whatsapp",
             "contato": "Paula Ribeiro",
-            "detalhe": "PROV-5c9f7ced",
+            "detalhe": "PROV-9dc3d193",
             "momento": 0,
-            "remetente": "+55 11 99000-0001"
+            "remetente": "+55 11 99000-0002"
         },
         {
             "acao": "entregue_ao_provedor",
             "ator": "provedor",
             "canal": "whatsapp",
             "contato": "Rui Nogueira",
-            "detalhe": "PROV-336d9393",
+            "detalhe": "PROV-1a620be0",
             "momento": 0,
             "remetente": "+55 11 99000-0002"
         },
@@ -257,7 +311,7 @@
             "ator": "provedor",
             "canal": "whatsapp",
             "contato": "Sônia Prado",
-            "detalhe": "PROV-c8f98950",
+            "detalhe": "PROV-4b0eb806",
             "momento": 0,
             "remetente": "+55 11 98000-0009"
         },
@@ -268,6 +322,60 @@
             "contato": "Vera Castro",
             "detalhe": "número não existe no WhatsApp",
             "momento": 0,
+            "remetente": "+55 11 98000-0009"
+        },
+        {
+            "acao": "adiado_sem_remetente",
+            "ator": "motor",
+            "canal": null,
+            "contato": "(sem nome)",
+            "detalhe": "whatsapp até 23/09 00:00",
+            "momento": 7,
+            "remetente": null
+        },
+        {
+            "acao": "adiado_sem_remetente",
+            "ator": "motor",
+            "canal": null,
+            "contato": "(sem nome)",
+            "detalhe": "whatsapp até 23/09 00:00",
+            "momento": 14,
+            "remetente": null
+        },
+        {
+            "acao": "adiado_sem_remetente",
+            "ator": "motor",
+            "canal": null,
+            "contato": "(sem nome)",
+            "detalhe": "whatsapp até 23/09 00:00",
+            "momento": 21,
+            "remetente": null
+        },
+        {
+            "acao": "novo_dia",
+            "ator": "operador",
+            "canal": null,
+            "contato": null,
+            "detalhe": "dia 2 da cadência — quotas diárias renovadas",
+            "momento": 28,
+            "remetente": null
+        },
+        {
+            "acao": "mensagem_criada",
+            "ator": "motor",
+            "canal": "whatsapp",
+            "contato": "(sem nome)",
+            "detalhe": "1",
+            "momento": 28,
+            "remetente": "+55 11 98000-0009"
+        },
+        {
+            "acao": "entregue_ao_provedor",
+            "ator": "provedor",
+            "canal": "whatsapp",
+            "contato": "(sem nome)",
+            "detalhe": "PROV-f09eda91",
+            "momento": 28,
             "remetente": "+55 11 98000-0009"
         },
         {
@@ -286,7 +394,7 @@
             "contato": "Marina Alves",
             "detalhe": "2",
             "momento": 48,
-            "remetente": "+55 11 99000-0001"
+            "remetente": "+55 11 99000-0002"
         },
         {
             "acao": "mensagem_criada",
@@ -304,7 +412,7 @@
             "contato": "Paula Ribeiro",
             "detalhe": "email",
             "momento": 48,
-            "remetente": "+55 11 99000-0001"
+            "remetente": "+55 11 99000-0002"
         },
         {
             "acao": "mensagem_criada",
@@ -316,20 +424,20 @@
             "remetente": "+55 11 99000-0002"
         },
         {
-            "acao": "entregue_ao_provedor",
-            "ator": "provedor",
-            "canal": "email",
-            "contato": "Marina Alves",
-            "detalhe": "PROV-669943bb",
+            "acao": "respondeu",
+            "ator": "pessoa",
+            "canal": "whatsapp",
+            "contato": "Otávio Lima",
+            "detalhe": "oi, pode me mandar os valores? — com o toque seguinte já na fila",
             "momento": 48,
-            "remetente": "resgate@afinix-relaciona.com.br"
+            "remetente": null
         },
         {
             "acao": "entregue_ao_provedor",
             "ator": "provedor",
             "canal": "email",
-            "contato": "Otávio Lima",
-            "detalhe": "PROV-c1a5842a",
+            "contato": "Marina Alves",
+            "detalhe": "PROV-4f2d2364",
             "momento": 48,
             "remetente": "resgate@afinix-relaciona.com.br"
         },
@@ -338,16 +446,16 @@
             "ator": "provedor",
             "canal": "email",
             "contato": "Rui Nogueira",
-            "detalhe": "PROV-c918475d",
+            "detalhe": "PROV-96920dff",
             "momento": 48,
             "remetente": "resgate@afinix-relaciona.com.br"
         },
         {
-            "acao": "respondeu",
-            "ator": "pessoa",
-            "canal": "whatsapp",
+            "acao": "envio_cancelado",
+            "ator": "motor",
+            "canal": null,
             "contato": "Otávio Lima",
-            "detalhe": "oi, pode me mandar os valores?",
+            "detalhe": "a pessoa respondeu antes do despacho: o toque seguinte não saiu (D40)",
             "momento": 48,
             "remetente": null
         },
@@ -367,7 +475,7 @@
             "contato": "Paula Ribeiro",
             "detalhe": "contato suprimido",
             "momento": 48,
-            "remetente": "+55 11 99000-0001"
+            "remetente": "+55 11 99000-0002"
         },
         {
             "acao": "novo_dia",
@@ -401,7 +509,7 @@
             "ator": "provedor",
             "canal": "whatsapp",
             "contato": "Sônia Prado",
-            "detalhe": "PROV-8b779d9a",
+            "detalhe": "PROV-44e25502",
             "momento": 96,
             "remetente": "+55 11 98000-0009"
         },
@@ -448,25 +556,52 @@
             "contato": "Rui Nogueira",
             "detalhe": "3",
             "momento": 120,
-            "remetente": "+55 11 99000-0002"
+            "remetente": "resgate@afinix-relaciona.com.br"
+        },
+        {
+            "acao": "pediu_para_sair",
+            "ator": "pessoa",
+            "canal": null,
+            "contato": "Rui Nogueira",
+            "detalhe": "com a mensagem já criada e esperando despacho",
+            "momento": 120,
+            "remetente": null
         },
         {
             "acao": "entregue_ao_provedor",
             "ator": "provedor",
             "canal": "whatsapp",
             "contato": "Marina Alves",
-            "detalhe": "PROV-f3658c58",
+            "detalhe": "PROV-a77d4b28",
             "momento": 120,
-            "remetente": "+55 11 99000-0001"
+            "remetente": "+55 11 99000-0002"
+        },
+        {
+            "acao": "envio_cancelado",
+            "ator": "motor",
+            "canal": null,
+            "contato": "Rui Nogueira",
+            "detalhe": "supressão chegou antes do despacho: a mensagem não saiu (D39)",
+            "momento": 120,
+            "remetente": null
+        },
+        {
+            "acao": "mensagem_criada",
+            "ator": "motor",
+            "canal": "whatsapp",
+            "contato": "(sem nome)",
+            "detalhe": "2",
+            "momento": 124,
+            "remetente": "+55 11 98000-0009"
         },
         {
             "acao": "entregue_ao_provedor",
             "ator": "provedor",
             "canal": "whatsapp",
-            "contato": "Rui Nogueira",
-            "detalhe": "PROV-bba01b2b",
-            "momento": 120,
-            "remetente": "+55 11 99000-0001"
+            "contato": "(sem nome)",
+            "detalhe": "PROV-75b8d807",
+            "momento": 124,
+            "remetente": "+55 11 98000-0009"
         }
     ],
     "outbox": [
@@ -723,11 +858,11 @@
             "agentes": {
                 "whatsapp": "Caio — prospecção fria no WhatsApp"
             },
-            "enviadas": 2,
+            "enviadas": 4,
             "objetivo": "Abrir conversa com quem nunca falou com a corretora",
-            "inscritos": 2,
+            "inscritos": 3,
             "respostas": 0,
-            "concluidas": 2,
+            "concluidas": 3,
             "suprimidos": 0,
             "em_cadencia": 0
         },
@@ -746,7 +881,7 @@
                 "email": "Edu — atendimento por e-mail",
                 "whatsapp": "Ana — resgate no WhatsApp"
             },
-            "enviadas": 9,
+            "enviadas": 7,
             "objetivo": "Reabrir oportunidade usando todos os endereços conhecidos",
             "inscritos": 4,
             "respostas": 1,
@@ -758,87 +893,129 @@
     "mensagens": [
         {
             "canal": "whatsapp",
-            "status": "enviado",
-            "contato": "Marina Alves",
-            "conteudo": "Oi Marina Alves, aqui é da Afinix. Podemos retomar aquela cotação?",
-            "remetente": "+55 11 99000-0001"
-        },
-        {
-            "canal": "whatsapp",
+            "passo": 1,
+            "buraco": false,
             "status": "enviado",
             "contato": "Otávio Lima",
             "conteudo": "Oi Otávio Lima, aqui é da Afinix. Podemos retomar aquela cotação?",
-            "remetente": "+55 11 99000-0002"
+            "remetente": "Retenção"
+        },
+        {
+            "canal": "email",
+            "passo": 2,
+            "buraco": false,
+            "status": "cancelado",
+            "contato": "Otávio Lima",
+            "conteudo": "Otávio Lima, separei duas opções que cabem no que você falou.",
+            "remetente": "Domínio de relacionamento"
         },
         {
             "canal": "whatsapp",
+            "passo": 1,
+            "buraco": false,
             "status": "enviado",
             "contato": "Paula Ribeiro",
             "conteudo": "Oi Paula Ribeiro, aqui é da Afinix. Podemos retomar aquela cotação?",
-            "remetente": "+55 11 99000-0001"
+            "remetente": "Retenção"
         },
         {
             "canal": "whatsapp",
+            "passo": 1,
+            "buraco": false,
             "status": "enviado",
-            "contato": "Rui Nogueira",
-            "conteudo": "Oi Rui Nogueira, aqui é da Afinix. Podemos retomar aquela cotação?",
-            "remetente": "+55 11 99000-0002"
-        },
-        {
-            "canal": "whatsapp",
-            "status": "enviado",
-            "contato": "Sônia Prado",
-            "conteudo": "Olá Sônia Prado, trabalho com plano de saúde empresarial em São Paulo. Faz sentido conversarmos?",
-            "remetente": "+55 11 98000-0009"
-        },
-        {
-            "canal": "whatsapp",
-            "status": "falha",
-            "contato": "Vera Castro",
-            "conteudo": "Olá Vera Castro, trabalho com plano de saúde empresarial em Osasco. Faz sentido conversarmos?",
-            "remetente": "+55 11 98000-0009"
+            "contato": "Marina Alves",
+            "conteudo": "Oi Marina Alves, aqui é da Afinix. Podemos retomar aquela cotação?",
+            "remetente": "Retenção"
         },
         {
             "canal": "email",
+            "passo": 2,
+            "buraco": false,
             "status": "enviado",
             "contato": "Marina Alves",
             "conteudo": "Marina Alves, separei duas opções que cabem no que você falou.",
-            "remetente": "resgate@afinix-relaciona.com.br"
-        },
-        {
-            "canal": "email",
-            "status": "enviado",
-            "contato": "Otávio Lima",
-            "conteudo": "Otávio Lima, separei duas opções que cabem no que você falou.",
-            "remetente": "resgate@afinix-relaciona.com.br"
-        },
-        {
-            "canal": "email",
-            "status": "enviado",
-            "contato": "Rui Nogueira",
-            "conteudo": "Rui Nogueira, separei duas opções que cabem no que você falou.",
-            "remetente": "resgate@afinix-relaciona.com.br"
+            "remetente": "Domínio de relacionamento"
         },
         {
             "canal": "whatsapp",
-            "status": "enviado",
-            "contato": "Sônia Prado",
-            "conteudo": "Sônia Prado, consigo fazer uma cotação sem compromisso. Quer que eu envie?",
-            "remetente": "+55 11 98000-0009"
-        },
-        {
-            "canal": "whatsapp",
+            "passo": 3,
+            "buraco": false,
             "status": "enviado",
             "contato": "Marina Alves",
             "conteudo": "Marina Alves, te mandei um e-mail com as opções. Prefere que eu resuma por aqui?",
-            "remetente": "+55 11 99000-0001"
+            "remetente": "Retenção"
         },
         {
             "canal": "whatsapp",
+            "passo": 1,
+            "buraco": false,
             "status": "enviado",
             "contato": "Rui Nogueira",
+            "conteudo": "Oi Rui Nogueira, aqui é da Afinix. Podemos retomar aquela cotação?",
+            "remetente": "Retenção"
+        },
+        {
+            "canal": "email",
+            "passo": 2,
+            "buraco": false,
+            "status": "enviado",
+            "contato": "Rui Nogueira",
+            "conteudo": "Rui Nogueira, separei duas opções que cabem no que você falou.",
+            "remetente": "Domínio de relacionamento"
+        },
+        {
+            "canal": "whatsapp",
+            "passo": 3,
+            "buraco": false,
+            "status": "cancelado",
+            "contato": "Rui Nogueira",
             "conteudo": "Rui Nogueira, te mandei um e-mail com as opções. Prefere que eu resuma por aqui?",
-            "remetente": "+55 11 99000-0001"
+            "remetente": "Retenção"
+        },
+        {
+            "canal": "whatsapp",
+            "passo": 1,
+            "buraco": false,
+            "status": "enviado",
+            "contato": "Sônia Prado",
+            "conteudo": "Olá Sônia Prado, trabalho com plano de saúde empresarial em São Paulo. Faz sentido conversarmos?",
+            "remetente": "Chip frio SP"
+        },
+        {
+            "canal": "whatsapp",
+            "passo": 2,
+            "buraco": false,
+            "status": "enviado",
+            "contato": "Sônia Prado",
+            "conteudo": "Sônia Prado, consigo fazer uma cotação sem compromisso. Quer que eu envie?",
+            "remetente": "Chip frio SP"
+        },
+        {
+            "canal": "whatsapp",
+            "passo": 1,
+            "buraco": false,
+            "status": "falha",
+            "contato": "Vera Castro",
+            "conteudo": "Olá Vera Castro, trabalho com plano de saúde empresarial em Osasco. Faz sentido conversarmos?",
+            "remetente": "Chip frio SP"
+        },
+        {
+            "canal": "whatsapp",
+            "passo": 1,
+            "buraco": true,
+            "status": "enviado",
+            "contato": "(sem nome)",
+            "conteudo": "Olá , trabalho com plano de saúde empresarial em Sorocaba. Faz sentido conversarmos?",
+            "remetente": "Chip frio SP"
+        },
+        {
+            "canal": "whatsapp",
+            "passo": 2,
+            "buraco": true,
+            "status": "enviado",
+            "contato": "(sem nome)",
+            "conteudo": ", consigo fazer uma cotação sem compromisso. Quer que eu envie?",
+            "remetente": "Chip frio SP"
         }
     ],
     "supressao": [
@@ -849,6 +1026,10 @@
         {
             "motivo": "pediu remoção por telefone",
             "contato": "Paula Ribeiro"
+        },
+        {
+            "motivo": "pediu para sair, com mensagem já na fila",
+            "contato": "Rui Nogueira"
         }
     ],
     "provedores": [
@@ -1063,24 +1244,24 @@
             "provedor": "uazapi",
             "servidor": "dd000000-0000-0000-0000-0000000000d1",
             "identificador": "+55 11 98000-0009",
-            "webhook_token": "23837aae-4f62-4e38-8caf-b8395addfda0"
+            "webhook_token": "73d17cee-387c-483d-afb5-627b7b5423a3"
         },
         {
             "tipo": "morna",
             "canal": "whatsapp",
             "quota": 200,
-            "saude": 100.00,
+            "saude": 50.00,
             "usado": 2,
             "config": {
                 "source": "5511990000001",
                 "app_name": "afinix-comercial"
             },
-            "estado": "ativo",
+            "estado": "circuito_aberto",
             "apelido": "Comercial",
             "provedor": "gupshup",
             "servidor": null,
             "identificador": "+55 11 99000-0001",
-            "webhook_token": "dfe81979-a913-4298-a5b6-5a93aa072801"
+            "webhook_token": "291a8b17-15a1-47a9-a7db-b0b8e5bad6d1"
         },
         {
             "tipo": "morna",
@@ -1097,7 +1278,7 @@
             "provedor": "gupshup",
             "servidor": null,
             "identificador": "+55 11 99000-0002",
-            "webhook_token": "8090d597-64aa-4410-9220-5eb4f7dc7c5c"
+            "webhook_token": "a2b5830e-cc0f-4ede-a1eb-36411777ca5f"
         },
         {
             "tipo": "morna",
@@ -1115,7 +1296,7 @@
             "provedor": "resend",
             "servidor": null,
             "identificador": "resgate@afinix-relaciona.com.br",
-            "webhook_token": "fed2e43f-7057-40c7-a2fa-31ea1a6b0cc1"
+            "webhook_token": "531f4f28-25d9-4534-bc4c-03673213ed1f"
         }
     ],
     "servidores": [
@@ -1171,9 +1352,16 @@
             "status": "encerrado",
             "contato": "Vera Castro",
             "campanha": "Lista fria SP"
+        },
+        {
+            "passo": 2,
+            "motivo": "fim_dos_passos",
+            "status": "encerrado",
+            "contato": "(sem nome)",
+            "campanha": "Lista fria SP"
         }
     ],
-    "horas_simuladas": 120,
+    "horas_simuladas": 124,
     "provedores_canal": [
         {
             "docs": "https://resend.com/docs",

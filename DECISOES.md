@@ -724,6 +724,31 @@ dado, não remendar a frase. A função marca a suspeita por pontuação órfã 
 avisa quantas, e quem escreveu decide. Falso positivo aqui custa uma olhada; falso negativo custa
 uma campanha inteira dizendo "Olá ,".
 
+### D43 — O cenário do demo tem de acionar o que o demo diz mostrar
+`demo/preview.sql` encena, entre criar a mensagem e despachá-la, as três situações que o D37, o D39
+e o D40 tratam, e inscreve um contato sem nome para o D42 aparecer. `demo/conferir.py` recusa o
+`preview.json` que deixar de conter qualquer uma delas, e roda dentro do `demo/gerar.sh`.
+*Justificativa:* os quatro portões estavam no caminho do demo e **nenhum disparava**. Toda batida
+passava por `reivindicar_pendentes`, com a supressão, o rebalanceamento e a concordância com o
+agendador ali dentro — e o cenário nunca criava um pendente com remetente adoecido, nem uma
+supressão com mensagem na fila, nem uma resposta com toque seguinte já criado. O console mostrava
+uma cadência tranquila. Isso não quebra teste nenhum: o cenário não fica errado, ele só para de
+contar, e a diferença entre "o portão funciona" e "o portão nunca foi tocado" some da tela.
+**Relatar o que aconteceu, não o que devia ter acontecido.** A primeira versão deste relato deduzia
+a troca de remetente do estado depois do despacho e anunciou troca para quatro mensagens que nunca
+saíram do lugar — um demo mentindo na direção mais convincente possível, a de confirmar a correção
+recém-feita. O relato agora fotografa o remetente antes de `reivindicar_pendentes` e compara: o
+rebalanceamento acontece dentro da função e não deixa rastro na linha de `messages`, então sem a
+foto não há como saber, só como supor.
+**E o cenário tem de ser o certo para o portão.** A resposta na janela precisa ser de alguém com
+passo à frente: `fim_dos_passos` é o único encerramento que o D40 não cancela — de propósito, porque
+é o da última mensagem de toda cadência — e encená-la com quem estava no último passo teria
+"provado" o contrário do que o portão faz.
+**O demo consulta pela porta do produto.** A lista de mensagens do `preview.json` vem de
+`mensagens_da_campanha`, não de um `SELECT` próprio — mesma regra que levou a ingestão do demo para
+`ingerir_contato` (D32). Um demo que consulta à mão não exercita a tela, e `buraco`, que é o valor
+da função, não existiria no console.
+
 ---
 
 ## Decisões adiadas (não decidir agora)

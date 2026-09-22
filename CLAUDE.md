@@ -180,6 +180,12 @@ e elas têm teste automatizado obrigatório.**
   direto pelo modo que existe para pegá-lo (D42).
 - **Nunca** remendar o texto de um template por conta própria. Variável vazia deixa rastro
   ("Olá ,"); a tela marca e quem escreveu decide se preenche o dado ou reescreve a frase (D42).
+- **Nunca** deixar o demo passar por um portão sem acioná-lo. Cenário que não cria a situação não
+  prova nada e não quebra nada — só para de contar, e a tela fica igual à de antes da correção.
+  `demo/conferir.py` recusa o `preview.json` que perder uma das situações (D43).
+- **Nunca** deduzir, no relato do demo, um fato que o motor não deixou gravado. O rebalanceamento
+  acontece dentro de `reivindicar_pendentes` e não deixa rastro em `messages`: ou se fotografa
+  antes, ou se está supondo — e supor foi como o demo anunciou quatro trocas que nunca houve (D43).
 
 ---
 
@@ -258,7 +264,9 @@ e elas têm teste automatizado obrigatório.**
 > `demo/gerar.sh` roda o motor num cenário completo, injeta o resultado em `ui/console.html` por
 > `demo/injetar.py` e o console mostra — foi assim que D15 apareceu, um erro que teste unitário
 > nenhum pegava. O dado do console **não** se cola à mão: colar à mão foi como as constantes de
-> canal sumiram do arquivo sem ninguém notar.
+> canal sumiram do arquivo sem ninguém notar. O cenário encena a janela entre criar a mensagem e
+> despachá-la, que é onde o D37, o D39 e o D40 vivem, e `demo/conferir.py` recusa o `preview.json`
+> que deixar de acionar qualquer um deles: passar pelo portão não é o mesmo que tocá-lo (D43).
 
 **Fase 0 concluída** — inventário em `INVENTARIO-FASE-0.md`: 83 edge functions e 52 tabelas
 classificadas em migra/adapta/descarta. Leitura obrigatória antes de propor qualquer migração de

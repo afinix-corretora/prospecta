@@ -130,7 +130,12 @@ BEGIN
       ('Marina Alves','resgate'), ('Otávio Lima','resgate'),
       ('Paula Ribeiro','resgate'), ('Rui Nogueira','resgate'),
       ('Tulio Barros','resgate'),
-      ('Sônia Prado','fria'), ('Vera Castro','fria')
+      ('Sônia Prado','fria'), ('Vera Castro','fria'),
+      -- Sem nome, como a lista fria entrega. O template começa com
+      -- `Olá {{nome}},` e o motor troca variável ausente por nada — o texto
+      -- que sai é "Olá ,". É o D42 visível no console, e o motivo de a tela
+      -- da campanha marcar a suspeita.
+      ('(sem nome)','fria')
     ) AS v(nome, chave)
   LOOP
     SELECT campanha, versao INTO v_camp, v_ver FROM p.ids WHERE chave = r.chave;
@@ -180,22 +185,47 @@ BEGIN
 END;
 $$;
 
+-- Um contato sem nome é o caso normal de lista fria, e um rótulo nulo o
+-- apagava de toda a linha do tempo: as decisões do motor sobre ele apareciam
+-- sem dono. O rótulo é o mesmo de `mensagens_da_campanha` (D42), de propósito
+-- — duas grafias para a mesma pessoa e a gaveta do console não acha nada.
 CREATE FUNCTION p.nome_de(p_enrollment uuid) RETURNS text
 LANGUAGE sql STABLE AS $$
-  SELECT c.nome FROM enrollments e JOIN contacts c ON c.id = e.contact_id WHERE e.id = p_enrollment;
+  SELECT coalesce(c.nome, '(sem nome)') FROM enrollments e
+    JOIN contacts c ON c.id = e.contact_id WHERE e.id = p_enrollment;
 $$;
+
+-- Quem a mensagem apontava antes do despacho. O rebalanceamento do D37
+-- acontece dentro de `reivindicar_pendentes` e não deixa rastro: a linha de
+-- `messages` já sai com o remetente novo. Sem fotografar antes, a única forma
+-- de "relatar" a troca é adivinhar — foi o que a primeira versão deste demo
+-- fez, e ela anunciou troca para quatro mensagens que nunca saíram do lugar.
+CREATE TABLE p.antes_do_despacho (message_id uuid PRIMARY KEY, sender_account_id uuid NOT NULL);
 
 -- Provedor simulado: em produção é o adapter que faz o HTTP e devolve isto.
 CREATE FUNCTION p.responder_provedor() RETURNS void
 LANGUAGE plpgsql AS $$
-DECLARE r record; v_nome text; v_id text;
+DECLARE r record; v_nome text; v_id text; v_antes uuid;
 BEGIN
+  DELETE FROM p.antes_do_despacho;
+  INSERT INTO p.antes_do_despacho (message_id, sender_account_id)
+  SELECT id, sender_account_id FROM messages WHERE status = 'pendente';
+
   FOR r IN SELECT * FROM reivindicar_pendentes(50) LOOP
-    v_nome := (SELECT c.nome FROM messages m
+    v_nome := (SELECT coalesce(c.nome, '(sem nome)') FROM messages m
                  JOIN enrollments e ON e.id = m.enrollment_id
                  JOIN contacts c ON c.id = e.contact_id
                 WHERE m.id = r.message_id);
     v_id := 'PROV-' || substr(r.message_id::text, 1, 8);
+
+    SELECT sender_account_id INTO v_antes FROM p.antes_do_despacho
+     WHERE message_id = r.message_id;
+    IF v_antes IS NOT NULL AND v_antes <> r.sender_id THEN
+      PERFORM p.registrar('motor', v_nome, 'remetente_trocado',
+        'a conta ' || (SELECT apelido FROM sender_accounts WHERE id = v_antes)
+        || ' saiu do pool depois de a mensagem existir; o pendente foi para outra',
+        r.canal::text, r.sender_ident);
+    END IF;
 
     -- O número da Vera não existe no WhatsApp: culpa do destino.
     IF v_nome = 'Vera Castro' THEN
@@ -214,8 +244,8 @@ $$;
 
 DO $$
 DECLARE
-  r record; v_passada integer := 0; v_nome text;
-  v_msg uuid; v_prov text; v_chip uuid;
+  r record; v_passada integer := 0; v_nome text; v_i integer;
+  v_prov text; v_chip uuid;
 BEGIN
   WHILE v_passada < 40 LOOP
     v_passada := v_passada + 1;
@@ -231,25 +261,96 @@ BEGIN
           WHERE m.enrollment_id = r.enrollment_id ORDER BY m.criado_em DESC LIMIT 1));
     END LOOP;
 
-    PERFORM p.responder_provedor();
+    -- ---------------------------------------------------------------
+    -- A janela entre criar a mensagem e despachá-la
+    --
+    -- Tudo daqui até `responder_provedor` acontece com mensagens já
+    -- criadas e ainda `pendente`. É a janela que o D37, o D39 e o D40
+    -- tratam, e sem encená-la o demo passava por esses portões sem
+    -- nunca acioná-los.
+    -- ---------------------------------------------------------------
 
-    -- Otávio responde depois do primeiro contato.
-    IF p.agora() >= interval '3 hours' AND NOT EXISTS (
-      SELECT 1 FROM p.linha WHERE contato = 'Otávio Lima' AND acao = 'respondeu')
+    -- D37: a conta Comercial adoece com mensagem na fila. O pool tem a
+    -- Retenção do lado; antes do D37 a mensagem ia para a conta morta
+    -- assim mesmo, num laço de falhas.
+    IF NOT EXISTS (SELECT 1 FROM p.linha WHERE acao = 'circuito_aberto')
+      AND EXISTS (SELECT 1 FROM messages
+                   WHERE status = 'pendente'
+                     AND sender_account_id = 'dd000000-0000-0000-0000-000000000001')
     THEN
-      SELECT m.id, m.provider_message_id, m.sender_account_id
-        INTO v_msg, v_prov, v_chip FROM messages m
-        JOIN enrollments e ON e.id = m.enrollment_id
+      FOR v_i IN 1..5 LOOP
+        PERFORM privado.registrar_falha_remetente('dd000000-0000-0000-0000-000000000001');
+      END LOOP;
+      PERFORM p.registrar('operador', NULL, 'circuito_aberto',
+        'a conta Comercial acumulou 5 falhas e saiu do pool', 'whatsapp',
+        '+55 11 99000-0001');
+    END IF;
+
+    -- D39: Rui pede para sair depois de a mensagem dele existir. O gatilho
+    -- de `messages` guarda a criação; quem guarda o despacho é o portão.
+    IF p.agora() >= interval '72 hours' AND NOT EXISTS (
+      SELECT 1 FROM suppression WHERE contact_id = p.quem('Rui Nogueira'))
+      AND EXISTS (SELECT 1 FROM messages m JOIN enrollments e ON e.id = m.enrollment_id
+                   WHERE e.contact_id = p.quem('Rui Nogueira') AND m.status = 'pendente')
+    THEN
+      INSERT INTO suppression (contact_id, motivo)
+      VALUES (p.quem('Rui Nogueira'), 'pediu para sair, com mensagem já na fila');
+      PERFORM p.registrar('pessoa', 'Rui Nogueira', 'pediu_para_sair',
+        'com a mensagem já criada e esperando despacho');
+    END IF;
+
+    -- D40: Otávio responde com o toque seguinte JÁ criado e esperando
+    -- despacho. A invariante 4 encerra o enrollment na hora, mas quem já saiu
+    -- do roteador é uma linha em `messages` que ninguém mais olha. Sem o
+    -- portão, a pessoa que acabou de responder recebe o toque de quem não
+    -- respondeu — o erro mais caro de um motor de cadência, porque para quem
+    -- recebe não parece bug, parece desatenção.
+    --
+    -- Tem de ser alguém com passo à frente: `fim_dos_passos` é o único
+    -- encerramento que o D40 não cancela, e com ele o cenário não provaria
+    -- nada. Por isso não é a Sônia, cujo toque 2 é o último.
+    IF NOT EXISTS (SELECT 1 FROM p.linha WHERE contato = 'Otávio Lima' AND acao = 'respondeu')
+      AND EXISTS (SELECT 1 FROM messages m JOIN enrollments e ON e.id = m.enrollment_id
+                   WHERE e.contact_id = p.quem('Otávio Lima') AND m.status = 'pendente')
+      AND EXISTS (SELECT 1 FROM messages m JOIN enrollments e ON e.id = m.enrollment_id
+                   WHERE e.contact_id = p.quem('Otávio Lima')
+                     AND m.provider_message_id IS NOT NULL)
+    THEN
+      SELECT m.provider_message_id, m.sender_account_id INTO v_prov, v_chip
+        FROM messages m JOIN enrollments e ON e.id = m.enrollment_id
        WHERE e.contact_id = p.quem('Otávio Lima')
          AND m.provider_message_id IS NOT NULL
        ORDER BY m.criado_em DESC LIMIT 1;
-      IF v_prov IS NOT NULL THEN
-        PERFORM registrar_evento_provedor(v_chip, v_prov, 'respondido', now(),
-          '{"texto":"oi, pode me mandar os valores?"}'::jsonb);
-        PERFORM p.registrar('pessoa','Otávio Lima','respondeu',
-          'oi, pode me mandar os valores?','whatsapp');
-      END IF;
+      PERFORM registrar_evento_provedor(v_chip, v_prov, 'respondido', now(),
+        '{"texto":"oi, pode me mandar os valores?"}'::jsonb);
+      PERFORM p.registrar('pessoa','Otávio Lima','respondeu',
+        'oi, pode me mandar os valores? — com o toque seguinte já na fila',
+        'whatsapp');
     END IF;
+
+    PERFORM p.responder_provedor();
+
+    -- O que o portão fez com o que estava na fila. Sem esta linha, uma
+    -- mensagem cancelada some do relato: ela não vira evento de provedor
+    -- nenhum, porque nunca chegou a sair. E são dois portões diferentes, então
+    -- o relato diz qual: "cancelado" sem motivo é a mesma opacidade que o D42
+    -- conserta do outro lado.
+    FOR r IN SELECT m.id, coalesce(c.nome, '(sem nome)') AS nome,
+                    CASE WHEN EXISTS (SELECT 1 FROM suppression sp
+                                       WHERE sp.contact_id = e.contact_id)
+                         THEN 'supressão chegou antes do despacho: a mensagem não saiu (D39)'
+                         ELSE 'a pessoa respondeu antes do despacho: o toque seguinte não saiu (D40)'
+                    END AS motivo
+               FROM messages m
+               JOIN enrollments e ON e.id = m.enrollment_id
+               JOIN contacts c ON c.id = e.contact_id
+              WHERE m.status = 'cancelado'
+                AND NOT EXISTS (SELECT 1 FROM p.linha l
+                                 WHERE l.contato = coalesce(c.nome, '(sem nome)')
+                                   AND l.acao = 'envio_cancelado')
+    LOOP
+      PERFORM p.registrar('motor', r.nome, 'envio_cancelado', r.motivo);
+    END LOOP;
 
     -- Marina clica no link do e-mail, mas não responde (D7).
     IF p.agora() >= interval '50 hours' AND NOT EXISTS (
@@ -295,20 +396,25 @@ SELECT jsonb_pretty(jsonb_build_object(
     ) ORDER BY id), '[]'::jsonb) FROM p.linha),
 
   'enrollments', (SELECT coalesce(jsonb_agg(jsonb_build_object(
-      'contato', c.nome, 'campanha', ca.nome, 'status', e.status,
+      'contato', coalesce(c.nome, '(sem nome)'), 'campanha', ca.nome, 'status', e.status,
       'passo', e.passo_atual, 'motivo', e.motivo_encerramento
     ) ORDER BY c.nome), '[]'::jsonb)
     FROM enrollments e JOIN contacts c ON c.id = e.contact_id
     JOIN campaigns ca ON ca.id = e.campaign_id),
 
+  -- Pela função do produto, não por SELECT próprio (D42). É a mesma regra do
+  -- :ingestao: um demo que consulta `messages` à mão não exercita a tela que
+  -- a pessoa vai usar — e `buraco`, que é o valor da função, não existiria
+  -- aqui. É assim que aparece no console que a lista fria sem coluna de nome
+  -- compôs "Olá ,".
   'mensagens', (SELECT coalesce(jsonb_agg(jsonb_build_object(
-      'contato', c.nome, 'canal', m.canal, 'status', m.status,
-      'conteudo', m.conteudo,
-      'remetente', sa.identificador
-    ) ORDER BY m.criado_em), '[]'::jsonb)
-    FROM messages m JOIN enrollments e ON e.id = m.enrollment_id
-    JOIN contacts c ON c.id = e.contact_id
-    LEFT JOIN sender_accounts sa ON sa.id = m.sender_account_id),
+      'contato', x.contato, 'canal', x.canal, 'status', x.status,
+      'passo', x.passo, 'conteudo', x.conteudo, 'buraco', x.buraco,
+      'remetente', x.remetente
+    ) ORDER BY x.criado_em), '[]'::jsonb)
+    FROM p.ids i
+    CROSS JOIN LATERAL mensagens_da_campanha(
+      current_setting('app.tenant')::uuid, i.campanha, 200) x),
 
   'remetentes', (SELECT coalesce(jsonb_agg(jsonb_build_object(
       'identificador', identificador, 'apelido', apelido, 'canal', canal,
@@ -338,7 +444,7 @@ SELECT jsonb_pretty(jsonb_build_object(
     )), '[]'::jsonb) FROM suppression s LEFT JOIN contacts c ON c.id = s.contact_id),
 
   'outbox', (SELECT coalesce(jsonb_agg(jsonb_build_object(
-      'contato', c.nome, 'fato', o.fato, 'autoria', o.autoria
+      'contato', coalesce(c.nome, '(sem nome)'), 'fato', o.fato, 'autoria', o.autoria
     )), '[]'::jsonb) FROM outbox o JOIN contacts c ON c.id = o.contact_id),
 
   'horas_simuladas', (SELECT (extract(epoch from decorrido)/3600)::int FROM p.relogio),

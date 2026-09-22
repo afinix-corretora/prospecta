@@ -30,4 +30,5 @@ node --experimental-strip-types "$RAIZ/demo/ingerir.ts" > "$GERADO"
 psql -q -v ON_ERROR_STOP=1 -v ingestao="$GERADO" \
   -d "$BANCO" -f "$RAIZ/demo/preview.sql" > "$RAIZ/demo/preview.json"
 echo "demo/preview.json: $(wc -c < "$RAIZ/demo/preview.json") bytes"
+python3 "$RAIZ/demo/conferir.py"
 python3 "$RAIZ/demo/injetar.py"

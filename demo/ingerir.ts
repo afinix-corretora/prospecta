@@ -63,11 +63,23 @@ p('END');
 p('$g$;');
 p('');
 
+// O rótulo é o nome; quem não tem vira `(sem nome)`. Duas linhas sem nome
+// colidiriam na chave primária de `p.pessoas` e uma sobrescreveria a outra em
+// silêncio — então a colisão falha aqui, alto, em vez de virar um contato a
+// menos no cenário sem ninguém notar.
+const rotulos = new Set<string>();
+
 p('DO $g$');
 p('DECLARE r record;');
 p('BEGIN');
 for (const c of colheita.contatos) {
-  const rotulo = c.nome ?? `linha ${c.linha}`;
+  const rotulo = c.nome ?? '(sem nome)';
+  if (rotulos.has(rotulo)) {
+    throw new Error(
+      `rótulo repetido no cenário: ${rotulo} (linha ${c.linha}). ` +
+      'Dê um nome a uma das linhas, ou o demo perde um contato em silêncio.');
+  }
+  rotulos.add(rotulo);
   p(`  SELECT * INTO r FROM ingerir_contato(
     current_setting('app.tenant')::uuid, ${lit('o', colheita.origem)},
     ${lit('j', JSON.stringify(identidadesParaJson(c)))}::jsonb,
