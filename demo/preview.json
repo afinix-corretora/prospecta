@@ -1,6 +1,105 @@
 {
     "linha": [
         {
+            "acao": "previa_da_importacao",
+            "ator": "operador",
+            "canal": null,
+            "contato": null,
+            "detalhe": "7 entrariam como novos, 0 seriam reimportação — conferido antes de gravar",
+            "momento": 0,
+            "remetente": null
+        },
+        {
+            "acao": "importada",
+            "ator": "operador",
+            "canal": null,
+            "contato": "Marina Alves",
+            "detalhe": "criado com 3 identidade(s)",
+            "momento": 0,
+            "remetente": null
+        },
+        {
+            "acao": "importada",
+            "ator": "operador",
+            "canal": null,
+            "contato": "Otávio Lima",
+            "detalhe": "criado com 3 identidade(s)",
+            "momento": 0,
+            "remetente": null
+        },
+        {
+            "acao": "importada",
+            "ator": "operador",
+            "canal": null,
+            "contato": "Paula Ribeiro",
+            "detalhe": "criado com 2 identidade(s)",
+            "momento": 0,
+            "remetente": null
+        },
+        {
+            "acao": "importada",
+            "ator": "operador",
+            "canal": null,
+            "contato": "Rui Nogueira",
+            "detalhe": "criado com 3 identidade(s)",
+            "momento": 0,
+            "remetente": null
+        },
+        {
+            "acao": "importada",
+            "ator": "operador",
+            "canal": null,
+            "contato": "Sônia Prado",
+            "detalhe": "criado com 2 identidade(s)",
+            "momento": 0,
+            "remetente": null
+        },
+        {
+            "acao": "importada",
+            "ator": "operador",
+            "canal": null,
+            "contato": "Tulio Barros",
+            "detalhe": "criado com 2 identidade(s)",
+            "momento": 0,
+            "remetente": null
+        },
+        {
+            "acao": "importada",
+            "ator": "operador",
+            "canal": null,
+            "contato": "Vera Castro",
+            "detalhe": "criado com 2 identidade(s)",
+            "momento": 0,
+            "remetente": null
+        },
+        {
+            "acao": "linha_recusada",
+            "ator": "operador",
+            "canal": null,
+            "contato": "Escritório Central",
+            "detalhe": "linha 9: nenhum contato utilizável: o que havia não passou na conferência",
+            "momento": 0,
+            "remetente": null
+        },
+        {
+            "acao": "linha_recusada",
+            "ator": "operador",
+            "canal": null,
+            "contato": "Cliente Sem Contato",
+            "detalhe": "linha 10: linha sem telefone, e-mail ou @ preenchido",
+            "momento": 0,
+            "remetente": null
+        },
+        {
+            "acao": "valor_ignorado",
+            "ator": "operador",
+            "canal": null,
+            "contato": null,
+            "detalhe": "linha 9, coluna Telefone: 11 3251-4000 — telefone fixo não recebe WhatsApp nem SMS",
+            "momento": 0,
+            "remetente": null
+        },
+        {
             "acao": "inscrito",
             "ator": "motor",
             "canal": null,
@@ -122,7 +221,7 @@
             "ator": "provedor",
             "canal": "whatsapp",
             "contato": "Marina Alves",
-            "detalhe": "PROV-588d79c0",
+            "detalhe": "PROV-19fd1ad4",
             "momento": 0,
             "remetente": "+55 11 99000-0001"
         },
@@ -131,7 +230,7 @@
             "ator": "provedor",
             "canal": "whatsapp",
             "contato": "Otávio Lima",
-            "detalhe": "PROV-c100e8ae",
+            "detalhe": "PROV-696e58e0",
             "momento": 0,
             "remetente": "+55 11 99000-0002"
         },
@@ -140,7 +239,7 @@
             "ator": "provedor",
             "canal": "whatsapp",
             "contato": "Paula Ribeiro",
-            "detalhe": "PROV-e73d724c",
+            "detalhe": "PROV-a0f830e9",
             "momento": 0,
             "remetente": "+55 11 99000-0001"
         },
@@ -149,7 +248,7 @@
             "ator": "provedor",
             "canal": "whatsapp",
             "contato": "Rui Nogueira",
-            "detalhe": "PROV-48117cbc",
+            "detalhe": "PROV-43f613c5",
             "momento": 0,
             "remetente": "+55 11 99000-0002"
         },
@@ -158,7 +257,7 @@
             "ator": "provedor",
             "canal": "whatsapp",
             "contato": "Sônia Prado",
-            "detalhe": "PROV-35de204b",
+            "detalhe": "PROV-7e5ce080",
             "momento": 0,
             "remetente": "+55 11 98000-0009"
         },
@@ -221,7 +320,7 @@
             "ator": "provedor",
             "canal": "email",
             "contato": "Marina Alves",
-            "detalhe": "PROV-3bba1a0a",
+            "detalhe": "PROV-fbd98e47",
             "momento": 48,
             "remetente": "resgate@afinix-relaciona.com.br"
         },
@@ -230,7 +329,7 @@
             "ator": "provedor",
             "canal": "email",
             "contato": "Otávio Lima",
-            "detalhe": "PROV-3b2fbd67",
+            "detalhe": "PROV-dcb48595",
             "momento": 48,
             "remetente": "resgate@afinix-relaciona.com.br"
         },
@@ -239,7 +338,7 @@
             "ator": "provedor",
             "canal": "email",
             "contato": "Rui Nogueira",
-            "detalhe": "PROV-c71836e6",
+            "detalhe": "PROV-70e7b867",
             "momento": 48,
             "remetente": "resgate@afinix-relaciona.com.br"
         },
@@ -302,7 +401,7 @@
             "ator": "provedor",
             "canal": "whatsapp",
             "contato": "Sônia Prado",
-            "detalhe": "PROV-f48199f7",
+            "detalhe": "PROV-5af9333d",
             "momento": 96,
             "remetente": "+55 11 98000-0009"
         },
@@ -356,7 +455,7 @@
             "ator": "provedor",
             "canal": "whatsapp",
             "contato": "Marina Alves",
-            "detalhe": "PROV-88dd1e04",
+            "detalhe": "PROV-f4fd4f47",
             "momento": 120,
             "remetente": "+55 11 99000-0001"
         },
@@ -365,7 +464,7 @@
             "ator": "provedor",
             "canal": "whatsapp",
             "contato": "Rui Nogueira",
-            "detalhe": "PROV-37dd02e4",
+            "detalhe": "PROV-893e1a01",
             "momento": 120,
             "remetente": "+55 11 99000-0001"
         }
@@ -964,7 +1063,7 @@
             "provedor": "uazapi",
             "servidor": "dd000000-0000-0000-0000-0000000000d1",
             "identificador": "+55 11 98000-0009",
-            "webhook_token": "f892ba47-753a-43f5-9e35-1bfad5a9cabe"
+            "webhook_token": "236dba71-a83d-457d-aa67-cc02610ea8af"
         },
         {
             "tipo": "morna",
@@ -981,7 +1080,7 @@
             "provedor": "gupshup",
             "servidor": null,
             "identificador": "+55 11 99000-0001",
-            "webhook_token": "fc1c531e-1e2a-404e-9e34-1d4f10eaaf90"
+            "webhook_token": "c5785a4d-8d88-47bd-9857-cd8a8a04bcfe"
         },
         {
             "tipo": "morna",
@@ -998,7 +1097,7 @@
             "provedor": "gupshup",
             "servidor": null,
             "identificador": "+55 11 99000-0002",
-            "webhook_token": "4fbfeb9c-febf-4726-a44b-864d4580f37a"
+            "webhook_token": "002e2d64-6cbf-488e-b697-9c3076803b16"
         },
         {
             "tipo": "morna",
@@ -1016,7 +1115,7 @@
             "provedor": "resend",
             "servidor": null,
             "identificador": "resgate@afinix-relaciona.com.br",
-            "webhook_token": "922004e4-62db-41b0-833c-bb8a97ec6233"
+            "webhook_token": "de4c91ce-bea8-4bd4-a777-bb2241e034e8"
         }
     ],
     "servidores": [

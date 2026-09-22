@@ -100,35 +100,26 @@ INSERT INTO sender_accounts
 UPDATE sender_accounts SET provider_server_id = 'dd000000-0000-0000-0000-0000000000d1'
  WHERE id = 'dd000000-0000-0000-0000-000000000003';
 
--- Sete pessoas, cada uma mostrando uma coisa diferente.
-INSERT INTO contacts (id, nome, origem, metadados) VALUES
-  ('e1000000-0000-0000-0000-000000000001','Marina Alves','planilha','{"cidade":"Santos"}'),
-  ('e1000000-0000-0000-0000-000000000002','Otávio Lima','planilha','{"cidade":"São Paulo"}'),
-  ('e1000000-0000-0000-0000-000000000003','Paula Ribeiro','planilha','{"cidade":"Campinas"}'),
-  ('e1000000-0000-0000-0000-000000000004','Rui Nogueira','pipefy','{"cidade":"Santos"}'),
-  ('e1000000-0000-0000-0000-000000000005','Sônia Prado','planilha','{"cidade":"São Paulo"}'),
-  ('e1000000-0000-0000-0000-000000000006','Tulio Barros','planilha','{"cidade":"Guarulhos"}'),
-  ('e1000000-0000-0000-0000-000000000007','Vera Castro','planilha','{"cidade":"Osasco"}');
+-- ---------------------------------------------------------------------------
+-- Importação: pela porta de entrada, não por INSERT
+-- ---------------------------------------------------------------------------
 
-INSERT INTO contact_identities (contact_id, canal, valor, valor_norm, origem) VALUES
-  ('e1000000-0000-0000-0000-000000000001','whatsapp','+5511990001001','5511990001001','planilha'),
-  ('e1000000-0000-0000-0000-000000000001','email','marina@exemplo.com','marina@exemplo.com','planilha'),
-  ('e1000000-0000-0000-0000-000000000002','whatsapp','+5511990001002','5511990001002','planilha'),
-  ('e1000000-0000-0000-0000-000000000002','email','otavio@exemplo.com','otavio@exemplo.com','planilha'),
-  -- Paula não tem e-mail: o passo 2 dela não tem por onde sair.
-  ('e1000000-0000-0000-0000-000000000003','whatsapp','+5511990001003','5511990001003','planilha'),
-  ('e1000000-0000-0000-0000-000000000004','whatsapp','+5511990001004','5511990001004','pipefy'),
-  ('e1000000-0000-0000-0000-000000000004','email','rui@exemplo.com','rui@exemplo.com','pipefy'),
-  ('e1000000-0000-0000-0000-000000000005','whatsapp','+5511990001005','5511990001005','planilha'),
-  ('e1000000-0000-0000-0000-000000000006','whatsapp','+5511990001006','5511990001006','planilha'),
-  ('e1000000-0000-0000-0000-000000000007','whatsapp','+5511990001007','5511990001007','planilha');
+-- As pessoas entram de `demo/contatos.csv`, lidas por `PlanilhaSource` e
+-- gravadas por `ingerir_contato` — o mesmo caminho da tela. Antes este
+-- arquivo dava INSERT nas sete, que era justamente o "INSERT à mão" que a
+-- ingestão veio substituir (D32): um demo que pula a porta de entrada não
+-- exercita a porta de entrada.
+--
+-- O uuid de cada contato passa a vir do banco, então o cenário chama as
+-- pessoas por `p.quem('Nome')`.
+\i :ingestao
 
 -- Tulio já tinha pedido para sair antes de a campanha começar.
 INSERT INTO suppression (contact_id, motivo)
-VALUES ('e1000000-0000-0000-0000-000000000006','opt-out registrado na campanha anterior');
+VALUES (p.quem('Tulio Barros'),'opt-out registrado na campanha anterior');
 
 -- ---------------------------------------------------------------------------
--- Ingestão
+-- Inscrição nas campanhas
 -- ---------------------------------------------------------------------------
 
 DO $$
@@ -136,17 +127,14 @@ DECLARE r record; v_id uuid; v_camp uuid; v_ver uuid;
 BEGIN
   FOR r IN
     SELECT * FROM (VALUES
-      ('e1000000-0000-0000-0000-000000000001'::uuid,'Marina Alves','resgate'),
-      ('e1000000-0000-0000-0000-000000000002','Otávio Lima','resgate'),
-      ('e1000000-0000-0000-0000-000000000003','Paula Ribeiro','resgate'),
-      ('e1000000-0000-0000-0000-000000000004','Rui Nogueira','resgate'),
-      ('e1000000-0000-0000-0000-000000000006','Tulio Barros','resgate'),
-      ('e1000000-0000-0000-0000-000000000005','Sônia Prado','fria'),
-      ('e1000000-0000-0000-0000-000000000007','Vera Castro','fria')
-    ) AS v(contato, nome, chave)
+      ('Marina Alves','resgate'), ('Otávio Lima','resgate'),
+      ('Paula Ribeiro','resgate'), ('Rui Nogueira','resgate'),
+      ('Tulio Barros','resgate'),
+      ('Sônia Prado','fria'), ('Vera Castro','fria')
+    ) AS v(nome, chave)
   LOOP
     SELECT campanha, versao INTO v_camp, v_ver FROM p.ids WHERE chave = r.chave;
-    v_id := inscrever(r.contato, v_camp, v_ver, now());
+    v_id := inscrever(p.quem(r.nome), v_camp, v_ver, now());
     IF v_id IS NULL THEN
       PERFORM p.registrar('motor', r.nome, 'inscricao_recusada',
         'já estava na supressão — nem chega a criar estado');
@@ -251,7 +239,7 @@ BEGIN
     THEN
       SELECT m.id, m.provider_message_id INTO v_msg, v_prov FROM messages m
         JOIN enrollments e ON e.id = m.enrollment_id
-       WHERE e.contact_id = 'e1000000-0000-0000-0000-000000000002'
+       WHERE e.contact_id = p.quem('Otávio Lima')
          AND m.provider_message_id IS NOT NULL
        ORDER BY m.criado_em DESC LIMIT 1;
       IF v_prov IS NOT NULL THEN
@@ -268,7 +256,7 @@ BEGIN
     THEN
       SELECT m.provider_message_id INTO v_prov FROM messages m
         JOIN enrollments e ON e.id = m.enrollment_id
-       WHERE e.contact_id = 'e1000000-0000-0000-0000-000000000001'
+       WHERE e.contact_id = p.quem('Marina Alves')
          AND m.canal = 'email' AND m.provider_message_id IS NOT NULL
        ORDER BY m.criado_em DESC LIMIT 1;
       IF v_prov IS NOT NULL THEN
@@ -280,10 +268,10 @@ BEGIN
 
     -- No dia 2, alguém pede para sair por outro canal.
     IF p.agora() >= interval '30 hours' AND NOT EXISTS (
-      SELECT 1 FROM suppression WHERE contact_id = 'e1000000-0000-0000-0000-000000000003')
+      SELECT 1 FROM suppression WHERE contact_id = p.quem('Paula Ribeiro'))
     THEN
       INSERT INTO suppression (contact_id, motivo)
-      VALUES ('e1000000-0000-0000-0000-000000000003','pediu remoção por telefone');
+      VALUES (p.quem('Paula Ribeiro'),'pediu remoção por telefone');
       PERFORM p.registrar('operador','Paula Ribeiro','suprimida',
         'pediu remoção por telefone; entra na lista global');
     END IF;

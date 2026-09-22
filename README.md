@@ -108,6 +108,22 @@ A tela (`app/src/telas/Importar.tsx`) encadeia os três passos, e o primeiro é 
 conferir: **o que cada coluna virou**. Uma planilha cuja coluna se chama "Fone Comercial" importa
 500 contatos sem telefone nenhum e sem erro nenhum.
 
+### Inscrever em campanha
+
+`app/src/telas/Contatos.tsx` lista, busca por nome ou por número (comparando só os dígitos, porque
+ninguém procura pelo valor normalizado) e inscreve em campanha. Também com prévia
+(`prever_inscricao`), e aqui o motivo é mais forte: das três formas de a inscrição dar errado, **a
+pior não dá erro nenhum**. Inscrever quem não tem identidade no canal dos passos é aceito; o
+roteador faz `passo_pulado_sem_identidade`, empurra o enrollment adiante e encerra em
+`fim_dos_passos` — e o relatório mostra "campanha concluída" para quem nunca recebeu nada.
+
+Alcançável são três coisas ao mesmo tempo: identidade `valida`, num canal que o flow usa **e** que a
+campanha habilita, e que não esteja suprimida. Qualquer uma sozinha engana.
+
+`campaigns` **não tem** `flow_version_id` — a dupla campanha/flow só existe dentro de `enrollments`.
+A tela escolhe as duas separadamente, mostra os canais de cada lado e avisa, antes de qualquer
+chamada, quando eles não se cruzam. Isso é contorno de uma lacuna de modelagem, não solução (D35).
+
 ## O agendador
 
 `processar_vencidos(limite, modo)` é uma passada do worker: acorda, pergunta quem está vencido,
