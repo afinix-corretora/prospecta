@@ -11,6 +11,7 @@ import {
 import { lerProvedoresCanal, criarTenant } from './dados';
 import type { ProvedorCanal } from './dados';
 import { configurado, faltando, mensagemDeErro } from './supabase';
+import { carimboLegivel } from './carimbo';
 
 export function App() {
   // Antes de qualquer coisa: sem configuração não há o que tentar, e dizer o
@@ -45,6 +46,18 @@ function SemConfiguracao() {
           <code className="mono">app/.env.local</code> e reinicie o
           <code className="mono"> npm run dev</code>.
         </Aviso>
+
+        {/* O carimbo separa as duas causas que produzem esta mesma tela: a
+            variável não foi salva, ou o build é anterior a ela. Sem ele a
+            pessoa salva de novo, recarrega, vê isto igual, e conclui que o
+            app está quebrado. */}
+        <p style={{ fontSize: 12, color: 'var(--ink-3)' }}>
+          Este build: <code className="mono">{carimboLegivel()}</code>.<br />
+          Se esse horário é <b>anterior</b> ao momento em que você salvou a
+          variável, quem está velho é o build — Deployments → ⋯ →{' '}
+          <b>Redeploy</b>, sem cache. O horário não muda? O deploy não saiu
+          desta branch.
+        </p>
         <p style={{ fontSize: 12, color: 'var(--ink-3)', marginBottom: 0 }}>
           O prefixo <code className="mono">VITE_</code> é obrigatório: o Vite só
           expõe ao navegador variável que o tenha.

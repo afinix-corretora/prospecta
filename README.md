@@ -515,6 +515,32 @@ Depois do primeiro deploy, no Supabase → **Authentication → URL Configuratio
 - *Redirect URLs*: o domínio de produção **e** `https://*-<seu-escopo>.vercel.app` para os previews.
   Sem isso o link de acesso volta para `localhost` e o login de preview não fecha.
 
+### Production Branch tem que ter o app
+
+A Vercel constrói a produção a partir de **uma** branch, e é ela que o domínio de produção
+serve. Se essa branch não tem `app/`, a produção não tem o que construir — e o domínio segue
+servindo o último deploy que deu certo, que pode ser de qualquer branch e de qualquer data.
+O sintoma é cruel: você adiciona a variável, manda Redeploy, recarrega, e vê exatamente a mesma
+tela. Nada do que se faz em Environment Variables muda isso, porque o build nem acontece.
+
+Settings → Git → **Production Branch** precisa apontar para uma branch que carregue `app/`.
+
+### Carimbo do build
+
+As telas de "Falta configurar" e de login mostram de quando é o build, de qual commit e de qual
+branch. Não é enfeite: `VITE_*` entra no bundle **na hora do build**, não na hora que a página
+abre, então adicionar a variável na Vercel não muda um deploy que já passou. Sem o carimbo,
+"a variável não foi salva" e "o build é velho" produzem a mesma tela, e a segunda é a comum.
+
+Como ler: horário anterior ao momento em que você salvou a variável → o build é velho, Redeploy
+sem cache. Horário que não muda depois do Redeploy → o deploy não saiu dessa branch, veja a
+seção acima.
+
+O carimbo vem de `VERCEL_GIT_COMMIT_SHA`, `VERCEL_GIT_COMMIT_REF` e `VERCEL_ENV`, que a Vercel dá
+ao processo de build — nenhuma precisa do prefixo `VITE_`, porque são coladas em tempo de
+compilação por `define` no `vite.config.ts`. Só metadado: nenhum valor de variável entra ali,
+nem mascarado.
+
 ### O que não vai para a Vercel
 
 As edge functions e o worker rodam no Supabase, não aqui — `supabase functions deploy`. A Vercel

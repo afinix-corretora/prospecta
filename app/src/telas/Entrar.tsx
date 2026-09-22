@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { sb, mensagemDeErro } from '../supabase';
 import { Aviso, Campo } from '../componentes/base';
+import { carimboLegivel } from '../carimbo';
 
 /** Link por e-mail: sem senha para vazar, sem senha para o suporte redefinir. */
 export function Entrar() {
@@ -43,6 +44,12 @@ export function Entrar() {
             </button>
           </>
         )}
+
+        {/* Mesmo carimbo da tela de configuração: daqui também se responde
+            "é o build que acabei de subir?" sem abrir o painel da Vercel. */}
+        <p style={{ fontSize: 11, color: 'var(--ink-3)', marginTop: 18, marginBottom: 0 }}>
+          build <code className="mono">{carimboLegivel()}</code>
+        </p>
       </form>
     </div>
   );
