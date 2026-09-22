@@ -433,7 +433,7 @@ Depois, uma linha no SQL editor:
 
 ```sql
 SELECT privado.agendar_motor(
-  'https://<ref>.supabase.co/functions/v1/motor-worker',  -- URL do worker
+  'https://hucuwjvihqgftdjpnych.supabase.co/functions/v1/motor-worker',
   '*/5 * * * *',                                          -- de 5 em 5 minutos
   50                                                      -- vencidos por passada
 );

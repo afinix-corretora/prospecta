@@ -175,6 +175,11 @@ e elas têm teste automatizado obrigatório.**
   curto?* O D37 alargou a janela `pendente` e só o D39 e o D40 foram atrás do que ela quebrou.
 - **Nunca** criar função em `public` para repetir o que a política de RLS já diz. A tela de
   supressão insere direto; o teste é que passa a rodar no papel de quem usa o produto (D41).
+- **Nunca** deixar o shadow mode sem como ler o texto composto. Rodar tudo sem enviar só vale se
+  der para ver o que teria sido enviado — senão o erro mais provável, o template errado, passa
+  direto pelo modo que existe para pegá-lo (D42).
+- **Nunca** remendar o texto de um template por conta própria. Variável vazia deixa rastro
+  ("Olá ,"); a tela marca e quem escreveu decide se preenche o dado ou reescreve a frase (D42).
 
 ---
 

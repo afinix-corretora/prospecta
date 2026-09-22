@@ -565,3 +565,27 @@ export async function suprimirContato(dados: {
   if (error) throw error;
   return 'nova';
 }
+
+export interface MensagemComposta {
+  message_id: string;
+  criado_em: string;
+  contato: string;
+  canal: ProvedorCanal['canal'];
+  destino: string;
+  passo: number;
+  status: EventoDaCampanha['status'];
+  remetente: string;
+  conteudo: string;
+  buraco: boolean;
+}
+
+/** O texto que o motor compôs — em shadow mode, a única forma de vê-lo. */
+export async function lerMensagensDaCampanha(
+  tenant: string, campanha: string, limite = 50,
+): Promise<MensagemComposta[]> {
+  const { data, error } = await sb.rpc('mensagens_da_campanha', {
+    p_tenant: tenant, p_campaign_id: campanha, p_limite: limite,
+  });
+  if (error) throw error;
+  return (data ?? []) as MensagemComposta[];
+}

@@ -96,6 +96,7 @@ rodar previa_insc "$RAIZ/tests/previa_inscricao.sql"
 rodar painel      "$RAIZ/tests/painel.sql"
 rodar rebalance   "$RAIZ/tests/rebalanceamento.sql"
 rodar concorda    "$RAIZ/tests/despacho_concorda.sql"
+rodar mensagens   "$RAIZ/tests/mensagens.sql"
 
 # ---------------------------------------------------------------------------
 # Adapters de canal — TypeScript, sem rede (fetch injetado).

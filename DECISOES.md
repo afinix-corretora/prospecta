@@ -700,6 +700,30 @@ encerrado por resposta (invariante 4), **mas não entra na supressão** — ent�
 volta a falar com ele. Detectar opt-out em texto livre é decisão de produto (e há agentes de IA no
 schema para isso); está anotado junto com a pergunta de bounce e denúncia.
 
+### D42 — Ler o que o motor compôs, e o rastro que a variável vazia deixa
+`mensagens_da_campanha` devolve o texto renderizado de cada mensagem, com canal, destino, passo,
+status e remetente — e um booleano `buraco` marcando suspeita de variável sem valor. A tela da
+campanha mostra, atrás de um clique.
+*Justificativa:* o shadow mode roda o caminho inteiro sem enviar. Mas o texto composto — o que a
+pessoa receberia — não aparecia em lugar nenhum do produto: o painel mostrava eventos, não conteúdo.
+Sem isso, o modo que de-risca o projeto **não pega a classe de erro mais provável de todas**, que é
+o template errado.
+**E há uma que ele pega sozinho, se alguém puder ler.** `renderizar` troca chave ausente por string
+vazia, e não pela marcação crua. A decisão está certa, e o comentário dela argumenta bem — "mandar
+`Oi {{nome}}` para um cliente é pior do que mandar `Oi`". Só que o resultado, para um contato sem
+nome, é isto:
+
+    Olá {{nome}}, tudo bem?            ->   Olá , tudo bem?
+    {{nome}}, você é de {{cidade}}.    ->   , você é de .
+
+Ninguém escreve "Olá ," à mão. E uma lista fria entra justamente sem nome e sem cidade, então isso
+sai em **toda** mensagem da campanha.
+**Marcar, não corrigir.** Consertar o texto seria decidir a redação por quem escreveu o template:
+"Olá, tudo bem?" pode não ser o que a pessoa queria dizer, e a saída certa talvez seja preencher o
+dado, não remendar a frase. A função marca a suspeita por pontuação órfã ou espaço dobrado, a tela
+avisa quantas, e quem escreveu decide. Falso positivo aqui custa uma olhada; falso negativo custa
+uma campanha inteira dizendo "Olá ,".
+
 ---
 
 ## Decisões adiadas (não decidir agora)

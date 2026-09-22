@@ -12,8 +12,12 @@ import { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { useSessao } from '../sessao';
 import { Aviso, Kpi, NOME_CANAL, Secao, corCanal } from '../componentes/base';
-import { lerCampanhas, lerEventosDaCampanha, lerResumoDaCampanha } from '../dados';
-import type { Campanha as Camp, EventoDaCampanha, ResumoDaCampanha } from '../dados';
+import {
+  lerCampanhas, lerEventosDaCampanha, lerMensagensDaCampanha, lerResumoDaCampanha,
+} from '../dados';
+import type {
+  Campanha as Camp, EventoDaCampanha, MensagemComposta, ResumoDaCampanha,
+} from '../dados';
 import { mensagemDeErro } from '../supabase';
 
 // Frases nominais, não verbos: "1 por resposta" funciona com qualquer
@@ -47,6 +51,7 @@ export function Campanha() {
   const [campanha, setCampanha] = useState<Camp | null>(null);
   const [resumo, setResumo] = useState<ResumoDaCampanha | null>(null);
   const [eventos, setEventos] = useState<EventoDaCampanha[]>([]);
+  const [mensagens, setMensagens] = useState<MensagemComposta[]>([]);
   const [erro, setErro] = useState('');
   const [carregando, setCarregando] = useState(true);
 
@@ -54,14 +59,16 @@ export function Campanha() {
     if (!tenant || !id) return;
     setErro('');
     try {
-      const [cs, r, ev] = await Promise.all([
+      const [cs, r, ev, ms] = await Promise.all([
         lerCampanhas(),
         lerResumoDaCampanha(tenant.tenant_id, id),
         lerEventosDaCampanha(tenant.tenant_id, id),
+        lerMensagensDaCampanha(tenant.tenant_id, id),
       ]);
       setCampanha(cs.find((c) => c.id === id) ?? null);
       setResumo(r);
       setEventos(ev);
+      setMensagens(ms);
     } catch (e) { setErro(mensagemDeErro(e)); }
     finally { setCarregando(false); }
   }
@@ -124,6 +131,8 @@ export function Campanha() {
         </p>
       </div>
 
+      <Mensagens lista={mensagens} />
+
       <Secao titulo="Linha do tempo"
              nota={eventos.length ? `${eventos.length} evento(s), mais recente primeiro` : 'nada ainda'} />
 
@@ -166,6 +175,67 @@ export function Campanha() {
       )}
 
       <button className="btn" onClick={() => void recarregar()}>Atualizar</button>
+    </>
+  );
+}
+
+/**
+ * O que o motor compôs, palavra por palavra.
+ *
+ * É a razão de ser do shadow mode: rodar tudo sem enviar só vale se der para
+ * ler o que teria sido enviado. Sem isto, o erro mais provável de todos — o
+ * template errado — passa direto pelo modo que existe para pegá-lo.
+ */
+function Mensagens({ lista }: { lista: MensagemComposta[] }) {
+  const [aberto, setAberto] = useState(false);
+  const comBuraco = lista.filter((m) => m.buraco).length;
+
+  if (lista.length === 0) return null;
+
+  return (
+    <>
+      <Secao titulo="O que o motor escreveu"
+             nota={`${lista.length} ${lista.length === 1 ? 'mensagem' : 'mensagens'}`} />
+
+      {comBuraco > 0 && (
+        <Aviso tipo="erro">
+          <b>{comBuraco}</b> {comBuraco === 1 ? 'mensagem tem' : 'mensagens têm'} cara de variável
+          vazia — pontuação sobrando ou espaço dobrado, o rastro de um{' '}
+          <code className="mono">{'{{nome}}'}</code> sem valor. O motor troca variável ausente por
+          nada, de propósito (mandar a marcação crua seria pior), mas o texto vira
+          &ldquo;Olá , tudo bem?&rdquo;. Quem escreveu o template decide o que fazer: preencher o
+          dado, ou escrever uma frase que funcione sem ele.
+        </Aviso>
+      )}
+
+      <div className="painel">
+        <button className="btn" onClick={() => setAberto((v) => !v)}>
+          {aberto ? 'Esconder o texto' : 'Ler o texto das mensagens'}
+        </button>
+
+        {aberto && (
+          <table className="tab">
+            <thead>
+              <tr><th>Quem</th><th>Passo</th><th>Destino</th><th>O texto</th></tr>
+            </thead>
+            <tbody>
+              {lista.map((m) => (
+                <tr key={m.message_id}>
+                  <td style={{ color: 'var(--ink)' }}>{m.contato}</td>
+                  <td>{m.passo}</td>
+                  <td className="mono">{m.destino}</td>
+                  <td style={{ whiteSpace: 'pre-wrap', color: 'var(--ink)' }}>
+                    {m.conteudo}
+                    {m.buraco && (
+                      <span className="chip" style={{ marginLeft: 8 }}>variável vazia?</span>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
     </>
   );
 }
