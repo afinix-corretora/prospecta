@@ -460,19 +460,25 @@ Sem `ultimas_passadas`, um 401 no worker pareceria exatamente igual a "não havi
 As cinco funções moram em `privado`, sem EXECUTE para `anon` nem `authenticated`: agendar o motor é
 operação da plataforma, não do cliente. Nenhum tenant agenda o motor de ninguém.
 
-## Antes de ligar: republicar as edge functions
+## As edge functions publicadas
 
-As três edge functions no projeto `hucuwjvihqgftdjpnych` estão na **versão 1**, de 18/09. O
-repositório andou muito desde então, e o código publicado está atrás do schema em dois pontos que
-importam:
+As três estão na **versão 2**, publicadas em 23/09 e **conferidas byte a byte** contra o
+repositório: 13 arquivos na `motor-worker`, 13 na `canal-webhook`, 12 na `provisionar-instancia`,
+todos idênticos ao que está no git.
 
-| O que mudou no repositório | O que a versão publicada faz |
+A versão 1, de 18/09, estava atrás do schema em dois pontos que importavam:
+
+| O que mudou no repositório | O que a versão 1 fazia |
 |---|---|
-| **D38** trocou a assinatura de `registrar_evento_provedor`, que agora exige o chip | `canal-webhook` chama a versão de 4 argumentos, **que não existe mais** — todo evento casado por `provider_message_id` falharia |
-| **D30** acrescentou o adapter da Resend | o pacote publicado não tem `email-resend.ts`; despachar e-mail daria "provedor sem adapter" |
+| **D38** trocou a assinatura de `registrar_evento_provedor`, que agora exige o chip | `canal-webhook` chamava a versão de 4 argumentos, **que não existe mais** — todo evento casado por `provider_message_id` falharia |
+| **D30** acrescentou o adapter da Resend | o pacote publicado não tinha `email-resend.ts`; despachar e-mail daria "provedor sem adapter" |
 
-Hoje o raio disso é **zero**: nenhum chip está cadastrado, nenhum provedor aponta para a URL de
-webhook, e o `pg_cron` não está agendado. Mas é uma armadilha para o dia em que estiver.
+O raio disso era zero enquanto não havia chip cadastrado, provedor apontando para webhook nem
+`pg_cron` agendado — mas era uma armadilha para o dia em que houvesse.
+
+### Como republicar
+
+Pela CLI, a partir de um checkout:
 
 ```bash
 supabase functions deploy motor-worker          --project-ref hucuwjvihqgftdjpnych
@@ -484,9 +490,22 @@ O `verify_jwt` de cada uma vem do `supabase/config.toml` e **não** é para ser 
 `canal-webhook` é `false` de propósito, porque provedor não tem JWT para mandar (D24). Sem essa
 declaração, todo webhook voltaria 401 — e o efeito não seria um erro visível, seria o D23 de volta.
 
-Republicar pela CLI, a partir de um checkout, e não colando arquivo por arquivo: os adapters são
-cheios de expressão regular, e foi exatamente um transporte mexendo numa barra invertida que
-produziu o incidente do D32.
+**Se não houver CLI, o transporte arquivo por arquivo só vale com conferência.** Esta seção dizia
+antes, sem ressalva, para nunca colar arquivo por arquivo — os adapters são cheios de expressão
+regular, e foi um transporte mexendo numa barra invertida que produziu o incidente do D32. A regra
+continua valendo como preferência, e a v2 foi publicada assim porque não havia token de CLI
+disponível. O que torna isso aceitável não é cuidado ao copiar: é **ler de volta e comparar**.
+
+```python
+# depois de publicar, para cada função:
+#   get_edge_function(slug) devolve os arquivos com o conteúdo
+#   comparar cada um com o arquivo local, string contra string
+```
+
+Sem essa comparação, o transporte é o D32 esperando para acontecer de novo — e ela não é opcional
+nem "por garantia": é ela que substitui a CLI. Igual à ideia do digest estrutural que confere o
+schema aplicado contra o de teste, e pelo mesmo motivo: o que prova que o publicado é o do
+repositório é a comparação, não a intenção de quem publicou.
 
 ## Navegação do console
 

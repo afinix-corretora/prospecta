@@ -182,13 +182,21 @@ não-secreto em branco limpa.
 
 ## 4. Republicar as edge functions
 
-As três funções publicadas estão atrás do repositório. Pelo CLI:
+**Já feito em 23/09.** As três estão na versão 2, conferidas byte a byte contra o
+repositório. Este passo só volta a ser necessário quando o código de
+`adapters/`, `motor/` ou `supabase/functions/` mudar.
+
+Quando for a hora, pelo CLI, a partir de um checkout:
 
 ```bash
-supabase functions deploy motor-worker --project-ref SEU-PROJETO
-supabase functions deploy canal-webhook --project-ref SEU-PROJETO
+supabase functions deploy motor-worker          --project-ref SEU-PROJETO
+supabase functions deploy canal-webhook         --project-ref SEU-PROJETO
 supabase functions deploy provisionar-instancia --project-ref SEU-PROJETO
 ```
+
+O `verify_jwt` vem do `supabase/config.toml`. O `canal-webhook` é `false` de
+propósito — provedor não tem JWT para mandar (D24), e sem isso todo webhook
+voltaria 401. Ver o README para o que fazer quando não houver CLI.
 
 ---
 
