@@ -74,6 +74,7 @@ BEGIN
   -- `Authorization`, onde um caractere a mais é chave diferente — e o 401 que
   -- volta é idêntico ao de chave errada. Reportar, não aparar em silêncio: o
   -- worker usa o valor como está, então aparar aqui esconderia o defeito.
+  --
   -- `btrim` de um argumento só apara ESPAÇO. Quebra de linha e tabulação
   -- passam direto, e são justamente as que uma cópia de terminal traz. O
   -- conjunto vai por `chr()` porque a barra invertida não entra aqui (D32).
