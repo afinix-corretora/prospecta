@@ -749,6 +749,31 @@ passo à frente: `fim_dos_passos` é o único encerramento que o D40 não cancel
 `ingerir_contato` (D32). Um demo que consulta à mão não exercita a tela, e `buraco`, que é o valor
 da função, não existiria no console.
 
+### D44 — A chave do motor se confere antes de agendar, sem nunca ser devolvida
+`privado.conferir_chave_do_motor(p_url)` diz se o segredo do Vault serve: existe com o nome exato,
+não tem espaço nem quebra nas pontas, é JWT ou `sb_secret_`, carrega `role = service_role`, é do
+projeto para onde o job vai bater, e não expirou. `LIGAR.md` é o procedimento inteiro, com a
+conferência entre guardar e agendar.
+*Justificativa:* ligar o motor tem dois passos manuais, e só um deles reclama quando está errado.
+Na tela do Supabase a `anon` fica imediatamente acima da `service_role`, com o mesmo formato e quase
+o mesmo tamanho. Colar a de cima agenda o job, deixa a batida sair, e faz o worker responder 401 em
+toda passada — **e uma passada 401 é indistinguível, em toda a tela do produto, de uma passada sem
+vencidos**. É o formato do D31 e do D42 outra vez: o estado errado existe e nada o nomeia. Depois de
+agendado, o erro vira silêncio com cara de normalidade, e é procurado no lugar errado.
+**Fatos sobre a chave, nunca a chave.** Toda linha da saída descreve o segredo sem carregá-lo, e o
+tamanho é reportado como número. Uma função que lê segredo e escreve texto está a uma edição de
+vazá-lo, então a asserção existe e foi conferida contra sabotagem: ao forçar a linha do segredo a
+ecoar o valor, duas asserções ficam vermelhas.
+**Reportar a sujeira, não apará-la.** Espaço e quebra de linha nas pontas não aparecem em campo de
+senha, viajam no cabeçalho `Authorization` e devolvem o mesmo 401. Aparar em silêncio esconderia o
+defeito, porque o worker usa o valor como está — a conferência aponta e segue diagnosticando, para
+que ninguém corrija o espaço só para descobrir depois que a chave também era a errada.
+`btrim` de um argumento apara **só espaço**: quebra de linha e tabulação passam direto, e são
+justamente as que uma cópia de terminal traz. Quem pegou isso foi o teste, contra a primeira versão
+da função.
+**O arquivo é o procedimento, não o cofre.** `LIGAR.md` explica onde a chave mora e por que não pode
+morar em arquivo — nem nele. A primeira anti-regra do projeto não abre exceção para documentação.
+
 ---
 
 ## Decisões adiadas (não decidir agora)

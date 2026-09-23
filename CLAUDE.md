@@ -186,6 +186,15 @@ e elas têm teste automatizado obrigatório.**
 - **Nunca** deduzir, no relato do demo, um fato que o motor não deixou gravado. O rebalanceamento
   acontece dentro de `reivindicar_pendentes` e não deixa rastro em `messages`: ou se fotografa
   antes, ou se está supondo — e supor foi como o demo anunciou quatro trocas que nunca houve (D43).
+- **Nunca** deixar um passo manual de configuração sem como conferir antes do efeito. Colar a `anon`
+  no lugar da `service_role` agenda, bate e responde 401 — e passada 401 é idêntica a passada sem
+  vencidos. Depois de agendado, o erro vira silêncio com cara de normalidade (D44).
+- **Nunca** devolver o segredo numa função que o lê. Fatos a respeito dele — papel, projeto,
+  validade, tamanho — nunca o valor. E com asserção, porque a distância entre uma coisa e outra é
+  uma linha de "debug" esquecida (D44).
+- **Nunca** aparar em silêncio a sujeira de um segredo. O worker usa o valor como está: espaço nas
+  pontas é defeito a apontar, não a esconder. E `btrim` de um argumento apara só espaço — quebra de
+  linha e tabulação passam direto (D44).
 
 ---
 
