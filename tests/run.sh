@@ -228,5 +228,36 @@ for m in "$RAIZ"/supabase/migrations/*.sql; do
 done
 echo "PASS  migrations reaplicam limpas após o down"
 
+# ---------------------------------------------------------------------------
+# Números escritos à mão na documentação
+#
+# O CLAUDE.md diz quantas migrations existem, e esse número tinha ficado nove
+# atrás do repositório — no arquivo que instrui toda sessão nova. É a mesma
+# classe de defeito que os meta-testes de tenant já cobram: lista escrita à mão
+# envelhece sem avisar. Então o número passa a ser derivado, como os outros.
+#
+# O contador do projeto não entra aqui: exigiria rede. Quem aplica no Supabase
+# confere pelo `list_migrations`, junto com o `get_advisors` que já é regra.
+# ---------------------------------------------------------------------------
+
+echo ""
+echo "→ documentação que cita contagem"
+
+QTD_ARQ=$(ls "$RAIZ"/supabase/migrations/*.sql | wc -l | tr -d ' ')
+QTD_DOC=$(grep -oE '\(([0-9]+) migrations no repositório' "$RAIZ/CLAUDE.md" \
+          | grep -oE '[0-9]+' | head -1)
+
+if [ -z "$QTD_DOC" ]; then
+  echo "FALHA CLAUDE.md não diz mais quantas migrations existem — a linha sumiu"
+  exit 1
+elif [ "$QTD_DOC" = "$QTD_ARQ" ]; then
+  echo "PASS  CLAUDE.md cita $QTD_DOC migrations e há $QTD_ARQ no repositório"
+else
+  echo "FALHA CLAUDE.md diz $QTD_DOC migrations; o repositório tem $QTD_ARQ"
+  echo "      Atualize a linha em CLAUDE.md, e confira o contador do projeto"
+  echo "      com list_migrations antes de dar por fechado."
+  exit 1
+fi
+
 echo ""
 echo "Tudo verde."

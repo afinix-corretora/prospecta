@@ -260,10 +260,20 @@ e elas têm teste automatizado obrigatório.**
 > **derivados do schema** cobram `tenant_id`, RLS e FK composta de toda tabela nova — lista escrita
 > à mão envelhece sem avisar, e essa já tinha perdido a `provider_servers` (D31).
 >
-> O schema está **aplicado no projeto `hucuwjvihqgftdjpnych`** (21 migrations no repositório, 22
-> registros no projeto — uma corretiva de texto, ver D32), conferido por
+> O schema está **aplicado no projeto `hucuwjvihqgftdjpnych`** (30 migrations no repositório, 33
+> registros no projeto — duas corretivas de texto e uma separação, ver D32 e D39), conferido por
 > digest estrutural contra o banco de teste — colunas, constraints, índices, políticas, corpos de
 > função e a grade de privilégios batem byte a byte.
+>
+> Esse "30" tinha ficado em "21" por nove migrations, aqui no arquivo que instrui toda sessão nova.
+> É a mesma classe de defeito do parágrafo de cima — número escrito à mão envelhece sem avisar — e
+> agora ele é cobrado: `tests/run.sh` conta os arquivos de `supabase/migrations/` e falha se esta
+> linha discordar. O do projeto não dá para conferir do suite (precisa de rede), então quem mexer
+> no schema confere pelo `list_migrations` junto com o `get_advisors` que já é obrigatório.
+>
+> As três edge functions estão na **versão 2** no projeto, cada arquivo conferido byte a byte
+> contra o repositório depois de publicar. `LIGAR.md` é o procedimento de ligar o motor, com a
+> conferência do D44 entre guardar a chave e agendar.
 >
 > Toda mudança de schema roda `tests/run.sh` antes do commit. Teste vermelho é bloqueio, não aviso.
 > Toda mudança aplicada no projeto roda `get_advisors` depois: o suite não enxerga o que só existe
