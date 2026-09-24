@@ -54,11 +54,36 @@ permite conferir tudo antes de a primeira mensagem sair.
 | Quero mudar | Onde |
 |---|---|
 | Suprimir uma pessoa ou um endereço | Tela de Supressão |
-| Quais palavras numa resposta viram opt-out | *(em construção — será uma lista num só lugar)* |
+| Quais palavras numa resposta viram opt-out | Tabela `opt_out_termos` — uma linha por termo, com uma `nota` explicando por que ele está lá |
 | Se bounce e denúncia suprimem | *(em construção)* |
 
 **A supressão é definitiva.** Entrar nela não tem volta pela tela, de propósito: é a lista de quem
 pediu para não ser incomodado, e ela vale acima de qualquer regra de campanha.
+
+#### Como o motor entende um "pare"
+
+Quando alguém responde, o motor lê o texto e procura pedidos de saída. A parte que importa você
+saber, porque é contraintuitiva:
+
+**Termos ambíguos só contam com contexto.** Em plano de saúde, *"quero sair do meu plano"* é alguém
+querendo trocar de operadora — o melhor lead que existe. *"Não quero individual, quero empresarial"*
+é uma resposta de compra. Suprimir essas pessoas seria perder a venda e fazer o oposto do que elas
+pediram.
+
+Então `sair`, `não quero`, `descartar` e `tira` **só suprimem** quando vêm seguidos de algo sobre
+receber mensagem: "sair da **lista**", "não quero **receber**". Já `pare`, `descadastrar`,
+`não perturbe` e `spam` valem sozinhos, porque não têm outra leitura.
+
+O raciocínio por trás: **errar para mais é irreversível, errar para menos se conserta.** Se alguém
+pediu para sair de um jeito que o motor não reconheceu, você suprime pela tela em dez segundos. Se
+o motor suprimir um cliente por engano, ele está perdido para sempre.
+
+Para mudar: a tabela `opt_out_termos`. Cada linha tem `termo`, `exige_uma_de` (as palavras de
+contexto — vazio quer dizer "vale sozinho") e `nota`, dizendo por que está assim.
+
+**Um buraco que você precisa saber:** responder **PARE a um SMS não é detectado**, porque o
+provedor de SMS não tem webhook de entrada — a resposta não chega ao motor de jeito nenhum. É o
+caso clássico de opt-out no Brasil, e hoje ele não existe aqui.
 
 ### O que o CRM fica sabendo
 

@@ -29,6 +29,7 @@ import type {
 } from './tipos.ts';
 import { erroDeRede, exigir } from './tipos.ts';
 import { emailValido, montarRemetente, normalizarEmail, separarAssunto } from './email.ts';
+import { primeiroTexto } from './texto.ts';
 
 const ENDPOINT = 'https://api.resend.com/emails';
 const DOMINIOS = 'https://api.resend.com/domains';
@@ -140,7 +141,15 @@ export class EmailResendAdapter implements ChannelAdapter {
         deNumero: de,
         tipo: 'respondido',
         ocorridoEm: quando,
-        payload: { evento: tipoBruto, de, autoria: null },
+        payload: {
+          evento: tipoBruto,
+          de,
+          autoria: null,
+          // O corpo, quando o provedor manda. Sem `html` de propósito: tag
+          // virando texto encheria o classificador de opt-out de ruído (D48).
+          texto: primeiroTexto((dados as Record<string, unknown>).text,
+                                (dados as Record<string, unknown>).subject) ?? null,
+        },
       }];
     }
 

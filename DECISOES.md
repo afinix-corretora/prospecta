@@ -1049,3 +1049,77 @@ E uma correção menor no caminho: eu tinha posto `ON DELETE SET NULL` na FK. Ma
 imutável por gatilho, então a cláusula é inalcançável — e `SET NULL` diria a coisa errada se um dia
 rodasse, desapontando a campanha em silêncio. Ficou sem `ON DELETE`, com o motivo escrito, e com
 asserção provando que apagar uma versão de flow é recusado.
+
+### D48 — Quem pede para sair, sai
+
+Até aqui, responder encerrava o enrollment (invariante 4) mas **não** suprimia. Quem respondia "pare"
+saía daquela cadência e voltava a receber na campanha seguinte: o motor honrava a resposta e
+esquecia o pedido.
+
+#### Primeiro achado: o texto era jogado fora
+
+Antes de escrever o detector, fui ver onde o texto da resposta chega. **Nenhum adapter guardava.** Os
+cinco gravavam só metadado — `de`, `remoteJid`, `tipo_mensagem` — e o corpo da mensagem morria no
+`normalizeWebhook`. Um classificador de opt-out em SQL não teria o que ler.
+
+É o formato do D31 de novo, numa camada acima: eu teria construído a verificação sobre um campo que
+não existia, e ela nunca dispararia — em silêncio.
+
+Cobertura real, depois da correção:
+
+| Canal | Resposta chega? | Texto? |
+|---|---|---|
+| WhatsApp (Gupshup, Meta, UAZAPI, Evolution) | sim | **sim, agora** |
+| E-mail (Resend) | sim, `email.received` | corpo quando o provedor manda |
+| **SMS (Comtele)** | **não** — `normalizeWebhook` devolve `[]` | não há entrada nenhuma |
+
+O SMS merece destaque porque é o caso **clássico** de opt-out no Brasil: responder PARE a um SMS.
+Hoje esse caminho não existe, e fingir que existe seria pior do que dizê-lo.
+
+#### A armadilha, que neste negócio é cara
+
+Supressão é **imutável**. E duas das palavras óbvias são ambíguas exatamente onde está o dinheiro:
+
+- *"quero **sair** do meu plano da Amil"* — é intenção de troca de operadora. É o **melhor lead que
+  existe**, não um opt-out.
+- *"**não quero** individual, quero empresarial"* — é resposta de compra.
+
+Suprimir esses dois seria perder a venda **e** fazer o oposto da vontade da pessoa.
+
+A regra que resolve: termo ambíguo só conta com **contexto de recebimento nas três palavras
+seguintes**. "não quero **receber**", "sair da **lista**". Termo sem outra leitura possível numa
+resposta a prospecção — "pare", "descadastrar", "não perturbe" — vale sozinho.
+
+Três detalhes que a implementação obrigou a enfrentar:
+
+- **Contexto que vem antes.** "pode descartar" traz o sentido no que vem antes do termo. Resolvido
+  com termo composto (`pode descartar`), e não com uma segunda janela para trás — a busca já prefere
+  o termo mais longo.
+- **"para" é a preposição mais comum do idioma.** Só a construção `para de` conta, e ainda assim com
+  contexto de envio, senão "liga para de manhã" suprimiria alguém.
+- **"tira" também é ambíguo**: *"me tira uma dúvida"* é engajamento puro.
+
+A assimetria que governa tudo isto: **falso positivo é irreversível; falso negativo se conserta pela
+tela de supressão.** Quando os dois erros custam diferente, a trava mora do lado do erro caro.
+
+#### Verificação
+
+`tests/opt_out.sql`, 13 asserções, mais 7 nos adapters. Duas listas de frases, e a segunda é a que
+importa: dezesseis pedidos de saída que **têm** de ser pegos, e dez leads vivos que **não** podem
+ser suprimidos — cinco dos quais contêm literalmente um termo da lista.
+
+Três sabotagens. A primeira é a que justifica a decisão inteira: **tirando a regra de contexto,
+sete dos dez leads vivos do cenário são suprimidos**, entre eles "quero sair do meu plano da Amil" e
+"quero parar de pagar tão caro, tem opção melhor?".
+
+E uma correção numa asserção minha: eu tinha fixado qual termo a frase de teste casaria. "pode parar
+de me mandar mensagem" casa tanto `parar` (com contexto "mandar") quanto `para de`, e as duas
+leituras estão certas — a asserção passou a exigir que o motivo carregue **um termo real da lista**,
+que é a propriedade auditável, em vez de um termo específico.
+
+#### Onde mudar
+
+A lista mora em `opt_out_termos`, com uma coluna `nota` em cada linha explicando por que o termo
+está lá e por que exige (ou não) contexto. Trocar vocabulário não é mexer em código. A tabela não
+tem `tenant_id` de propósito — é idioma, não dado de cliente — e está na lista de exceções do
+meta-teste com essa justificativa escrita.

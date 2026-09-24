@@ -225,6 +225,15 @@ e elas têm teste automatizado obrigatório.**
 - **Nunca** afirmar no comentário mais do que o código sustenta. A checagem de "campanha sem flow"
   não impede o enrollment vazio — o `NOT NULL` já impedia; ela só torna a recusa legível. A
   sabotagem que não acende nada é o sinal de que a asserção, ou a afirmação, está errada (D47).
+- **Nunca** construir verificação sobre um campo que ninguém preenche. Os cinco adapters jogavam
+  fora o texto da resposta; um detector de opt-out lendo `payload->>'texto'` nunca dispararia, em
+  silêncio. Conferir a origem do dado vem antes de escrever quem o lê (D48).
+- **Nunca** suprimir por termo ambíguo sem contexto. "quero sair do meu plano" e "não quero
+  individual, quero empresarial" são intenção de COMPRA. Supressão é imutável: falso positivo apaga
+  o cliente para sempre, falso negativo se conserta pela tela. A trava mora do lado do erro caro
+  (D48).
+- **Nunca** deixar o classificador de opt-out ler o que não é string. Objeto virando
+  "[object Object]" e número virando "0" alimentam de ruído uma decisão que não tem volta (D48).
 
 ---
 
@@ -290,7 +299,7 @@ e elas têm teste automatizado obrigatório.**
 > **derivados do schema** cobram `tenant_id`, RLS e FK composta de toda tabela nova — lista escrita
 > à mão envelhece sem avisar, e essa já tinha perdido a `provider_servers` (D31).
 >
-> O schema está **aplicado no projeto `hucuwjvihqgftdjpnych`** (33 migrations no repositório, 38
+> O schema está **aplicado no projeto `hucuwjvihqgftdjpnych`** (34 migrations no repositório, 39
 > registros no projeto — duas corretivas de texto, uma separação e duas do D46 (superfície e
 > tenant explícito), ver D32, D39 e D46), conferido por
 > digest estrutural contra o banco de teste — colunas, constraints, índices, políticas, corpos de

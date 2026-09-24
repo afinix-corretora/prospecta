@@ -19,6 +19,7 @@ import type {
 } from './tipos.ts';
 import { erroDeRede, exigir } from './tipos.ts';
 import { normalizarTelefone } from './telefone.ts';
+import { emCaminho, primeiroTexto } from './texto.ts';
 
 const BASE_PADRAO = 'https://api.gupshup.io/wa/api/v1';
 
@@ -123,7 +124,14 @@ export class WhatsAppGupshupAdapter implements ChannelAdapter {
         providerMessageId: String(alvo),
         tipo: 'respondido' as TipoEvento,
         ocorridoEm: instante(p.timestamp ?? p.ts),
-        payload: { de: p.source ?? null, tipo_mensagem: p.type ?? null },
+        payload: {
+          de: p.source ?? null,
+          tipo_mensagem: p.type ?? null,
+          // O corpo vem em `payload.payload.text` nas de texto. Figura e
+          // áudio não têm — e aí o campo simplesmente não existe (D48).
+          texto: primeiroTexto(emCaminho(p, 'payload', 'text'),
+                               emCaminho(p, 'payload', 'caption')) ?? null,
+        },
       }];
     }
 

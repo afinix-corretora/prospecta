@@ -28,6 +28,7 @@ import type {
 } from './tipos.ts';
 import { erroDeRede, exigir } from './tipos.ts';
 import { normalizarTelefone } from './telefone.ts';
+import { emCaminho, primeiroTexto } from './texto.ts';
 
 export class WhatsAppUazapiAdapter implements ChannelAdapter {
   readonly canal = 'whatsapp' as const;
@@ -122,6 +123,14 @@ export class WhatsAppUazapiAdapter implements ChannelAdapter {
         payload: {
           de: item.sender ?? item.from ?? item.chatid ?? null,
           tipo_mensagem: item.messageType ?? item.type ?? null,
+          // A UAZAPI varia o nome conforme a versão e o tipo. Todos os
+          // caminhos conhecidos, em ordem; nenhum é garantido (D48).
+          texto: primeiroTexto(
+            item.text, item.content, item.body, item.caption,
+            emCaminho(item, 'message', 'conversation'),
+            emCaminho(item, 'message', 'extendedTextMessage', 'text'),
+            emCaminho(item, 'message', 'imageMessage', 'caption'),
+          ) ?? null,
         },
       };
 

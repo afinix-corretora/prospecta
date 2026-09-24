@@ -11,6 +11,7 @@ import type {
 } from './tipos.ts';
 import { erroDeRede, exigir } from './tipos.ts';
 import { normalizarTelefone } from './telefone.ts';
+import { emCaminho, primeiroTexto } from './texto.ts';
 
 const VERSAO_PADRAO = 'v21.0';
 
@@ -103,7 +104,15 @@ export class WhatsAppMetaAdapter implements ChannelAdapter {
             providerMessageId: contexto.id,
             tipo: 'respondido' as TipoEvento,
             ocorridoEm: instante(m.timestamp),
-            payload: { de: m.from ?? null, tipo_mensagem: m.type ?? null },
+            payload: {
+              de: m.from ?? null,
+              tipo_mensagem: m.type ?? null,
+              // `text.body` nas de texto; legenda nas de mídia (D48).
+              texto: primeiroTexto(emCaminho(m, 'text', 'body'),
+                                    emCaminho(m, 'image', 'caption'),
+                                    emCaminho(m, 'video', 'caption'),
+                                    emCaminho(m, 'button', 'text')) ?? null,
+            },
           });
         }
       }

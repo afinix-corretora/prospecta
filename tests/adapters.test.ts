@@ -20,6 +20,7 @@ import { EmailResendAdapter } from '../adapters/email-resend.ts';
 import { criarAdapter, canalTemAdapter, PROVEDORES_POR_CANAL } from '../adapters/registro.ts';
 import { normalizarTelefone, telefoneValido } from '../adapters/telefone.ts';
 import { emailValido, montarRemetente, normalizarEmail, separarAssunto } from '../adapters/email.ts';
+import { emCaminho, primeiroTexto } from '../adapters/texto.ts';
 
 /** fetch falso que grava a chamada e devolve o que o teste mandar. */
 function fetchFalso(status: number, corpo: unknown) {
@@ -976,4 +977,87 @@ test('adapter declara o canal que o registro promete', () => {
       assert.equal(criarAdapter(p).canal, canal);
     }
   }
+});
+
+// ---------------------------------------------------------------------------
+// O texto da resposta (D48)
+// ---------------------------------------------------------------------------
+//
+// Este campo não é enfeite de tela: é dele que o motor decide se alguém pediu
+// para sair, e supressão é imutável. Um objeto virando "[object Object]" aqui
+// seria ruído alimentando um classificador cuja decisão não tem volta.
+
+test('primeiroTexto só aceita string, e escolhe a primeira que presta', () => {
+  assert.equal(primeiroTexto('  pare  '), 'pare');
+  assert.equal(primeiroTexto(undefined, null, '', '   ', 'segunda'), 'segunda');
+  // Os que NÃO podem passar: converter qualquer um deles com String() é como
+  // "[object Object]" e "0" entrariam no banco.
+  assert.equal(primeiroTexto({ text: 'pare' }), undefined);
+  assert.equal(primeiroTexto(['pare']), undefined);
+  assert.equal(primeiroTexto(0), undefined);
+  assert.equal(primeiroTexto(false), undefined);
+  assert.equal(primeiroTexto(), undefined);
+});
+
+test('primeiroTexto corta texto absurdo em vez de guardar tudo', () => {
+  const gigante = 'a'.repeat(10_000);
+  assert.equal(primeiroTexto(gigante)!.length, 4096);
+});
+
+test('emCaminho não estoura quando o caminho não existe', () => {
+  assert.equal(emCaminho({ a: { b: 'x' } }, 'a', 'b'), 'x');
+  assert.equal(emCaminho({ a: null }, 'a', 'b'), undefined);
+  assert.equal(emCaminho(undefined, 'a'), undefined);
+  assert.equal(emCaminho('texto', 'a'), undefined);
+});
+
+test('gupshup carrega o texto da resposta', () => {
+  const [e] = new WhatsAppGupshupAdapter().normalizeWebhook({
+    type: 'message',
+    payload: {
+      context: { gsId: 'gs-original' }, source: '5511900000001',
+      type: 'text', payload: { text: 'PARE' },
+    },
+  });
+  assert.equal(e!.tipo, 'respondido');
+  assert.equal(e!.payload.texto, 'PARE');
+});
+
+test('meta carrega o texto da resposta', () => {
+  const [e] = new WhatsAppMetaAdapter().normalizeWebhook({
+    entry: [{ changes: [{ value: { messages: [{
+      context: { id: 'wamid-original' }, from: '5511900000001',
+      type: 'text', text: { body: 'nao quero mais receber' },
+    }] } }] }],
+  });
+  assert.equal(e!.payload.texto, 'nao quero mais receber');
+});
+
+test('evolution carrega o texto, inclusive o de resposta citada', () => {
+  const [a] = new WhatsAppEvolutionAdapter().normalizeWebhook({
+    event: 'messages.upsert',
+    data: [{ key: { remoteJid: '5511900000001@s.whatsapp.net', fromMe: false },
+             messageTimestamp: 1700000000, message: { conversation: 'pare' } }],
+  });
+  assert.equal(a!.payload.texto, 'pare');
+
+  const [b] = new WhatsAppEvolutionAdapter().normalizeWebhook({
+    event: 'messages.upsert',
+    data: [{ key: { remoteJid: '5511900000001@s.whatsapp.net', fromMe: false },
+             messageTimestamp: 1700000000,
+             message: { extendedTextMessage: { text: 'me tira dessa lista' } } }],
+  });
+  assert.equal(b!.payload.texto, 'me tira dessa lista');
+});
+
+test('mensagem sem texto — figura, áudio — não inventa texto', () => {
+  const [e] = new WhatsAppEvolutionAdapter().normalizeWebhook({
+    event: 'messages.upsert',
+    data: [{ key: { remoteJid: '5511900000001@s.whatsapp.net', fromMe: false },
+             messageTimestamp: 1700000000,
+             message: { audioMessage: { seconds: 3 } } }],
+  });
+  // `null`, e não a string "undefined" nem um objeto: é o que o SQL lê como
+  // "não há texto" e deixa passar sem suprimir ninguém.
+  assert.equal(e!.payload.texto, null);
 });

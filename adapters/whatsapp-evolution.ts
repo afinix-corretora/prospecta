@@ -14,6 +14,7 @@ import type {
 } from './tipos.ts';
 import { AUTORIA, erroDeRede, exigir } from './tipos.ts';
 import { normalizarTelefone } from './telefone.ts';
+import { emCaminho, primeiroTexto } from './texto.ts';
 
 interface ChaveEvolution {
   id?: string;
@@ -98,7 +99,18 @@ export class WhatsAppEvolutionAdapter implements ChannelAdapter {
           deNumero: numero,
           tipo: 'respondido' as TipoEvento,
           ocorridoEm: instante(item.messageTimestamp),
-          payload: { remoteJid: chave?.remoteJid ?? null, autoria: null },
+          payload: {
+            remoteJid: chave?.remoteJid ?? null,
+            autoria: null,
+            // Baileys por baixo: texto simples em `conversation`, texto com
+            // citação em `extendedTextMessage.text` (D48).
+            texto: primeiroTexto(
+              emCaminho(item, 'message', 'conversation'),
+              emCaminho(item, 'message', 'extendedTextMessage', 'text'),
+              emCaminho(item, 'message', 'imageMessage', 'caption'),
+              emCaminho(item, 'message', 'videoMessage', 'caption'),
+            ) ?? null,
+          },
         }];
       });
     }
