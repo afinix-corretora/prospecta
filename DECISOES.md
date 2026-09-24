@@ -1183,3 +1183,48 @@ jeitos de o provedor não dizer — campo ausente, nome de campo trocado, valor 
 14 asserções em `tests/devolucao.sql` e 2 novas nos adapters. Duas sabotagens: fundir os dois faz o
 CRM ouvir `opt_out` por um bounce (cinco asserções vermelhas); ignorar `permanente` suprime endereço
 bom por caixa cheia (três vermelhas).
+
+### D50 — O link de acesso voltava para o localhost
+
+Relato da operação: o link que chega por e-mail redirecionava para `localhost` em vez do endereço
+da plataforma.
+
+A primeira coisa foi olhar o código, e **ele estava certo**: `Entrar.tsx` já passava
+`emailRedirectTo: window.location.origin`. O defeito não estava aqui.
+
+O Supabase só honra o `emailRedirectTo` se a URL estiver na lista de **Redirect URLs**. Quando não
+está, ele **não recusa e não avisa** — cai em silêncio no **Site URL**, que vem de fábrica como
+`http://localhost:3000`. Confirmado na documentação, que tem uma página de troubleshooting com
+exatamente este título. Há um segundo suspeito possível: o template do Magic Link usando
+`{{ .SiteURL }}` em vez de `{{ .RedirectTo }}`, que ignora o pedido por construção.
+
+Nenhum dos dois é código deste repositório — são painel. E é aí que está a parte que **é** minha.
+
+#### É o D44 de novo, e por isso rendeu código
+
+O sintoma tem a forma que este projeto já catalogou duas vezes: **a requisição dá certo**. `error` é
+nulo, a tela diz "link enviado", e não há nada para suspeitar. O erro só aparece minutos depois, na
+caixa de entrada, sem nada que ligue uma coisa à outra — e o primeiro palpite de quem recebe é o
+filtro de spam ou o navegador, não uma lista dentro de um painel.
+
+O app não tem como saber o que está na lista do Supabase. Mas tem como dizer **o que pediu**. A tela
+de entrada agora mostra, depois de enviar, o endereço para onde o link deve voltar — e, quando esse
+endereço não é local, explica onde arrumar se o e-mail apontar para outro lugar. Mistério vira
+diagnóstico de cinco segundos.
+
+#### Dois detalhes que o trabalho obrigou
+
+**A barra no fim.** `window.location.origin` não tem barra, e o glob `.../**` da lista do Supabase
+casa caminhos **abaixo** da raiz. Mandar a origem pelada deixa o casamento na dependência de
+detalhe de implementação do glob. `urlDeRetorno` garante a barra.
+
+**`ehLocal` por regex ancorada, e não por `includes`.** `https://localhost.exemplo.com` contém a
+palavra "localhost" e é um endereço real — um `includes` esconderia o aviso exatamente de quem mais
+precisa dele. Tem teste para os dois lados.
+
+#### Um erro meu, que o CSS não reclamaria
+
+Escrevi `var(--linha)` no estilo da nota. O token não existe — o nome real é `--line`. CSS não
+falha: a borda simplesmente não apareceria, e o build passa verde. Corrigi e varri o arquivo inteiro
+atrás de outros (`nenhum`). É a mesma classe do D31: uma referência que parece garantia e não é
+lida por ninguém.

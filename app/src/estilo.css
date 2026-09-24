@@ -244,6 +244,16 @@ button.item:hover { border-color: var(--line-strong); transform: translateX(2px)
 }
 .entrar h1 { font-size: 22px; margin-bottom: 4px }
 .entrar > form > p { color: var(--ink-2); font-size: 13px; margin: 0 0 20px }
+/* O endereço de retorno do link de acesso. Fica discreto porque, quando tudo
+   está certo, é só uma confirmação — e gritante quando não está, porque aí é
+   a única pista de que o problema mora na lista do Supabase e não na caixa de
+   entrada de quem esperou o e-mail. */
+.entrar .nota-retorno {
+  color: var(--ink-3); font-size: 12px; line-height: 1.5;
+  margin: 12px 0 0; padding: 10px 12px;
+  border: 1px solid var(--line); border-radius: var(--r-sm);
+}
+.entrar .nota-retorno code { word-break: break-all }
 
 .qr { display: grid; gap: 10px; justify-items: center; padding: 14px; background: var(--surface-2); border-radius: var(--r-sm) }
 .qr img { width: 220px; height: 220px; image-rendering: pixelated; border-radius: 8px; background: #fff }

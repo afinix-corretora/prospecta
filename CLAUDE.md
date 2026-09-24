@@ -242,6 +242,13 @@ e elas têm teste automatizado obrigatório.**
 - **Nunca** confiar que invalidar a identidade basta. `valida = false` decide o roteamento FUTURO;
   a mensagem já pendente carrega a identidade na linha, e quem a barra no despacho é
   `esta_suprimido` — é o D37 na camada da identidade (D49).
+- **Nunca** deixar uma configuração de painel falhar em silêncio dentro do app. O Supabase ignora
+  um `emailRedirectTo` fora da lista e cai no Site URL sem avisar: a chamada retorna sucesso e o
+  erro só aparece na caixa de entrada. A tela diz o que PEDIU, para a diferença ser visível (D50).
+- **Nunca** detectar endereço local com `includes('localhost')`. `https://localhost.exemplo.com` é
+  um endereço real, e o `includes` esconde o aviso justamente de quem precisa dele (D50).
+- **Nunca** supor que um token de CSS existe. `var(--inexistente)` não falha o build — a regra
+  simplesmente não se aplica, e o verde continua verde (D50).
 
 ---
 

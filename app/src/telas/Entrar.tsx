@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { sb, mensagemDeErro } from '../supabase';
+import { ehLocal, urlDeRetorno } from '../retorno';
 import { Aviso, Campo } from '../componentes/base';
 import { carimboLegivel } from '../carimbo';
 
@@ -14,7 +15,7 @@ export function Entrar() {
     setErro(''); setEstado('enviando');
     const { error } = await sb.auth.signInWithOtp({
       email,
-      options: { emailRedirectTo: window.location.origin },
+      options: { emailRedirectTo: urlDeRetorno() },
     });
     if (error) { setErro(mensagemDeErro(error)); setEstado('parado'); return; }
     setEstado('enviado');
@@ -27,10 +28,29 @@ export function Entrar() {
         <p>Motor de cadência multicanal.</p>
 
         {estado === 'enviado' ? (
-          <Aviso tipo="ok">
-            Link enviado para <b>{email}</b>. Abra pelo mesmo navegador —
-            é ele que guarda a sessão.
-          </Aviso>
+          <>
+            <Aviso tipo="ok">
+              Link enviado para <b>{email}</b>. Abra pelo mesmo navegador —
+              é ele que guarda a sessão.
+            </Aviso>
+
+            {/* O que o app pediu, dito em voz alta. Sem isto, um link que
+                volta para outro endereço é um mistério: a requisição deu
+                certo, a tela diz "enviado", e o defeito está numa lista que
+                mora no painel do Supabase. */}
+            <p className="nota-retorno">
+              O link vai trazer você de volta para{' '}
+              <code className="mono">{urlDeRetorno()}</code>.
+              {!ehLocal(urlDeRetorno()) && (
+                <>
+                  {' '}Se o e-mail apontar para <code className="mono">localhost</code> ou
+                  para outro endereço, é porque esta URL não está em
+                  <b> Authentication ▸ URL Configuration ▸ Redirect URLs</b> no
+                  Supabase — ele ignora o pedido em silêncio e usa o Site URL.
+                </>
+              )}
+            </p>
+          </>
         ) : (
           <>
             <Campo

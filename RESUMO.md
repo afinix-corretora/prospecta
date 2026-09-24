@@ -143,6 +143,33 @@ ficaria de fora e por quê.
 
 ---
 
+## O link de acesso está voltando para o lugar errado?
+
+O app manda um link por e-mail em vez de senha. Se o link chegar apontando para
+`localhost` — ou para qualquer endereço que não seja o do app — **o problema não é o e-mail nem o
+navegador**: é uma lista no painel do Supabase.
+
+O Supabase só respeita o endereço de retorno que o app pede se ele estiver na lista de permitidos.
+Quando não está, ele **não recusa e não avisa**: usa em silêncio o "Site URL", que vem de fábrica
+como `http://localhost:3000`.
+
+**Onde arrumar:** Supabase ▸ Authentication ▸ URL Configuration.
+
+| Campo | Valor |
+|---|---|
+| Site URL | `https://app-eight-snowy-54.vercel.app` |
+| Redirect URLs | `https://app-eight-snowy-54.vercel.app/**` |
+| | `https://*-afinix.vercel.app/**` *(os previews de cada branch)* |
+| | `http://localhost:5173/**` *(desenvolvimento local)* |
+
+**Se ainda assim continuar errado**, o segundo suspeito é o texto do e-mail: em
+Authentication ▸ Email Templates ▸ Magic Link, o link precisa usar `{{ .RedirectTo }}`. Se estiver
+escrito `{{ .SiteURL }}`, ele ignora o pedido do app por construção.
+
+Para você não precisar adivinhar de novo: **a tela de entrada agora mostra o endereço para onde o
+link vai voltar**, logo depois de enviá-lo. Se o e-mail chegar apontando para outro lugar, a
+diferença fica visível em cinco segundos em vez de virar investigação.
+
 ## O que ainda depende de você
 
 1. **Ligar o motor** — `LIGAR.md`: criar o cliente, guardar a chave, **conferir antes de agendar**,
