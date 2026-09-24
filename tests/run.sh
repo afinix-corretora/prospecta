@@ -42,6 +42,15 @@ novo_banco() {
 DO \$\$ BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname='anon') THEN CREATE ROLE anon NOLOGIN; END IF;
   IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname='authenticated') THEN CREATE ROLE authenticated NOLOGIN; END IF;
+  -- service_role também, e pelo mesmo motivo do anon logo abaixo: as
+  -- migrations só concedem a papel que existe (IF EXISTS ... pg_roles).
+  -- Sem ele, todo GRANT para service_role é pulado em silêncio e o suite
+  -- confere uma grade MAIS ESTREITA que a de produção — e o teste da chave do
+  -- motor nem chega a rodar, estoura em has_function_privilege. Isto passou
+  -- despercebido porque o papel existia por acaso na máquina de quem escreveu
+  -- o teste: dependência de estado ambiente não avisa, só some quando muda de
+  -- máquina (D46).
+  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname='service_role') THEN CREATE ROLE service_role NOLOGIN; END IF;
 END \$\$;
 GRANT USAGE ON SCHEMA public TO anon, authenticated;
 GRANT ALL ON ALL TABLES IN SCHEMA public TO authenticated;
@@ -99,6 +108,7 @@ rodar concorda    "$RAIZ/tests/despacho_concorda.sql"
 rodar mensagens   "$RAIZ/tests/mensagens.sql"
 rodar chave       "$RAIZ/tests/chave_do_motor.sql"
 rodar writeback   "$RAIZ/tests/writeback.sql"
+rodar dreno       "$RAIZ/tests/dreno.sql"
 
 # ---------------------------------------------------------------------------
 # Adapters de canal — TypeScript, sem rede (fetch injetado).

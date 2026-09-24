@@ -857,3 +857,85 @@ padrão de secrets no Vault, UX do Disparador (upload multi-formato, modos de di
 
 **Descarta:** modelo de execução em lote, status-como-mutex entre camadas, qualquer tabela modelada
 por canal.
+
+### D46 — O dreno da outbox, e o que um dreno parado parece
+
+O D45 fez os três fatos nascerem. Ninguém os consumia. As linhas entravam `pendente` e ficavam ali.
+
+Pior: `tentativas`, `proxima_tentativa_em` e `ultimo_erro` existem na `outbox` **desde a primeira
+migration**, e nenhum SQL do projeto jamais as escreveu. É a forma exata do `tem_adapter` do D31 —
+coluna que parece garantia e é decoração. A tabela estava vestida de fila com retry sem nunca ter
+tido um consumidor.
+
+O dreno é o análogo exato do despacho de mensagens, e isso é escolha, não coincidência:
+
+| | reivindicar | fechar |
+|---|---|---|
+| `messages` | `reivindicar_pendentes` | `registrar_resultado_envio` |
+| `outbox` | `reivindicar_writebacks` | `registrar_resultado_writeback` |
+
+Mesmo lease, mesmo `FOR UPDATE SKIP LOCKED`, mesma casa (`public` com EXECUTE só para
+`service_role`, que é o que permite o worker chamar por PostgREST sem expor nada ao cliente).
+
+**O que este D46 não entrega.** Falar com o CRM. O adapter do Pipefy depende do OAuth de
+`_shared/pipefy.ts`, que mora no projeto legado. A divisão é a mesma do agendador e dos `adapters/`:
+a decisão e a reivindicação são atômicas e ficam no banco; o I/O é de quem tem a credencial. Assim
+como o `instagram_oficial` está no catálogo com `tem_adapter = false`, aqui a ausência é declarada
+em vez de fingida.
+
+#### Três coisas que o dreno podia quebrar, e não quebra
+
+**1. Reivindicar não pode reabrir a porta que o D45 fechou.** A trava de dedup do D45 é um índice
+único **parcial** em `status = 'pendente'`. Se reivindicar tirasse a linha de `pendente` — o reflexo
+natural de "peguei, então não está mais na fila" — um segundo `respondido` da mesma pessoa entraria
+enquanto o primeiro ainda estava em voo, e o CRM levaria a escrita duas vezes. A linha reivindicada
+continua `pendente`; quem a segura é o `reivindicada_em`. A sabotagem que troca isso derruba quatro
+asserções.
+
+**2. Desistir não pode ser silencioso.** No oitavo tropeço a linha vira `falha` e o fato **nunca
+chega ao CRM**. Se ninguém puder listar o que desistiu, é o D45 repetido uma camada acima: o fato
+existe, a garantia está escrita, e a verificação não existe. Por isso `writebacks_falhados` diz
+quais são, de quem e por quê.
+
+E `falha` **solta** a trava do D45, de propósito: o fato não chegou, então uma ocorrência nova da
+mesma pessoa tem direito de tentar em vez de ser recusada por causa de uma linha morta.
+
+**3. Dreno parado não pode parecer fila vazia.** É o D36 e o D44 outra vez, na terceira superfície.
+"Zero writebacks saindo" tem duas causas opostas — nada aconteceu, ou o dreno morreu — e sem um
+número que as separe as duas são a mesma tela. O número é `pendente_mais_antigo_em_horas`: fila
+vazia **não tem** mais antigo. É o único campo do `resumo_da_outbox` que distingue as duas
+situações, e é por isso que ele existe.
+
+#### Verificação
+
+`tests/dreno.sql`, 25 asserções. Quatro sabotagens conferidas uma a uma, porque asserção que o
+cenário não consegue violar não prova nada (D36):
+
+| sabotagem | o que fica vermelho |
+|---|---|
+| dreno ignora a hora marcada | "antes da hora marcada não volta ao lote" |
+| reivindicar tira a linha de `pendente` | as quatro do item 1, inclusive a trava do D45 |
+| teto que nunca chega | "no teto de tentativas, desiste" e as duas de visibilidade |
+| `min(criado_em)` sem `FILTER` | "fila vazia: não existe mais antigo" |
+
+#### E um achado de tabela ao lado: o suite dependia de estado ambiente
+
+Ao cobrar a grade de privilégios das quatro funções novas, a asserção "as duas do worker seguem
+chamáveis por `service_role`" me fez perguntar onde esse papel nasce. Resposta: em lugar nenhum do
+repositório. O `tests/run.sh` cria `anon` e `authenticated`; `service_role` **existia por acaso** na
+máquina onde os testes vinham rodando.
+
+Consequência, confirmada escondendo o papel e rodando o suite: ele não roda. Estoura em
+`tests/chave_do_motor.sql`, num `has_function_privilege('service_role', ...)`. E antes de estourar,
+todos os `GRANT ... TO service_role` das migrations — que são guardados por
+`IF EXISTS (SELECT 1 FROM pg_roles ...)` — eram **pulados em silêncio**, de modo que o suite
+conferia uma grade mais estreita que a de produção.
+
+Isto estava assim desde o D44, escondido por uma máquina que tinha o papel. É a mesma forma do
+resto desta lista — a garantia escrita, a verificação ausente — com um agravante próprio: quem
+verificava dependia de algo que não estava no repositório, então o suite verde não significava o
+que parecia significar. O `run.sh` agora cria os três papéis, e o experimento foi refeito ao
+contrário: papel escondido, suite verde, porque agora ele mesmo o cria.
+
+A pergunta que fica registrada, do mesmo feitio da do D37: **o que mais o suite assume da máquina
+em vez de montar?**

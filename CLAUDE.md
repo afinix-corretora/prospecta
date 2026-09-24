@@ -205,6 +205,17 @@ e elas têm teste automatizado obrigatório.**
   gera writeback — é o eco que o D3 manda evitar (D45).
 - **Nunca** tratar fato da pessoa como fato do enrollment. Resposta encerra todos os enrollments do
   contato; sem índice único, quem está em três campanhas gera três escritas iguais no CRM (D45).
+- **Nunca** deixar um fato nascer sem quem o consuma. `tentativas`, `proxima_tentativa_em` e
+  `ultimo_erro` existiam desde a primeira migration e nenhum SQL as escrevia — coluna que parece
+  garantia e é decoração é o `tem_adapter` do D31 de novo (D46).
+- **Nunca** deixar o dreno parado parecer fila vazia. "Zero writebacks saindo" tem duas causas
+  opostas, e o único número que as separa é a idade do pendente mais antigo: fila vazia não tem
+  mais antigo (D46).
+- **Nunca** desistir de um writeback em silêncio. No teto de tentativas o fato nunca chega ao CRM;
+  se ninguém puder listar o que desistiu, é o D45 repetido uma camada acima (D46).
+- **Nunca** deixar uma linha reivindicada sair de `pendente`. A trava de dedup do D45 é parcial em
+  `status = 'pendente'`: tirar a linha de lá enquanto ela está em voo reabre a porta que o D45
+  fechou — e libera a trava é o que `falha` faz de propósito, porque o fato não chegou (D46).
 
 ---
 
@@ -270,8 +281,9 @@ e elas têm teste automatizado obrigatório.**
 > **derivados do schema** cobram `tenant_id`, RLS e FK composta de toda tabela nova — lista escrita
 > à mão envelhece sem avisar, e essa já tinha perdido a `provider_servers` (D31).
 >
-> O schema está **aplicado no projeto `hucuwjvihqgftdjpnych`** (31 migrations no repositório, 34
-> registros no projeto — duas corretivas de texto e uma separação, ver D32 e D39), conferido por
+> O schema está **aplicado no projeto `hucuwjvihqgftdjpnych`** (32 migrations no repositório, 36
+> registros no projeto — duas corretivas de texto, uma separação e uma de superfície, ver D32,
+> D39 e D46), conferido por
 > digest estrutural contra o banco de teste — colunas, constraints, índices, políticas, corpos de
 > função e a grade de privilégios batem byte a byte.
 >
