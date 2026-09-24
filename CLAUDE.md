@@ -257,6 +257,14 @@ e elas têm teste automatizado obrigatório.**
 - **Nunca** transportar código à mão quando o que ele compra pode esperar. Sem CLI, publicar é
   reproduzir dezenas de KB exatos, e foi assim que o D32 nasceu. Se nada depende disso hoje, o que
   se constrói é a verificação — ela vale para todas as próximas vezes (D51).
+- **Nunca** dar por publicado o que não foi lido de volta. O que prova que o projeto tem o código
+  do repositório é a comparação, não o retorno de sucesso do deploy — mesma ideia do digest
+  estrutural do schema. `conferir-contra-projeto.py` faz essa volta, e fica fora do suite porque
+  precisa de rede (D52).
+- **Nunca** ler "arquivo que não voltou" como bundle incompleto. `import type` é apagado pelo
+  bundler: o arquivo é enviado e não faz parte do pacote. O fecho de imports conta ele de
+  propósito, porque errar para o lado de pedir uma republicação a mais é barato, e errar para o
+  outro é o digest passando verde sobre diferença real (D52).
 
 ---
 
@@ -334,9 +342,13 @@ e elas têm teste automatizado obrigatório.**
 > linha discordar. O do projeto não dá para conferir do suite (precisa de rede), então quem mexer
 > no schema confere pelo `list_migrations` junto com o `get_advisors` que já é obrigatório.
 >
-> As três edge functions estão na **versão 2** no projeto, cada arquivo conferido byte a byte
-> contra o repositório depois de publicar. `LIGAR.md` é o procedimento de ligar o motor, com a
-> conferência do D44 entre guardar a chave e agendar.
+> As três edge functions estão na **versão 3** no projeto desde o D52, com o código do D48 e do
+> D49 no ar: cada arquivo do bundle foi lido de volta do projeto e comparado byte a byte com o
+> repositório (14, 14 e 13 arquivos). Quem responde pela pergunta daqui para frente são os dois
+> verificadores — `conferir-publicado.py`, no suite, pelo digest do que cada function empacota, e
+> `conferir-contra-projeto.py`, fora do suite porque precisa de rede, pela comparação com o que o
+> projeto tem. `LIGAR.md` é o procedimento de ligar o motor, com a conferência do D44 entre guardar
+> a chave e agendar.
 >
 > Toda mudança de schema roda `tests/run.sh` antes do commit. Teste vermelho é bloqueio, não aviso.
 > Toda mudança aplicada no projeto roda `get_advisors` depois: o suite não enxerga o que só existe

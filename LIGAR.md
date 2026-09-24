@@ -180,34 +180,25 @@ não-secreto em branco limpa.
 
 ---
 
-## 4. Republicar as edge functions
+## 4. As edge functions
 
-**Confira antes de decidir se precisa.** Esta seção já disse "já feito em 23/09"
-e ficou falsa no dia em que `adapters/` mudou — fato escrito à mão envelhece sem
-avisar, que é a mesma classe do contador de migrations. Agora quem responde é:
+**Estão publicadas e conferidas** — as três na versão 3, em 24/09, com cada arquivo do bundle lido
+de volta do projeto e comparado byte a byte com o repositório (D52). Nada a fazer aqui hoje.
+
+Mas esta seção já disse "já feito" antes e ficou falsa sem avisar, no dia em que `adapters/` mudou.
+Então a frase acima não vale como garantia: quem responde é
 
 ```bash
 python3 supabase/functions/conferir-publicado.py
 ```
 
 Ele resolve o que cada function empacota, tira um digest e compara com
-`supabase/functions/PUBLICADO.json`. Mudou uma linha de qualquer arquivo que
-entra no bundle, ele acusa. Roda dentro de `tests/run.sh`.
+`supabase/functions/PUBLICADO.json`. Mudou uma linha de qualquer arquivo que entra no bundle, ele
+acusa. Roda dentro de `tests/run.sh`, então na prática quem avisa é a bateria.
 
-**Hoje há pendência**, e ela importa para ligar o motor: o D48 (opt-out no texto
-da resposta) e o D49 (devolução ≠ denúncia) mudaram `normalizeWebhook`, e a
-`canal-webhook` publicada ainda tem o código antigo. **Enquanto não republicar,
-quem responder "pare" não será suprimido e bounce não será distinguido de
-denúncia** — em silêncio, que é o pior jeito.
+### Quando ele acusar
 
-As outras duas também estão com fontes diferentes, mas equivalentes em
-comportamento: elas empacotam os mesmos adapters e não chamam
-`normalizeWebhook`.
-
-Depois de publicar, atualize `PUBLICADO.json` com o digest novo — senão a
-bateria fica vermelha, que é exatamente o ponto.
-
-Quando for a hora, pelo CLI, a partir de um checkout:
+Aí sim há o que fazer. Pelo CLI, a partir de um checkout com acesso à API do Supabase:
 
 ```bash
 supabase functions deploy motor-worker          --project-ref SEU-PROJETO
@@ -215,9 +206,24 @@ supabase functions deploy canal-webhook         --project-ref SEU-PROJETO
 supabase functions deploy provisionar-instancia --project-ref SEU-PROJETO
 ```
 
-O `verify_jwt` vem do `supabase/config.toml`. O `canal-webhook` é `false` de
-propósito — provedor não tem JWT para mandar (D24), e sem isso todo webhook
-voltaria 401. Ver o README para o que fazer quando não houver CLI.
+O `verify_jwt` vem do `supabase/config.toml`. O `canal-webhook` é `false` de propósito — provedor
+não tem JWT para mandar (D24), e sem isso todo webhook voltaria 401, que é a invariante 4 parando
+de valer em silêncio.
+
+**Sem CLI, o transporte é manual, e o que o torna aceitável não é cuidado ao copiar — é ler de
+volta e comparar.** Depois de publicar, busque o conteúdo publicado, salve em JSON e rode:
+
+```bash
+python3 supabase/functions/conferir-contra-projeto.py publicado.json \
+        supabase/functions/canal-webhook/index.ts
+```
+
+Uma diferença é esperada e não é erro: `motor/porta.ts` aparece como ausente do bundle, porque só
+é importado como tipo e o bundler apaga import de tipo. O script sabe disso e não conta como
+divergência.
+
+Por fim, atualize `PUBLICADO.json` com o digest novo — senão a bateria fica vermelha, que é
+exatamente o ponto.
 
 ---
 

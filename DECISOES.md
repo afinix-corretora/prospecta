@@ -1283,3 +1283,57 @@ inventado, porque o digest da época não foi registrado e não dá para recompu
 Enquanto a `canal-webhook` não for republicada, **quem responder "pare" não é suprimido e devolução
 não é distinguida de denúncia** — em silêncio. Está escrito no `LIGAR.md`, no passo que precede
 ligar o motor.
+
+### D52 — Publicadas, e a prova de que foram
+
+O D51 adiou o deploy e construiu o verificador, com um argumento: sem CLI, publicar é reproduzir
+70 KB exatos, e o que isso compraria hoje era nada. O argumento tinha prazo — ele valia enquanto
+nada dependesse do deploy, e o passo 4 do `LIGAR.md` depende. Publiquei as três.
+
+#### O que torna aceitável um transporte que passa por mim
+
+Não é cuidado ao copiar. É **ler de volta e comparar**, que é a mesma ideia do digest estrutural do
+schema: o que prova que o publicado é o do repositório é a comparação, não a intenção de quem
+publicou.
+
+Então cada function foi publicada e, em seguida, buscada de volta do projeto e comparada arquivo
+por arquivo. O resultado:
+
+| function | versão | verify_jwt | arquivos do bundle | idênticos |
+|---|---|---|---|---|
+| `canal-webhook` | 3 | `false` | 14 | 14 |
+| `motor-worker` | 3 | `true` | 14 | 14 |
+| `provisionar-instancia` | 3 | `true` | 13 | 13 |
+
+`verify_jwt = false` na `canal-webhook` foi preservado de propósito e conferido na volta: provedor
+não tem JWT para mandar, e o padrão valendo ali faria todo webhook voltar 401 — a invariante 4
+parando de valer em silêncio, que foi o D23.
+
+A comparação virou arquivo: `supabase/functions/conferir-contra-projeto.py`. Ela precisa de rede,
+então **não** entra no suite — é o passo que se roda na hora de publicar, e é o irmão do
+`conferir-publicado.py`, que roda sem rede e responde outra pergunta. A diferença entre os dois é o
+ponto: um confere que alguém **disse** ter publicado o que está aqui; o outro confere o que o
+projeto **tem**.
+
+#### Uma descoberta que o D51 não previa
+
+O fecho de imports do `conferir-publicado.py` acusa 15 arquivos na `canal-webhook`; o projeto
+devolveu 14. O que falta é `motor/porta.ts`, e não é perda: ele só é importado como
+`import type { Banco } from './porta.ts'`, e o bundler apaga import de tipo. Foi enviado e não
+voltou porque nunca fez parte do bundle — e é por isso que a v2 também não o tinha, o que eu tinha
+lido, antes de entender, como sinal de bundle incompleto.
+
+O fecho segue sendo o certo para o digest: ele é conservador na direção segura. Mudar um arquivo
+de tipos pode não mudar o bundle, e aí o verificador pede uma republicação que não era necessária —
+barato. O contrário, ignorar imports de tipo e perder um arquivo que **é** empacotado, seria o
+digest passando verde sobre uma diferença real.
+
+O comparador conhece essa assimetria e a nomeia: arquivo ausente do bundle não é divergência;
+divergência é arquivo que voltou diferente, ou arquivo no projeto que não existe no repositório.
+
+#### O que isto destrava
+
+Até agora, responder "pare" não suprimia ninguém e devolução não era distinguida de denúncia —
+o código do D48 e do D49 existia no repositório e não no ar. Agora está no ar. O passo 4 do
+`LIGAR.md` deixa de ser bloqueio para ligar o motor, e o que resta ali é tudo o que depende de
+acesso que eu não tenho: o cliente, a chave e o remetente.
