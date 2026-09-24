@@ -111,6 +111,7 @@ rodar writeback   "$RAIZ/tests/writeback.sql"
 rodar dreno       "$RAIZ/tests/dreno.sql"
 rodar flow_campanha "$RAIZ/tests/flow_da_campanha.sql"
 rodar opt_out   "$RAIZ/tests/opt_out.sql"
+rodar devolucao  "$RAIZ/tests/devolucao.sql"
 
 # ---------------------------------------------------------------------------
 # Adapters de canal — TypeScript, sem rede (fetch injetado).

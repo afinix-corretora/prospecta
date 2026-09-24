@@ -13,7 +13,11 @@ export type Canal = 'email' | 'whatsapp' | 'sms' | 'instagram';
 
 export type TipoEvento =
   | 'enfileirado' | 'enviado' | 'entregue' | 'lido'
-  | 'respondido' | 'clique' | 'falha' | 'rejeitado';
+  | 'respondido' | 'clique' | 'falha' | 'rejeitado'
+  // Assíncronos, e diferentes de `rejeitado` (que é recusa na hora do envio):
+  // `devolvido` é aceitar e devolver depois; `denuncia` é a pessoa marcar
+  // como spam, que não é problema de endereço nenhum (D49).
+  | 'devolvido' | 'denuncia';
 
 /** O que o motor entrega ao adapter. Já passou pelo gate de supressão. */
 export interface PedidoEnvio {

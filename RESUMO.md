@@ -55,7 +55,7 @@ permite conferir tudo antes de a primeira mensagem sair.
 |---|---|
 | Suprimir uma pessoa ou um endereço | Tela de Supressão |
 | Quais palavras numa resposta viram opt-out | Tabela `opt_out_termos` — uma linha por termo, com uma `nota` explicando por que ele está lá |
-| Se bounce e denúncia suprimem | *(em construção)* |
+| Se bounce e denúncia suprimem | Sim, e de formas diferentes — ver abaixo |
 
 **A supressão é definitiva.** Entrar nela não tem volta pela tela, de propósito: é a lista de quem
 pediu para não ser incomodado, e ela vale acima de qualquer regra de campanha.
@@ -84,6 +84,22 @@ contexto — vazio quer dizer "vale sozinho") e `nota`, dizendo por que está as
 **Um buraco que você precisa saber:** responder **PARE a um SMS não é detectado**, porque o
 provedor de SMS não tem webhook de entrada — a resposta não chega ao motor de jeito nenhum. É o
 caso clássico de opt-out no Brasil, e hoje ele não existe aqui.
+
+#### Devolução e denúncia
+
+São coisas diferentes e o motor trata diferente, porque o CRM recebe fatos diferentes:
+
+| O que aconteceu | O que o motor faz | O que o CRM ouve |
+|---|---|---|
+| A pessoa marcou como **spam** | suprime a **pessoa**, em todo canal | "pediu para sair" |
+| O e-mail **não existe** (devolução permanente) | suprime **só aquele endereço** | "endereço inválido" |
+| Caixa cheia (devolução temporária) | **nada** | nada |
+
+A diferença importa: dizer ao CRM que alguém "pediu para sair" quando o que houve foi uma caixa
+inexistente é registrar uma decisão que a pessoa nunca tomou — e o comercial lê isso como recusa.
+
+**Quando o provedor não diz se a devolução foi definitiva, o motor trata como temporária.** É
+deliberado: suprimir um endereço bom não tem volta; insistir num endereço morto custa uma tentativa.
 
 ### O que o CRM fica sabendo
 

@@ -234,6 +234,14 @@ e elas têm teste automatizado obrigatório.**
   (D48).
 - **Nunca** deixar o classificador de opt-out ler o que não é string. Objeto virando
   "[object Object]" e número virando "0" alimentam de ruído uma decisão que não tem volta (D48).
+- **Nunca** tratar devolução e denúncia como o mesmo fato. Denúncia é vontade e suprime a pessoa
+  (`opt_out`); devolução permanente é fato sobre o endereço e suprime só ele (`identidade_invalida`).
+  Fundir os dois reporta ao CRM uma decisão que a pessoa não tomou (D49).
+- **Nunca** suprimir por devolução que o provedor não disse ser permanente. Caixa cheia numa terça
+  não é motivo para perder um contato bom para sempre; o desconhecido é temporário (D49).
+- **Nunca** confiar que invalidar a identidade basta. `valida = false` decide o roteamento FUTURO;
+  a mensagem já pendente carrega a identidade na linha, e quem a barra no despacho é
+  `esta_suprimido` — é o D37 na camada da identidade (D49).
 
 ---
 
@@ -299,7 +307,7 @@ e elas têm teste automatizado obrigatório.**
 > **derivados do schema** cobram `tenant_id`, RLS e FK composta de toda tabela nova — lista escrita
 > à mão envelhece sem avisar, e essa já tinha perdido a `provider_servers` (D31).
 >
-> O schema está **aplicado no projeto `hucuwjvihqgftdjpnych`** (34 migrations no repositório, 39
+> O schema está **aplicado no projeto `hucuwjvihqgftdjpnych`** (36 migrations no repositório, 41
 > registros no projeto — duas corretivas de texto, uma separação e duas do D46 (superfície e
 > tenant explícito), ver D32, D39 e D46), conferido por
 > digest estrutural contra o banco de teste — colunas, constraints, índices, políticas, corpos de

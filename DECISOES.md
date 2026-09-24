@@ -1123,3 +1123,63 @@ A lista mora em `opt_out_termos`, com uma coluna `nota` em cada linha explicando
 está lá e por que exige (ou não) contexto. Trocar vocabulário não é mexer em código. A tabela não
 tem `tenant_id` de propósito — é idioma, não dado de cliente — e está na lista de exceções do
 meta-teste com essa justificativa escrita.
+
+### D49 — Devolução e denúncia não são a mesma coisa
+
+A operação pediu que "bounce e denúncia também suprimam". Suprimem — mas de formas diferentes,
+porque são fatos de naturezas diferentes, e tratá-los igual escreveria no CRM uma vontade que
+ninguém manifestou.
+
+| | O que é | Suprime | O CRM ouve |
+|---|---|---|---|
+| **denúncia** | vontade: a pessoa marcou como spam | a **pessoa**, em todo canal | `opt_out` |
+| **devolução permanente** | fato sobre o endereço: a caixa não existe | só **aquele endereço** | `identidade_invalida` |
+| **devolução temporária** | caixa cheia numa terça-feira | **nada** | nada |
+
+#### O que já existia, e estava colapsado
+
+`tipo_evento` tinha `rejeitado` — recusa **na hora do envio**, síncrona. Não tinha nada para o
+assíncrono. E o adapter da Resend mapeava **`email.bounced` e `email.complained` para o mesmo
+`rejeitado`**, apagando justamente a diferença que decide qual fato vai para o CRM.
+
+Havia até um teste afirmando isso: *"resend: bounce e denúncia de spam viram rejeitado"*. O teste
+**codificava o defeito** — passava todo dia, e o que ele garantia era que a fusão continuasse.
+Foi reescrito para cobrar a distinção.
+
+#### A composição que saiu de graça
+
+Devolução não produz `opt_out` **não** por um `IF` que alguém lembrou de escrever, mas porque o
+gatilho de writeback do D45 volta cedo quando `contact_id` é nulo — e supressão por **endereço** tem
+`contact_id` nulo. As duas formas de suprimir já eram estruturalmente diferentes; bastou usar a
+certa em cada caso.
+
+#### Uma justificativa minha que estava errada, e o teste que a derrubou
+
+Escrevi que suprimir o endereço servia para **sobreviver à reimportação**. O teste estourou com
+`duplicate key`: `contact_identities` é única em `(tenant, canal, valor_norm)` e a ingestão usa
+`ON CONFLICT DO NOTHING`. A linha invalidada persiste. Minha razão era falsa.
+
+A razão verdadeira é o **D37 aplicado a identidades em vez de remetentes**: invalidar decide o
+**futuro**, e a mensagem que já existe carrega a identidade na própria linha. Entre o agendador criar
+a mensagem e o despachante pegá-la há uma janela ilimitada, e é dentro dela que a devolução chega.
+Quem barra a mensagem em voo é `esta_suprimido`, que o despacho consulta (D39) — `valida` ele nem
+olha.
+
+Sem a supressão por endereço, essa mensagem sai para uma caixa morta. Em e-mail isso não é só
+desperdício: devolver de novo derruba a reputação do domínio, que é o ativo que faz as próximas
+chegarem.
+
+O teste passou a encenar exatamente essa janela — passo 2 pendente, devolução do passo 1, e a
+asserção de que o despachante cancela.
+
+#### O default do desconhecido
+
+Provedor que não diz se a devolução foi permanente cai no caso **temporário**. É a mesma assimetria
+do D48: falso negativo se conserta pela tela; falso positivo é imutável. O teste cobra os três
+jeitos de o provedor não dizer — campo ausente, nome de campo trocado, valor inesperado.
+
+#### Verificação
+
+14 asserções em `tests/devolucao.sql` e 2 novas nos adapters. Duas sabotagens: fundir os dois faz o
+CRM ouvir `opt_out` por um bounce (cinco asserções vermelhas); ignorar `permanente` suprime endereço
+bom por caixa cheia (três vermelhas).

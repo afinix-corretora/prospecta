@@ -887,13 +887,44 @@ test('resend: clique é engajamento, não resposta (D7)', () => {
   assert.equal(e.tipo, 'clique');
 });
 
-test('resend: bounce e denúncia de spam viram rejeitado', () => {
-  for (const t of ['email.bounced', 'email.complained']) {
-    const [e] = new EmailResendAdapter().normalizeWebhook({
-      type: t, created_at: '2026-09-21T12:00:00.000Z', data: { email_id: 'em-1' },
-    });
-    assert.equal(e.tipo, 'rejeitado', t);
-  }
+// Este teste afirmava o contrário — que os dois viravam `rejeitado`. Ele
+// codificava o defeito: colapsar devolução e denúncia apaga a diferença entre
+// "o endereço não existe" e "a pessoa marcou como spam", e é essa diferença
+// que decide se o CRM ouve `identidade_invalida` ou `opt_out` (D49).
+test('resend: devolução e denúncia são eventos diferentes, não o mesmo', () => {
+  const [bounce] = new EmailResendAdapter().normalizeWebhook({
+    type: 'email.bounced', created_at: '2026-09-21T12:00:00.000Z',
+    data: { email_id: 'em-1' },
+  });
+  assert.equal(bounce!.tipo, 'devolvido');
+
+  const [spam] = new EmailResendAdapter().normalizeWebhook({
+    type: 'email.complained', created_at: '2026-09-21T12:00:00.000Z',
+    data: { email_id: 'em-2' },
+  });
+  assert.equal(spam!.tipo, 'denuncia');
+  // Denúncia não carrega `permanente`: não é fato sobre endereço nenhum.
+  assert.equal(spam!.payload.permanente, undefined);
+});
+
+test('resend: devolução só é permanente quando o provedor diz que é', () => {
+  const caso = (data: Record<string, unknown>) =>
+    new EmailResendAdapter().normalizeWebhook({
+      type: 'email.bounced', created_at: '2026-09-21T12:00:00.000Z',
+      data: { email_id: 'em-1', ...data },
+    })[0]!.payload.permanente;
+
+  assert.equal(caso({ bounce: { type: 'Permanent' } }), true);
+  assert.equal(caso({ bounce: { type: 'HardBounce' } }), true);
+  assert.equal(caso({ bounce: { type: 'Transient' } }), false);
+
+  // Os casos que importam: o provedor não disse, ou mudou o nome do campo, ou
+  // mandou algo inesperado. Todos caem em "temporário" — suprimir um endereço
+  // bom é irreversível; deixar um endereço morto custa uma tentativa perdida.
+  assert.equal(caso({}), false);
+  assert.equal(caso({ bounce: {} }), false);
+  assert.equal(caso({ bounce: { type: 42 } }), false);
+  assert.equal(caso({ bounce: { tipo: 'Permanent' } }), false);
 });
 
 test('resend: resposta casa pelo endereço, nunca pelo id do e-mail recebido', () => {

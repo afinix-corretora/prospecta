@@ -29,7 +29,7 @@ import type {
 } from './tipos.ts';
 import { erroDeRede, exigir } from './tipos.ts';
 import { emailValido, montarRemetente, normalizarEmail, separarAssunto } from './email.ts';
-import { primeiroTexto } from './texto.ts';
+import { emCaminho, primeiroTexto } from './texto.ts';
 
 const ENDPOINT = 'https://api.resend.com/emails';
 const DOMINIOS = 'https://api.resend.com/domains';
@@ -160,7 +160,13 @@ export class EmailResendAdapter implements ChannelAdapter {
       providerMessageId: String(dados.email_id),
       tipo,
       ocorridoEm: quando,
-      payload: { evento: tipoBruto },
+      payload: {
+        evento: tipoBruto,
+        // Só a devolução carrega isto, e só quando o provedor distingue. A
+        // ausência é lida como temporária pelo SQL, de propósito: suprimir um
+        // endereço bom por uma caixa cheia é irreversível (D49).
+        ...(tipo === 'devolvido' ? { permanente: devolucaoPermanente(raiz) } : {}),
+      },
     }];
   }
 
@@ -186,13 +192,35 @@ export class EmailResendAdapter implements ChannelAdapter {
  * em DECISOES.md sobre transformar denúncia em supressão, que é decisão de
  * produto e não de adapter.
  */
+/**
+ * A devolução foi definitiva?
+ *
+ * `true` só quando o provedor DIZ que foi. Qualquer outra coisa — campo
+ * ausente, nome de campo que mudou, valor inesperado — é lida como temporária,
+ * porque suprimir um endereço bom não tem volta e deixar um endereço morto no
+ * pool custa uma tentativa perdida por vez.
+ */
+function devolucaoPermanente(raiz: unknown): boolean {
+  const bruto = primeiroTexto(
+    emCaminho(raiz, 'data', 'bounce', 'type'),
+    emCaminho(raiz, 'data', 'bounce_type'),
+    emCaminho(raiz, 'data', 'type'),
+  );
+  if (!bruto) return false;
+  const v = bruto.toLowerCase();
+  return v === 'permanent' || v === 'hard' || v === 'hardbounce';
+}
+
 const TIPO_POR_EVENTO: Record<string, TipoEvento> = {
   'email.sent': 'enviado',
   'email.delivered': 'entregue',
   'email.opened': 'lido',
   'email.clicked': 'clique',
-  'email.bounced': 'rejeitado',
-  'email.complained': 'rejeitado',
+  // Os dois eram `rejeitado`, o que apagava a diferença entre "o endereço não
+  // existe" e "a pessoa marcou como spam" — e essa diferença decide se o CRM
+  // ouve `identidade_invalida` ou `opt_out` (D49).
+  'email.bounced': 'devolvido',
+  'email.complained': 'denuncia',
   'email.failed': 'falha',
 };
 
