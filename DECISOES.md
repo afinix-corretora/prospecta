@@ -774,6 +774,40 @@ da função.
 **O arquivo é o procedimento, não o cofre.** `LIGAR.md` explica onde a chave mora e por que não pode
 morar em arquivo — nem nele. A primeira anti-regra do projeto não abre exceção para documentação.
 
+### D45 — Três dos quatro fatos do writeback nunca eram produzidos
+Gatilhos em `enrollments` e em `suppression` enfileiram `respondido`, `campanha_concluida` e
+`opt_out` na `outbox`. Antes só `identidade_invalida` nascia.
+*Justificativa:* o D3 fixa o contrato em quatro fatos e o diagrama do `CLAUDE.md` desenha
+`outbox → writeback CRM`. Conferindo o que o motor gravava: `identidade_invalida` em dois lugares, e
+os outros três **em lugar nenhum** — a palavra só existia na definição do enum. O `'respondido'` que
+aparece no código é `tipo_evento` de `message_events`, outro enum com a mesma palavra, e foi o que
+fez a falta passar despercebida.
+O estrago é concreto: quem pede para sair entra em `suppression` e o CRM nunca sabe, então o
+corretor liga para quem pediu para não ser incomodado; quem responde encerra a cadência e continua
+aparecendo como lead frio, o mais quente da base parado; a campanha termina e o lead fica "em
+cadência" para sempre. É o formato do D31, do D37 e do D42 — a garantia escrita, a verificação
+ausente —, só que aqui nem o produtor existia.
+**Por gatilho, não por chamada.** Há dois caminhos de encerramento: `encerrar_enrollment` para o
+agendador e o gatilho de `message_events` para a invariante 4. Um gatilho em `enrollments` pega os
+dois; pedir a cada chamador que lembre de gravar o fato é a convenção que este projeto recusa em
+todo lugar.
+**Shadow mode não escreve no CRM.** Rodar o caminho inteiro sem efeito externo é o que `simulado`
+significa, e o CRM é externo. Dizer a ele que a campanha concluiu, quando nenhuma mensagem saiu, é
+uma mentira que o backfill não desfaz. O gate é a existência de mensagem não-simulada — e ele
+resolve de graça o caso do D35: enrollment que percorreu todos os passos sem identidade nenhuma
+encerra em `fim_dos_passos` sem nunca ter contatado, e "campanha concluída" para quem nunca foi
+contatado é exatamente o silêncio que a prévia da inscrição existe para quebrar.
+**Dois motivos de encerramento não viram fato, cada um por uma razão.** `mudanca_etapa_crm` veio do
+CRM — escrever de volta é o eco que o D3 manda evitar. `falha_permanente` não tem fato no contrato
+estreito, e alargar o contrato é decisão, não detalhe de implementação.
+**`respondido` e `opt_out` são fatos da pessoa**, não do enrollment: índice parcial único garante um
+por contato enquanto o anterior estiver pendente. Uma resposta encerra todos os enrollments do
+contato, e sem isso quem está em três campanhas geraria três escritas idênticas no CRM.
+**Ainda falta o consumidor.** Nada drena a `outbox` — `status_outbox` tem `enviado` e `falha` que
+ninguém escreve, e `tentativas`/`proxima_tentativa_em` são maquinaria de retentativa sem retentador.
+O dreno precisa do OAuth do Pipefy, que mora em `_shared/pipefy.ts` do projeto legado e não está
+neste repositório.
+
 ---
 
 ## Decisões adiadas (não decidir agora)

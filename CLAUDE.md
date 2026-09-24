@@ -195,6 +195,16 @@ e elas têm teste automatizado obrigatório.**
 - **Nunca** aparar em silêncio a sujeira de um segredo. O worker usa o valor como está: espaço nas
   pontas é defeito a apontar, não a esconder. E `btrim` de um argumento apara só espaço — quebra de
   linha e tabulação passam direto (D44).
+- **Nunca** declarar um contrato sem conferir quem o produz. Dos quatro fatos do D3, três nunca
+  nasciam — a palavra só existia no enum, e `'respondido'` ainda por cima colidia com um valor de
+  `tipo_evento`, o que escondeu a falta (D45).
+- **Nunca** deixar o shadow mode escrever no CRM. `simulado` significa caminho inteiro sem efeito
+  externo, e o CRM é externo: contar que a campanha concluiu sem nenhuma mensagem ter saído é
+  mentira que o backfill não desfaz. O gate é a existência de mensagem não-simulada (D45).
+- **Nunca** devolver ao CRM um fato que veio dele. `mudanca_etapa_crm` encerra o enrollment e não
+  gera writeback — é o eco que o D3 manda evitar (D45).
+- **Nunca** tratar fato da pessoa como fato do enrollment. Resposta encerra todos os enrollments do
+  contato; sem índice único, quem está em três campanhas gera três escritas iguais no CRM (D45).
 
 ---
 
@@ -260,7 +270,7 @@ e elas têm teste automatizado obrigatório.**
 > **derivados do schema** cobram `tenant_id`, RLS e FK composta de toda tabela nova — lista escrita
 > à mão envelhece sem avisar, e essa já tinha perdido a `provider_servers` (D31).
 >
-> O schema está **aplicado no projeto `hucuwjvihqgftdjpnych`** (30 migrations no repositório, 33
+> O schema está **aplicado no projeto `hucuwjvihqgftdjpnych`** (31 migrations no repositório, 34
 > registros no projeto — duas corretivas de texto e uma separação, ver D32 e D39), conferido por
 > digest estrutural contra o banco de teste — colunas, constraints, índices, políticas, corpos de
 > função e a grade de privilégios batem byte a byte.

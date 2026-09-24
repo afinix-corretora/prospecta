@@ -390,13 +390,34 @@ SELECT t.confere('agendador: índice parcial de next_run_at existe',
 -- Contrato de writeback (D3)
 -- ===========================================================================
 
+-- Caio, e não Ana: desde o D45 a resposta da Ana já produz o `respondido`
+-- dela na outbox, e repetir o fato aqui esbarraria na trava de dedup logo
+-- abaixo. O contrato é o que este bloco mede; a duplicata tem asserção
+-- própria.
 SELECT t.aceita('D3: fato do contrato estreito é aceito na outbox',
   $$INSERT INTO outbox (contact_id, destino, fato)
-    VALUES ('11111111-1111-1111-1111-111111111111','pipefy','respondido')$$);
+    VALUES ('33333333-3333-3333-3333-333333333333','pipefy','respondido')$$);
 
 SELECT t.recusa('D3: fato fora do contrato estreito é recusado',
   $$INSERT INTO outbox (contact_id, destino, fato)
-    VALUES ('11111111-1111-1111-1111-111111111111','pipefy','nome_do_lead')$$);
+    VALUES ('33333333-3333-3333-3333-333333333333','pipefy','nome_do_lead')$$);
+
+-- D45: o mesmo fato pendente duas vezes para a mesma pessoa é uma escrita
+-- repetida no CRM. Quem responde em dois canais, ou pede para sair duas
+-- vezes, é um fato só. A trava é um índice único parcial — vale para o
+-- gatilho e para quem insere à mão, que é o caso desta linha.
+SELECT t.recusa('D45: o mesmo fato pendente não entra duas vezes',
+  $$INSERT INTO outbox (contact_id, destino, fato)
+    VALUES ('33333333-3333-3333-3333-333333333333','pipefy','respondido')$$);
+
+-- ...mas só enquanto o primeiro está pendente. Despachado o fato, um novo
+-- acontecimento da mesma pessoa volta a ser escrita legítima.
+UPDATE outbox SET status = 'enviado'
+ WHERE contact_id = '33333333-3333-3333-3333-333333333333' AND fato = 'respondido';
+
+SELECT t.aceita('D45: com o anterior despachado, o fato pode acontecer de novo',
+  $$INSERT INTO outbox (contact_id, destino, fato)
+    VALUES ('33333333-3333-3333-3333-333333333333','pipefy','respondido')$$);
 
 SELECT t.confere('D3: toda escrita externa carrega marca de autoria',
   (SELECT bool_and(autoria IS NOT NULL AND length(autoria) > 0) FROM outbox));

@@ -98,6 +98,7 @@ rodar rebalance   "$RAIZ/tests/rebalanceamento.sql"
 rodar concorda    "$RAIZ/tests/despacho_concorda.sql"
 rodar mensagens   "$RAIZ/tests/mensagens.sql"
 rodar chave       "$RAIZ/tests/chave_do_motor.sql"
+rodar writeback   "$RAIZ/tests/writeback.sql"
 
 # ---------------------------------------------------------------------------
 # Adapters de canal — TypeScript, sem rede (fetch injetado).
