@@ -1337,3 +1337,71 @@ Até agora, responder "pare" não suprimia ninguém e devolução não era disti
 o código do D48 e do D49 existia no repositório e não no ar. Agora está no ar. O passo 4 do
 `LIGAR.md` deixa de ser bloqueio para ligar o motor, e o que resta ali é tudo o que depende de
 acesso que eu não tenho: o cliente, a chave e o remetente.
+
+### D53 — O tenant de teste, e por que não existe "root"
+
+Você pediu um admin/root nosso para testar. Duas correções antes de fazer, porque as duas mudam o
+que foi feito.
+
+#### O usuário já existia; o tenant é que não
+
+`admin@grupoafx.com.br` está em `auth.users` desde o começo, confirmado, com senha, e entrou duas
+vezes hoje (17:33 e 02:30 — são os logins que apareceram na investigação do D50). Não havia nada a
+criar ali.
+
+O que não existia era o **tenant**: zero linhas em `tenants` e zero em `tenant_users`. Entrar no
+app com essa conta daria uma tela vazia, e o motivo não é bug — é o RLS fazendo o que deve. A
+política de `tenants` é `pertence_ao_tenant(id)`, e quem não está em `tenant_users` não enxerga
+linha nenhuma, de tabela nenhuma.
+
+Isso também é o passo 1 do `LIGAR.md`, que estava parado esperando alguém com acesso de escrita.
+
+#### Não há root neste produto, e isso é a arquitetura funcionando
+
+Não existe papel acima do tenant. Os papéis são `dono`, `admin`, `operador` e `leitor`, e todos
+valem **dentro de um tenant** (D18). Um usuário que enxergasse todos os tenants seria exatamente o
+"bug entre clientes" que a `tenant_id` em toda tabela, as FKs compostas e o RLS por papel existem
+para tornar impossível.
+
+O equivalente ao que você pediu é **`dono` do tenant**, que é o papel máximo que o produto tem, e é
+o que a conta recebeu.
+
+#### O zero que quase não foi zero
+
+Contei `tenants` e li 0 — e quase segui em frente. Mas `tenants` tem `FORCE ROW LEVEL SECURITY`, e
+uma leitura sem JWT devolve zero linhas quer a tabela esteja vazia, quer esteja cheia. As duas
+situações são indistinguíveis pelo `count(*)`, que é a forma do D44 outra vez.
+
+Conferido por duas vias antes de escrever: o papel da consulta tem `rolbypassrls = true` (então o
+RLS não estava filtrando), e `pg_stat_user_tables.n_live_tup` também dizia 0, que é um caminho que
+não passa por política nenhuma. Criar um segundo tenant por causa de uma leitura filtrada teria
+falhado no `UNIQUE` do slug — de sorte, não de cuidado.
+
+#### Onde o bootstrap mora, e por que não no repositório
+
+O tenant nasceu de um `DO` idempotente aplicado **só no projeto**, não versionado. Isto é dado, não
+schema: o repositório não carrega o uuid de uma pessoa real, e um ambiente novo — o banco
+descartável do suite, um clone futuro — não precisa deste tenant nem teria o schema `auth` para
+satisfazer a checagem de dono. É o mesmo tipo de desvio que o `CLAUDE.md` já registra entre as 36
+migrations do repositório e os registros do projeto, e entrou na mesma lista com o mesmo motivo
+escrito.
+
+A checagem de dono não é zelo: `criar_tenant` sem dono cria um tenant que **ninguém enxerga**, pela
+mesma política de RLS de duas seções acima. Falhar alto é melhor do que criar o invisível.
+
+| | |
+|---|---|
+| tenant | `1a9e60a5-49f4-431a-ab82-5a07adeb627f` |
+| nome | Afinix Corretora (teste) |
+| slug | `afinix-teste` |
+| dono | `admin@grupoafx.com.br` |
+
+Slug com `-teste` de propósito: o que for exercitado aqui é descartável, e o tenant de produção
+nasce limpo quando for a hora — sem contato de teste, sem campanha de teste, sem supressão de
+teste, que é imutável e não se apaga.
+
+#### O que ainda impede de usar
+
+Entrar no app ainda depende da lista de endereços do Supabase (D50): o link chega apontando para
+`localhost:3000`. O tenant existir não conserta isso — são dois bloqueios independentes, e este era
+o que estava do meu lado.
