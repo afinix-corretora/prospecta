@@ -995,3 +995,57 @@ O que sobra dessa lacuna é risco de desenho, e esse foi conferido estaticamente
 limpos, as classes que a tela usa (`tab`, `kpis`, `kpi`, `aviso`, `sec`, `mono`) existem no CSS, a
 tabela é montada como `Campanha` e `Contatos` montam a delas, e o `Aviso` aceita as três variantes
 usadas. A decisão dos três estados, que é a parte que pode estar logicamente errada, tem 7 testes.
+
+### D47 — A campanha aponta o seu flow
+
+Até aqui, `campaigns` e `flow_versions` só se encontravam dentro de `enrollments`. A dupla existia,
+mas ninguém era dono dela.
+
+A consequência aparecia na tela de contatos: para inscrever alguém, o operador escolhia a versão de
+flow numa lista de **todas** as versões do cliente, e a tela mostrava os canais dos dois lados para
+que ele mesmo reparasse se cruzavam. Isso é contorno, não solução — e o erro que ele evita é
+silencioso, que é o pior tipo. Flow de e-mail numa campanha só de WhatsApp não dá erro nenhum: o
+motor pula passo a passo e encerra como concluído sem mandar nada (D35).
+
+**A pergunta "qual flow esta campanha roda" é da campanha, não de cada inscrição.** Perguntá-la a
+cada inscrição é perguntar N vezes uma coisa que muda uma vez — e cada repetição é uma chance de
+responder diferente.
+
+#### Três decisões embutidas
+
+**A coluna é NULL-ável.** Campanha existe antes de o flow estar escrito, e `criar_campanha_de_modelo`
+cria a campanha e o flow em sequência. Exigir a ligação no INSERT inverteria essa ordem sem ganho.
+
+**Apontar é um ato**, com função própria (`definir_flow_da_campanha`), porque é ali que a conferência
+cabe: cruzar os canais uma vez, quando se liga, no momento em que quem configura ainda está olhando
+para a tela de configuração. A recusa é só para a interseção **vazia**. Cruzamento **parcial** passa
+de propósito — o D4 já manda pular o passo cujo canal a campanha não habilita, e flow multicanal em
+campanha de um canal só é uso legítimo. Proibir o parcial seria uma trava estreita demais, que é o
+outro jeito de errar.
+
+**Repontar a campanha não move quem já está inscrito.** `enrollments` carrega o próprio
+`flow_version_id` desde a primeira migration, e é ele que o agendador lê. Publicar versão nova segue
+sendo o que o D9 diz: quem está em curso termina na versão em que entrou.
+
+#### O que a sabotagem ensinou sobre a minha própria asserção
+
+Quatro sabotagens, e a terceira não acendeu nada — o que era o sinal, não o alívio.
+
+Tirando a checagem de "campanha sem flow" de `inscrever_pela_campanha`, quem barra no fim é o
+`NOT NULL` de `enrollments.flow_version_id`. Como a asserção só aceitava `invalid_parameter_value`,
+o `not_null_violation` passava por cima dela e **abortava o arquivo** — e teste que aborta encolhe
+sem avisar (D38).
+
+Duas correções, e a segunda importa mais:
+
+- a asserção passou a capturar `others` e a distinguir *"recusou claramente"* de *"estourou cru,
+  SQLSTATE 23502"*;
+- **o comentário da migration passou a dizer a verdade menor.** Aquela checagem não impede estrago
+  nenhum — o banco já impedia. O que ela acrescenta é a recusa **legível**: sem ela o operador
+  recebe um erro citando uma coluna interna, que não diz o que fazer. Escrever que ela "impede o
+  enrollment vazio" teria sido uma afirmação maior do que o código sustenta.
+
+E uma correção menor no caminho: eu tinha posto `ON DELETE SET NULL` na FK. Mas `flow_versions` é
+imutável por gatilho, então a cláusula é inalcançável — e `SET NULL` diria a coisa errada se um dia
+rodasse, desapontando a campanha em silêncio. Ficou sem `ON DELETE`, com o motivo escrito, e com
+asserção provando que apagar uma versão de flow é recusado.

@@ -109,6 +109,7 @@ rodar mensagens   "$RAIZ/tests/mensagens.sql"
 rodar chave       "$RAIZ/tests/chave_do_motor.sql"
 rodar writeback   "$RAIZ/tests/writeback.sql"
 rodar dreno       "$RAIZ/tests/dreno.sql"
+rodar flow_campanha "$RAIZ/tests/flow_da_campanha.sql"
 
 # ---------------------------------------------------------------------------
 # Adapters de canal — TypeScript, sem rede (fetch injetado).

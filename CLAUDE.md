@@ -216,6 +216,15 @@ e elas têm teste automatizado obrigatório.**
 - **Nunca** deixar uma linha reivindicada sair de `pendente`. A trava de dedup do D45 é parcial em
   `status = 'pendente'`: tirar a linha de lá enquanto ela está em voo reabre a porta que o D45
   fechou — e libera a trava é o que `falha` faz de propósito, porque o fato não chegou (D46).
+- **Nunca** perguntar a cada inscrição o que é da campanha. Qual flow a campanha roda muda uma vez;
+  perguntar N vezes é N chances de responder diferente, e a resposta errada não dá erro — dá
+  campanha "concluída" sem mensagem nenhuma (D47).
+- **Nunca** recusar o cruzamento parcial de canais entre flow e campanha. O D4 já pula o passo do
+  canal não habilitado, e flow multicanal em campanha de um canal só é uso legítimo. O que se recusa
+  é a interseção **vazia**. Trava estreita demais é o outro jeito de errar (D47).
+- **Nunca** afirmar no comentário mais do que o código sustenta. A checagem de "campanha sem flow"
+  não impede o enrollment vazio — o `NOT NULL` já impedia; ela só torna a recusa legível. A
+  sabotagem que não acende nada é o sinal de que a asserção, ou a afirmação, está errada (D47).
 
 ---
 
@@ -281,7 +290,7 @@ e elas têm teste automatizado obrigatório.**
 > **derivados do schema** cobram `tenant_id`, RLS e FK composta de toda tabela nova — lista escrita
 > à mão envelhece sem avisar, e essa já tinha perdido a `provider_servers` (D31).
 >
-> O schema está **aplicado no projeto `hucuwjvihqgftdjpnych`** (32 migrations no repositório, 37
+> O schema está **aplicado no projeto `hucuwjvihqgftdjpnych`** (33 migrations no repositório, 38
 > registros no projeto — duas corretivas de texto, uma separação e duas do D46 (superfície e
 > tenant explícito), ver D32, D39 e D46), conferido por
 > digest estrutural contra o banco de teste — colunas, constraints, índices, políticas, corpos de
