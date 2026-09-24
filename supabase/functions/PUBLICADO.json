@@ -1,0 +1,20 @@
+{
+  "canal-webhook": {
+    "digest": "desconhecido-pre-D48",
+    "em": "2026-09-23 (v2; digest da época não foi registrado)",
+    "versao": 2,
+    "pendente": "D48/D49 mudaram normalizeWebhook nos adapters e esta é a única function que o chama. A v2 no projeto ainda tem o código antigo: opt-out por texto e a distinção devolução/denúncia NÃO rodam em produção até republicar. Sem urgência hoje — não há tenant, remetente nem job, então nenhum webhook chega. Republicar junto do LIGAR.md, antes de ligar o motor."
+  },
+  "motor-worker": {
+    "digest": "desconhecido-pre-D48",
+    "em": "2026-09-23 (v2; digest da época não foi registrado)",
+    "versao": 2,
+    "pendente": "D48/D49 mudaram `normalizeWebhook` e o union de TipoEvento nos adapters, e esta function empacota esses arquivos — logo o bundle publicado difere do repositório. Mas ela NÃO chama normalizeWebhook (só `send` e `provisionar`), então o comportamento publicado é equivalente. Republicar junto das outras, para o repositório e o projeto voltarem a ser a mesma coisa."
+  },
+  "provisionar-instancia": {
+    "digest": "desconhecido-pre-D48",
+    "em": "2026-09-23 (v2; digest da época não foi registrado)",
+    "versao": 2,
+    "pendente": "D48/D49 mudaram `normalizeWebhook` e o union de TipoEvento nos adapters, e esta function empacota esses arquivos — logo o bundle publicado difere do repositório. Mas ela NÃO chama normalizeWebhook (só `send` e `provisionar`), então o comportamento publicado é equivalente. Republicar junto das outras, para o repositório e o projeto voltarem a ser a mesma coisa."
+  }
+}

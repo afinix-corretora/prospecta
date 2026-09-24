@@ -249,6 +249,14 @@ e elas têm teste automatizado obrigatório.**
   um endereço real, e o `includes` esconde o aviso justamente de quem precisa dele (D50).
 - **Nunca** supor que um token de CSS existe. `var(--inexistente)` não falha o build — a regra
   simplesmente não se aplica, e o verde continua verde (D50).
+- **Nunca** escrever num documento que algo "já foi feito" sem quem confira. `LIGAR.md` dizia que as
+  edge functions estavam publicadas e conferidas; ficou falso no dia em que `adapters/` mudou.
+  `conferir-publicado.py` responde pelo digest do que cada function empacota (D51).
+- **Nunca** registrar como publicado o digest de agora. O que se registra é o que FOI publicado; na
+  dúvida, escrever "desconhecido" em vez de um número que parece conferência e não é (D51).
+- **Nunca** transportar código à mão quando o que ele compra pode esperar. Sem CLI, publicar é
+  reproduzir dezenas de KB exatos, e foi assim que o D32 nasceu. Se nada depende disso hoje, o que
+  se constrói é a verificação — ela vale para todas as próximas vezes (D51).
 
 ---
 

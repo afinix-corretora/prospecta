@@ -182,9 +182,30 @@ não-secreto em branco limpa.
 
 ## 4. Republicar as edge functions
 
-**Já feito em 23/09.** As três estão na versão 2, conferidas byte a byte contra o
-repositório. Este passo só volta a ser necessário quando o código de
-`adapters/`, `motor/` ou `supabase/functions/` mudar.
+**Confira antes de decidir se precisa.** Esta seção já disse "já feito em 23/09"
+e ficou falsa no dia em que `adapters/` mudou — fato escrito à mão envelhece sem
+avisar, que é a mesma classe do contador de migrations. Agora quem responde é:
+
+```bash
+python3 supabase/functions/conferir-publicado.py
+```
+
+Ele resolve o que cada function empacota, tira um digest e compara com
+`supabase/functions/PUBLICADO.json`. Mudou uma linha de qualquer arquivo que
+entra no bundle, ele acusa. Roda dentro de `tests/run.sh`.
+
+**Hoje há pendência**, e ela importa para ligar o motor: o D48 (opt-out no texto
+da resposta) e o D49 (devolução ≠ denúncia) mudaram `normalizeWebhook`, e a
+`canal-webhook` publicada ainda tem o código antigo. **Enquanto não republicar,
+quem responder "pare" não será suprimido e bounce não será distinguido de
+denúncia** — em silêncio, que é o pior jeito.
+
+As outras duas também estão com fontes diferentes, mas equivalentes em
+comportamento: elas empacotam os mesmos adapters e não chamam
+`normalizeWebhook`.
+
+Depois de publicar, atualize `PUBLICADO.json` com o digest novo — senão a
+bateria fica vermelha, que é exatamente o ponto.
 
 Quando for a hora, pelo CLI, a partir de um checkout:
 

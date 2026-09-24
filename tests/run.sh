@@ -265,6 +265,10 @@ echo "PASS  migrations reaplicam limpas após o down"
 # ---------------------------------------------------------------------------
 
 echo ""
+echo "→ edge functions: o publicado confere com o repositório?"
+python3 "$RAIZ/supabase/functions/conferir-publicado.py" || FALHOU=1
+
+echo ""
 echo "→ documentação que cita contagem"
 
 QTD_ARQ=$(ls "$RAIZ"/supabase/migrations/*.sql | wc -l | tr -d ' ')

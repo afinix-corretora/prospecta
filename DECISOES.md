@@ -1228,3 +1228,58 @@ Escrevi `var(--linha)` no estilo da nota. O token não existe — o nome real é
 falha: a borda simplesmente não apareceria, e o build passa verde. Corrigi e varri o arquivo inteiro
 atrás de outros (`nenhum`). É a mesma classe do D31: uma referência que parece garantia e não é
 lida por ninguém.
+
+### D51 — O que está publicado confere com o repositório?
+
+Fui publicar as edge functions com o código do D48 e do D49 e parei no meio, por dois motivos que
+valem mais que o deploy.
+
+#### O primeiro: a pergunta não tinha dono
+
+`LIGAR.md` dizia **"Já feito em 23/09. As três estão na versão 2, conferidas byte a byte"**. Era
+verdade quando foi escrito e ficou falsa no dia em que `adapters/` mudou — hoje. Ninguém reparou,
+porque nada reparava: é a mesma classe do contador de migrations que ficou nove atrás e do
+`tem_adapter` do D31.
+
+`supabase/functions/conferir-publicado.py` responde a pergunta em vez de alguém lembrar dela. Para
+cada function, resolve o **fecho transitivo dos imports** — que é exatamente o que vai no bundle —
+tira um digest do conteúdo, e compara com `PUBLICADO.json`. Mudou uma linha de qualquer arquivo
+empacotado, fica vermelho. Roda dentro de `tests/run.sh`.
+
+Ele **não** confere o que está no Supabase; isso precisa de rede, que o suite não tem. Confere se
+alguém **disse** ter publicado o que está aqui. Publicar sem registrar dá vermelho; registrar sem
+publicar é mentira deliberada, e para isso não há verificação que ajude.
+
+A porta de escape é a do meta-teste de tenant: dá para marcar `pendente`, mas é preciso escrever o
+motivo — e aí ele aparece em toda rodada, que é o oposto de esquecer.
+
+#### O segundo: transporte manual de 70 KB é o D32 esperando acontecer
+
+Não há token de CLI no ambiente, então publicar significa eu reproduzir 15 arquivos — 70 KB de JSON
+— exatos, numa chamada. O D32 nasceu de um transporte mexendo numa barra invertida. Serializei
+mecanicamente para tirar o risco do arquivo, e o risco continuou onde importa: na reprodução.
+
+Contra isso, o que o deploy compraria **hoje** é nada. Não há tenant, remetente, chave nem job: nenhum
+webhook pode chegar. E publicar agora resolveria uma vez, enquanto a próxima mudança em `adapters/`
+recriaria o mesmo buraco — o verificador resolve para sempre.
+
+Então: verificador agora, deploy no `LIGAR.md`, junto de ligar o motor, que é quando passa a
+importar.
+
+#### O erro que eu quase cometi dentro da própria correção
+
+Ao gravar o `PUBLICADO.json`, registrei `motor-worker` e `provisionar-instancia` com **o digest de
+hoje** e a data 23/09 — ou seja, afirmei que o publicado batia. Elas também empacotam os adapters
+que mudaram; o digest delas também está diferente. Eu teria mentido no arquivo construído para
+impedir mentiras, e a mentira teria passado verde.
+
+Corrigido: as três estão `pendente`, com a diferença dita — só a `canal-webhook` muda
+**comportamento**, porque é a única que chama `normalizeWebhook`; as outras duas diferem na fonte e
+são equivalentes na prática. E o digest gravado virou `desconhecido-pre-D48` em vez de um número
+inventado, porque o digest da época não foi registrado e não dá para recomputá-lo.
+
+#### O que está em jogo até publicar
+
+Enquanto a `canal-webhook` não for republicada, **quem responder "pare" não é suprimido e devolução
+não é distinguida de denúncia** — em silêncio. Está escrito no `LIGAR.md`, no passo que precede
+ligar o motor.

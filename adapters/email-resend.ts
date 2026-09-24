@@ -187,10 +187,10 @@ export class EmailResendAdapter implements ChannelAdapter {
  * fora: não há tipo de evento para eles e inventar um vizinho ('falha' para um
  * atraso que ainda vai entregar) estraga o status derivado.
  *
- * `email.complained` é o contato marcando como spam. Vira 'rejeitado' porque é
- * recusa do destinatário, mas 'rejeitado' aqui não suprime nada — ver a nota
- * em DECISOES.md sobre transformar denúncia em supressão, que é decisão de
- * produto e não de adapter.
+ * `email.complained` é o contato marcando como spam, e desde o D49 ele tem
+ * evento próprio: `denuncia`, que suprime a PESSOA e faz o CRM ouvir
+ * `opt_out`. Antes caía em 'rejeitado' junto com o bounce, o que apagava a
+ * diferença entre "a pessoa não quer" e "o endereço não existe".
  */
 /**
  * A devolução foi definitiva?
