@@ -12,6 +12,12 @@
  * está, ele **não recusa e não avisa**: cai em silêncio no Site URL, que vem
  * de fábrica como `http://localhost:3000`.
  *
+ * Isto deixou de ser hipótese em 24/09: os registros de autenticação do projeto
+ * mostram, nas duas tentativas do dia, `referer: "http://localhost:3000"` — e
+ * essa porta não existe em lugar nenhum deste app (o dev serve na 5173, a
+ * produção é https). O valor é o padrão de fábrica do Supabase, o que só
+ * acontece quando o pedido do app foi descartado.
+ *
  * O sintoma é o link do e-mail apontar para localhost. E, do lado de cá, a
  * requisição foi bem-sucedida — `error` é nulo, a tela diz "link enviado", e
  * não há nada para suspeitar. É a mesma forma do D44: uma configuração errada

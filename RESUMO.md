@@ -143,15 +143,24 @@ ficaria de fora e por quê.
 
 ---
 
-## O link de acesso está voltando para o lugar errado?
+## O link de acesso volta para o localhost — **conferido, e a causa é esta**
 
-O app manda um link por e-mail em vez de senha. Se o link chegar apontando para
-`localhost` — ou para qualquer endereço que não seja o do app — **o problema não é o e-mail nem o
-navegador**: é uma lista no painel do Supabase.
+Não é mais suspeita. Os registros de autenticação do projeto guardam as duas tentativas
+(24/09 às 02:30 e às 17:33), e nas duas o endereço de retorno resolvido pelo Supabase foi:
 
-O Supabase só respeita o endereço de retorno que o app pede se ele estiver na lista de permitidos.
-Quando não está, ele **não recusa e não avisa**: usa em silêncio o "Site URL", que vem de fábrica
-como `http://localhost:3000`.
+```
+"mail_type": "magic_link", "mail_to": "admin@grupoafx.com.br"
+"referer":   "http://localhost:3000"
+```
+
+Esse `http://localhost:3000` **não pode ter saído do app**: em desenvolvimento o app serve na
+porta 5173, e em produção ele é `https://`. `http://localhost:3000` é, exatamente, o Site URL
+que o Supabase traz de fábrica.
+
+Ou seja: o app pediu o endereço certo, o Supabase **descartou o pedido em silêncio** — porque
+ele só honra o endereço de retorno se estiver na lista de permitidos — e caiu no Site URL, que
+nunca foi configurado. As duas entradas do login deram certo (`303` e `Login` no registro); o
+que está errado é só para onde elas levam.
 
 **Onde arrumar:** Supabase ▸ Authentication ▸ URL Configuration.
 
@@ -159,16 +168,27 @@ como `http://localhost:3000`.
 |---|---|
 | Site URL | `https://app-eight-snowy-54.vercel.app` |
 | Redirect URLs | `https://app-eight-snowy-54.vercel.app/**` |
-| | `https://*-afinix.vercel.app/**` *(os previews de cada branch)* |
+| | `https://*-afinix.vercel.app/**` *(o endereço próprio de cada deploy)* |
 | | `http://localhost:5173/**` *(desenvolvimento local)* |
+
+A segunda linha não é zelo: cada deploy da Vercel ganha também um endereço próprio
+(`app-gyrlc8ktj-afinix.vercel.app` é o de agora). Abrir o app por um desses e não tê-lo na lista
+reproduz o mesmo defeito com a configuração "certa" — e aí o sintoma volta sem explicação.
 
 **Se ainda assim continuar errado**, o segundo suspeito é o texto do e-mail: em
 Authentication ▸ Email Templates ▸ Magic Link, o link precisa usar `{{ .RedirectTo }}`. Se estiver
 escrito `{{ .SiteURL }}`, ele ignora o pedido do app por construção.
 
-Para você não precisar adivinhar de novo: **a tela de entrada agora mostra o endereço para onde o
-link vai voltar**, logo depois de enviá-lo. Se o e-mail chegar apontando para outro lugar, a
-diferença fica visível em cinco segundos em vez de virar investigação.
+**Como conferir depois de mexer, sem depender da caixa de entrada** — é o D44 outra vez, uma
+configuração manual cujo erro é indistinguível do funcionamento normal. Peça um link novo e leia
+o registro: em Supabase ▸ Logs ▸ Auth, a linha do `mail.send` mais recente. O campo `referer` da
+requisição `/otp` ao lado dela é o endereço que o Supabase de fato vai usar. Se ele mudou de
+`http://localhost:3000` para o endereço do app, está resolvido — e isso se sabe **antes** de
+abrir o e-mail.
+
+E do lado de cá: **a tela de entrada mostra o endereço para onde pediu que o link voltasse**,
+logo depois de enviá-lo. O que o app pede está visível na tela; o que o Supabase faz com o pedido
+está visível no registro. A diferença entre os dois é o defeito.
 
 ## O que ainda depende de você
 
