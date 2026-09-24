@@ -986,6 +986,12 @@ a fila vazia. Ambos têm teste.
 A decisão mora em `app/src/telas/situacao_do_writeback.ts`, fora do `.tsx`, porque é a parte que
 pode estar errada — 7 testes, um por situação que, lida errado, some. O `.tsx` é só desenho.
 
-**O que não foi verificado:** a tela não foi renderizada no navegador. O app fala com o Supabase e o
-proxy do ambiente bloqueia esse host. O que está conferido é `tsc`, build e a decisão dos três
-estados.
+**O que não foi verificado, e por quê.** A tela não foi renderizada no navegador. A política de rede
+do ambiente nega tanto o host do Supabase quanto o preview do Vercel, então não há caminho: nem
+rodando o app localmente (ele precisa do banco), nem abrindo o deploy. Não é escolha, é fronteira
+do ambiente.
+
+O que sobra dessa lacuna é risco de desenho, e esse foi conferido estaticamente: `tsc` e build
+limpos, as classes que a tela usa (`tab`, `kpis`, `kpi`, `aviso`, `sec`, `mono`) existem no CSS, a
+tabela é montada como `Campanha` e `Contatos` montam a delas, e o `Aviso` aceita as três variantes
+usadas. A decisão dos três estados, que é a parte que pode estar logicamente errada, tem 7 testes.
