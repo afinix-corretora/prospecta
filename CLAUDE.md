@@ -281,9 +281,9 @@ e elas têm teste automatizado obrigatório.**
 > **derivados do schema** cobram `tenant_id`, RLS e FK composta de toda tabela nova — lista escrita
 > à mão envelhece sem avisar, e essa já tinha perdido a `provider_servers` (D31).
 >
-> O schema está **aplicado no projeto `hucuwjvihqgftdjpnych`** (32 migrations no repositório, 36
-> registros no projeto — duas corretivas de texto, uma separação e uma de superfície, ver D32,
-> D39 e D46), conferido por
+> O schema está **aplicado no projeto `hucuwjvihqgftdjpnych`** (32 migrations no repositório, 37
+> registros no projeto — duas corretivas de texto, uma separação e duas do D46 (superfície e
+> tenant explícito), ver D32, D39 e D46), conferido por
 > digest estrutural contra o banco de teste — colunas, constraints, índices, políticas, corpos de
 > função e a grade de privilégios batem byte a byte.
 >

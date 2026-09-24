@@ -122,7 +122,7 @@ BEGIN
   PERFORM dr.confere('e o contador mostra quantas foram', v_t = 8, v_t::text);
 
   -- Desistir não é silencioso: a tela consegue listar o que não chegou.
-  SELECT count(*) INTO v_n FROM writebacks_falhados(50) f
+  SELECT count(*) INTO v_n FROM writebacks_falhados(privado.tenant_padrao(), 50) f
    WHERE f.writeback_id = v_id AND f.ultimo_erro = 'tentativa 8' AND f.nome = 'Bruno Dreno';
   PERFORM dr.confere('o fato que desistiu aparece na lista, com erro e dono',
     v_n = 1, v_n::text);
@@ -190,7 +190,7 @@ BEGIN
   UPDATE outbox SET status = 'enviado' WHERE status = 'pendente';
 
   SELECT pendentes, pendente_mais_antigo_em_horas INTO v_pend, v_idade
-    FROM resumo_da_outbox();
+    FROM resumo_da_outbox(privado.tenant_padrao());
   PERFORM dr.confere('fila vazia: nenhum pendente', v_pend = 0, v_pend::text);
   PERFORM dr.confere('fila vazia: não existe "mais antigo"', v_idade IS NULL,
     coalesce(v_idade::text,'(nulo)'));
@@ -204,7 +204,7 @@ BEGIN
      AND fato = 'respondido' AND status = 'pendente';
 
   SELECT pendentes, vencidos_agora, falhados, pendente_mais_antigo_em_horas
-    INTO v_pend, v_venc, v_falh, v_idade FROM resumo_da_outbox();
+    INTO v_pend, v_venc, v_falh, v_idade FROM resumo_da_outbox(privado.tenant_padrao());
 
   PERFORM dr.confere('dreno parado: o pendente aparece', v_pend = 1, v_pend::text);
   PERFORM dr.confere('dreno parado: e está vencido agora', v_venc = 1, v_venc::text);
@@ -216,7 +216,54 @@ END;
 $$;
 
 -- ===========================================================================
--- 6. O recorte por tenant das duas de leitura, cobrado no schema
+-- 6. O recorte por tenant, com um segundo cliente no banco
+-- ===========================================================================
+
+-- Sem esta seção, o `WHERE tenant_id = p_tenant` passaria com e sem o filtro:
+-- um tenant só no banco não consegue violar a asserção (D36). O outro cliente
+-- entra com um writeback FALHADO, que é o caso mais perigoso — é o que a tela
+-- lista com nome e erro do contato.
+DO $$
+DECLARE v_outro uuid := 'aa000000-0000-0000-0000-0000000000bb';
+        v_c uuid := 'd0000000-0000-0000-0000-0000000000bb';
+        v_w uuid; v_falh bigint; v_n integer; v_pend bigint;
+BEGIN
+  INSERT INTO tenants (id, nome, slug) VALUES (v_outro, 'Outro Cliente', 'outro');
+  INSERT INTO contacts (id, tenant_id, nome, origem)
+  VALUES (v_c, v_outro, 'Contato do Outro', 'planilha');
+
+  INSERT INTO outbox (tenant_id, contact_id, destino, fato)
+  VALUES (v_outro, v_c, 'crm', 'respondido') RETURNING id INTO v_w;
+  FOR i IN 1..8 LOOP
+    PERFORM registrar_resultado_writeback(v_w, false, 'erro do outro cliente');
+  END LOOP;
+
+  PERFORM dr.confere('o writeback do outro cliente existe e falhou',
+    (SELECT status::text FROM outbox WHERE id = v_w) = 'falha',
+    (SELECT status::text FROM outbox WHERE id = v_w));
+
+  -- E agora o que importa: ele NÃO pode aparecer para o nosso cliente.
+  SELECT falhados, pendentes INTO v_falh, v_pend
+    FROM resumo_da_outbox(privado.tenant_padrao());
+  PERFORM dr.confere('o resumo não soma o falhado do outro cliente',
+    v_falh = 1, v_falh::text || ' (o nosso é 1)');
+
+  SELECT count(*) INTO v_n FROM writebacks_falhados(privado.tenant_padrao(), 50) f
+   WHERE f.writeback_id = v_w;
+  PERFORM dr.confere('a lista não mostra o writeback do outro cliente',
+    v_n = 0, v_n::text);
+
+  -- E o contrário, para não passar por ausência: perguntando pelo tenant dele,
+  -- ele aparece. Asserção que só sabe dizer "não veio nada" não distingue
+  -- recorte de consulta quebrada.
+  SELECT count(*) INTO v_n FROM writebacks_falhados(v_outro, 50) f
+   WHERE f.writeback_id = v_w AND f.nome = 'Contato do Outro';
+  PERFORM dr.confere('perguntando pelo tenant dele, ele aparece', v_n = 1, v_n::text);
+END;
+$$;
+
+-- ===========================================================================
+-- 7. A superfície das duas de leitura, cobrada no schema
 -- ===========================================================================
 
 -- Nenhuma das duas recebe tenant na assinatura: quem recorta é o RLS da

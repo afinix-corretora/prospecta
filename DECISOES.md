@@ -939,3 +939,21 @@ contrário: papel escondido, suite verde, porque agora ele mesmo o cria.
 
 A pergunta que fica registrada, do mesmo feitio da do D37: **o que mais o suite assume da máquina
 em vez de montar?**
+
+#### E uma correção minha, achada antes de construir em cima dela
+
+As duas funções de leitura nasceram sem tenant na assinatura, contando só com o RLS. Fui construir
+a tela e, ao olhar como `resumo_da_campanha` é chamada, vi que o padrão do projeto tem as **duas**
+camadas: filtro explícito `WHERE tenant_id = p_tenant` **e** RLS por baixo, porque a função é
+`SECURITY INVOKER`.
+
+Ter só o RLS era frágil por dois motivos, e o segundo é o que pesa. O primeiro: o RLS é a camada 3
+do D18 e não alcança todo papel — eu mesmo tinha concedido as funções a `service_role`, e aí a
+mesma chamada teria duas semânticas. O segundo: duas funções de painel com contratos diferentes é
+a segunda normalização do D32 em outra roupa. Quem escrever a terceira vai copiar uma das duas, e
+não há como saber qual.
+
+Corrigido: `resumo_da_outbox(p_tenant)` e `writebacks_falhados(p_tenant, p_limite)`. E, porque um
+tenant só no banco não consegue violar a asserção (D36), o cenário agora tem um segundo cliente com
+um writeback falhado — o caso mais perigoso, já que é o que a tela lista com nome e erro do
+contato. Sabotar o filtro faz a asserção contar 2 onde o certo é 1.

@@ -145,7 +145,12 @@ COMMENT ON FUNCTION registrar_resultado_writeback IS
 -- causas opostas — nada aconteceu, ou o dreno morreu — e sem o numero abaixo
 -- as duas sao a mesma tela. `pendente_mais_antigo_em_horas` e o unico numero
 -- que as separa: fila vazia nao tem mais antigo.
-CREATE FUNCTION resumo_da_outbox()
+-- Tenant explicito na assinatura, como `resumo_da_campanha`. O RLS ja
+-- recortaria, mas o RLS e a camada 3 do D18 e nao alcanca todo papel; a
+-- assinatura que nao diz de quem e o numero e a anti-regra do tenant
+-- implicito, e duas funcoes de painel com contratos diferentes seria a
+-- divergencia que o D32 chama de segunda normalizacao.
+CREATE FUNCTION resumo_da_outbox(p_tenant uuid)
 RETURNS TABLE (
   pendentes bigint, enviados bigint, falhados bigint,
   vencidos_agora bigint, pendente_mais_antigo_em_horas numeric
@@ -158,7 +163,8 @@ LANGUAGE sql STABLE SET search_path = public, privado AS $$
          round(extract(epoch FROM
                  now() - min(criado_em) FILTER (WHERE status = 'pendente')
                ) / 3600.0, 1)
-    FROM outbox;
+    FROM outbox
+   WHERE tenant_id = p_tenant;
 $$;
 
 COMMENT ON FUNCTION resumo_da_outbox IS
@@ -166,7 +172,7 @@ COMMENT ON FUNCTION resumo_da_outbox IS
    distingue dreno parado de fila vazia — sem ele as duas situacoes sao a
    mesma tela (D46, na linha do D36 e do D44).';
 
-CREATE FUNCTION writebacks_falhados(p_limite integer DEFAULT 50)
+CREATE FUNCTION writebacks_falhados(p_tenant uuid, p_limite integer DEFAULT 50)
 RETURNS TABLE (
   writeback_id uuid, contact_id uuid, nome text, destino text,
   fato fato_writeback, tentativas integer, ultimo_erro text,
@@ -177,7 +183,7 @@ LANGUAGE sql STABLE SET search_path = public, privado AS $$
          o.ultimo_erro, o.criado_em
     FROM outbox o
     LEFT JOIN contacts c ON c.id = o.contact_id AND c.tenant_id = o.tenant_id
-   WHERE o.status = 'falha'
+   WHERE o.tenant_id = p_tenant AND o.status = 'falha'
    ORDER BY o.criado_em DESC
    LIMIT p_limite;
 $$;
@@ -218,8 +224,8 @@ BEGIN
 
   -- Tela: so quem o RLS recorta.
   FOREACH alvo IN ARRAY ARRAY[
-    'public.resumo_da_outbox()',
-    'public.writebacks_falhados(integer)'
+    'public.resumo_da_outbox(uuid)',
+    'public.writebacks_falhados(uuid, integer)'
   ] LOOP
     EXECUTE format('REVOKE ALL ON FUNCTION %s FROM PUBLIC, anon, authenticated', alvo);
     -- O banco de teste nao tem `service_role`; o projeto tem. Revogar so
