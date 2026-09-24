@@ -509,6 +509,47 @@ export async function lerEventosDaCampanha(
 }
 
 // ---------------------------------------------------------------------------
+// Writeback: o que o motor tem para contar ao CRM (D46)
+// ---------------------------------------------------------------------------
+
+export interface ResumoDaOutbox {
+  pendentes: number;
+  enviados: number;
+  falhados: number;
+  vencidos_agora: number;
+  /** Nulo quando não há pendente. É o número que separa fila vazia de dreno
+   *  parado — sem ele, as duas situações são a mesma tela. */
+  pendente_mais_antigo_em_horas: number | null;
+}
+
+export async function lerResumoDaOutbox(tenant: string): Promise<ResumoDaOutbox | null> {
+  const { data, error } = await sb.rpc('resumo_da_outbox', { p_tenant: tenant });
+  if (error) throw error;
+  return ((data ?? [])[0] as ResumoDaOutbox) ?? null;
+}
+
+export interface WritebackFalhado {
+  writeback_id: string;
+  contact_id: string;
+  nome: string | null;
+  destino: string;
+  fato: 'opt_out' | 'identidade_invalida' | 'respondido' | 'campanha_concluida';
+  tentativas: number;
+  ultimo_erro: string | null;
+  criado_em: string;
+}
+
+export async function lerWritebacksFalhados(
+  tenant: string, limite = 50,
+): Promise<WritebackFalhado[]> {
+  const { data, error } = await sb.rpc('writebacks_falhados', {
+    p_tenant: tenant, p_limite: limite,
+  });
+  if (error) throw error;
+  return (data ?? []) as WritebackFalhado[];
+}
+
+// ---------------------------------------------------------------------------
 // Supressão (D41)
 // ---------------------------------------------------------------------------
 

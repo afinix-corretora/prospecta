@@ -67,6 +67,13 @@ export function Rail({ provedores }: { provedores: ProvedorCanal[] }) {
           Supressão
         </button>
 
+        {/* A última seta do diagrama, e a única que sai do motor para fora.
+            Primeiro nível porque a pergunta que ela responde — "o CRM já sabe?"
+            — é operacional diária, não configuração. */}
+        <button aria-current={atual('/writeback')} onClick={() => nav('/writeback')}>
+          Writeback
+        </button>
+
         <button
           className="grupo"
           aria-current={atual('/canais')}

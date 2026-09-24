@@ -957,3 +957,35 @@ Corrigido: `resumo_da_outbox(p_tenant)` e `writebacks_falhados(p_tenant, p_limit
 tenant só no banco não consegue violar a asserção (D36), o cenário agora tem um segundo cliente com
 um writeback falhado — o caso mais perigoso, já que é o que a tela lista com nome e erro do
 contato. Sabotar o filtro faz a asserção contar 2 onde o certo é 1.
+
+#### A tela, que é o que torna tudo isso legível
+
+Construí os números e quase parei aí — que é exatamente o erro que o D36 nomeia. `resumo_da_outbox`
+existe para uma tela; sem ela, é uma função que ninguém chama.
+
+A tela precisa separar **três** estados, e não dois, porque "zero writebacks saindo" tem três causas
+que produzem a mesma ausência de sinal:
+
+| estado | o que é | como se sabe |
+|---|---|---|
+| nada aconteceu | ninguém respondeu nem pediu para sair | total zero |
+| **nada nunca saiu** | os fatos empilham e o dreno nunca rodou | `enviados = 0` |
+| o dreno parou | já saiu antes, e agora empacou | `enviados > 0` e idade acima do teto |
+
+O do meio é o estado de **hoje**, porque o adapter do CRM ainda não existe. E é por isso que ele
+não pode ser vermelho: nesta fase a fila crescendo é o comportamento **correto** de um motor que
+guarda o que descobriu enquanto o caminho de saída não existe. Pintar isso de alarme ensinaria a
+ignorar o alarme — e aí o de verdade, o terceiro, passa despercebido. É a mesma razão do D36 ter
+uma tela dizendo "todas em shadow mode" em vez de deixar parecer defeito.
+
+Nenhum dos três é escrito à mão: os três saem de `enviados` e da idade do pendente mais antigo. E a
+idade ser **nula** em vez de zero quando a fila está vazia é o que faz os dois últimos não se
+confundirem — tratar nulo como zero silenciaria a parada de verdade; tratar como infinito alarmaria
+a fila vazia. Ambos têm teste.
+
+A decisão mora em `app/src/telas/situacao_do_writeback.ts`, fora do `.tsx`, porque é a parte que
+pode estar errada — 7 testes, um por situação que, lida errado, some. O `.tsx` é só desenho.
+
+**O que não foi verificado:** a tela não foi renderizada no navegador. O app fala com o Supabase e o
+proxy do ambiente bloqueia esse host. O que está conferido é `tsc`, build e a decisão dos três
+estados.

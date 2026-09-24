@@ -9,6 +9,7 @@ import { Importar } from './telas/Importar';
 import { Contatos } from './telas/Contatos';
 import { Campanha } from './telas/Campanha';
 import { Supressao } from './telas/Supressao';
+import { Writeback } from './telas/Writeback';
 import {
   Canais, Config, ConfigAgentes, ConfigIA, ConfigModelos, ConfigPlataformas, Hub,
 } from './telas/Telas';
@@ -97,6 +98,7 @@ function Casca() {
           <Route path="/campanhas/:id" element={<Campanha />} />
           <Route path="/contatos" element={<Contatos />} />
           <Route path="/supressao" element={<Supressao />} />
+          <Route path="/writeback" element={<Writeback />} />
           <Route path="/contatos/importar" element={<Importar />} />
           <Route path="/canais" element={<Canais />} />
           <Route path="/canais/:canal" element={<Canal />} />

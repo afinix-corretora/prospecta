@@ -143,6 +143,11 @@ echo "→ fontes de contato: CSV, dialetos e PlanilhaSource (TypeScript)"
 node --experimental-strip-types --test "$RAIZ/tests/fontes.test.ts" \
   | grep -E "^# (tests|pass|fail)|^not ok"
 
+echo ""
+echo "→ a leitura dos três estados do dreno (TypeScript)"
+node --experimental-strip-types --test "$RAIZ/tests/writeback_tela.test.ts" \
+  | grep -E "^# (tests|pass|fail)|^not ok"
+
 # ---------------------------------------------------------------------------
 # A fronteira. Os testes acima trabalham com cópias — o de TypeScript repete
 # as expressões da trava, o de SQL usa identidades escritas à mão. Aqui a
