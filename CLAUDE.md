@@ -385,6 +385,10 @@ e elas têm teste automatizado obrigatório.**
 > campanha atribui um por canal — e **nada no motor os lê**. Resposta encerra a cadência
 > (invariante 4) e ninguém conversa depois. A tela diz isso em voz alta desde o D55; escrever um
 > editor de agente antes de existir o laço de conversa seria construir decoração com capricho.
+> O laço em si está **proposto e não decidido** em `PROPOSTA-CONVERSA.md`: encosta na invariante 4,
+> no gate do D40 (que cancela mensagem pendente em enrollment encerrado por `resposta`) e na chave
+> `(enrollment_id, step_id)`. Nenhuma das opções está começada, e começar uma sem a decisão é o
+> jeito de furar uma invariante por dentro.
 >
 > As **cadências** ganharam tela no **D55**: até então, a única forma de existir um `flow_version`
 > era instanciar um dos sete modelos do catálogo — o schema inteiro sem porta, que é o D41 da

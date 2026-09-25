@@ -177,8 +177,8 @@ Isso está escrito na própria tela, de propósito: oferecer a escolha e deixar 
 produz efeito seria o pior jeito de descobrir — por um lead sem resposta.
 
 O laço de conversa é uma decisão que ainda não foi tomada, e não é pequena: a resposta de um agente
-não cabe na tabela de mensagens, cuja chave é "uma mensagem por passo da cadência". Quando for a
-hora, é um capítulo próprio.
+encosta em três garantias do motor. **`PROPOSTA-CONVERSA.md`** põe as opções lado a lado, com o que
+cada uma custa e uma recomendação — é para ler e decidir, não para aprovar.
 
 ---
 
