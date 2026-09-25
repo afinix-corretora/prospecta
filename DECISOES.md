@@ -1784,3 +1784,84 @@ responde é uma pessoa, no aplicativo do canal, e a tela diz isso.
    lição certa naquele momento. Ninguém perguntou quem o lê.
 3. **O pior defeito é o que não quebra nada.** Um teste vermelho avisa. Uma resposta que ninguém lê
    parece um dia sem resposta.
+
+---
+
+### D57 — O funil, e a primeira vez que construímos sobre experiência própria
+
+**Contexto.** O pedido era um Kanban: ver leads em prospecção, contatados, quem respondeu, quem não
+respondeu, e quem virou oportunidade. Antes de escrever uma linha, chegou a base de conhecimento da
+casa — 261 notas sobre os sistemas que o grupo já construiu.
+
+Havia uma nota chamada `Padrão - Kanban e Pipeline`, com o padrão catalogado em **sete projetos
+anteriores**, comparativo entre eles, receita recomendada e — o que vale mais — **as armadilhas já
+pagas em produção**.
+
+Isto muda a natureza do trabalho. Não é mais "como eu desenharia um Kanban". É "o que já deu errado
+sete vezes, e como não repetir".
+
+#### Quatro armadilhas que moldaram o arquivo
+
+**1. Estágio referenciado por nome.** Dois projetos procuravam o estágio por `'Perdeu'` ou por
+`ilike`, e quebraram quando o cliente renomeou. Aqui o código só conhece `slug` e `tipo`; `nome` é
+rótulo de tela. O teste renomeia um estágio para `'Lead Quente 🔥'` no meio da execução e confere que
+o motor continua achando.
+
+**2. Automação desfazendo o trabalho de gente.** Num projeto, a análise de sentimento moveu para
+"Perdeu" uma conversa que tinha **acabado de agendar reunião**. A regra que nasceu disso:
+**pessoa move de onde quiser; automação nunca tira de `ganho` nem de `perdido`.** Tem teste, e o
+teste tenta as duas automações (`motor` e `ia`) antes de confirmar que só `pessoa` desfaz.
+
+**3. Guarda de reativação por contato.** Um projeto travou o próprio ciclo seguinte ao marcar o
+contato como reativado para sempre. Por isso `sem_resposta` é do tipo `aberto`, não `perdido`: uma
+campanha nova traz a pessoa de volta para prospecção **sem exceção nenhuma na regra**. E quem pediu
+para sair não volta, porque `opt_out` é `perdido` — a mesma regra, agora protegendo.
+
+**4. "Gerenciado por IA" só na UI.** A nota registra, em dois projetos, colunas de automação que a
+tela mostrava e o backend não implementava. É o `tem_adapter` do D31 com outro nome — e um dos dois
+projetos citados chama-se **"Prospecta AI"**, um antecessor de nome igual e propósito diferente.
+
+Por isso `oportunidade` **nasce sem produtor**, e isso está escrito na migration e **na tela**: a
+coluna diz, em voz alta, que nenhuma automação move cards para lá ainda. Quando o classificador
+existir, a frase sai. Até lá, quem marca uma oportunidade é uma pessoa, e o produto não finge o
+contrário.
+
+#### A porta única, levada a sério
+
+A nota recomenda uma RPC `move_deal(deal, stage, source, reason)` como única porta. Aqui ela é
+`SECURITY DEFINER` **e** o D54 tira o `UPDATE` de `deals` do papel `authenticated`. Não é
+convenção: não existe outro caminho, e o teste confirma que o UPDATE direto devolve 42501.
+
+Por que DEFINER sem ferir o D41: ela não repete o que a política de RLS diz — ela impõe o que a
+política **não sabe expressar** (a atividade gravada e a regra de ganho/perdido). E, por ser
+DEFINER, confere `pode_operar` na mão, porque o RLS deixou de conferir por ela. A primeira versão
+do teste chamou `mover_deal` como `'pessoa'` sem JWT e levou `insufficient_privilege` — provando a
+checagem por acidente, o que é a melhor forma de prová-la.
+
+`deal_activities` é append-only pelo mesmo gatilho de `message_events`: a linha do tempo do card é o
+que permite auditar um auto-move errado, e foi a **falta** dela que deixou o caso do sentimento
+invisível por semanas no projeto anterior.
+
+#### O que o motor escreve, e o que ele não escreve
+
+Cada estágio corresponde a um fato que o motor já produzia:
+
+| Fato | Estágio | Guarda |
+|---|---|---|
+| inscrito | `em_prospeccao` | cria o card; semeia o funil se não houver |
+| mensagem `enviado` (nunca `simulado`) | `contatado` | só de `em_prospeccao` |
+| evento `respondido` | `respondeu` | de prospecção, contatado ou sem resposta |
+| encerrou por `fim_dos_passos` | `sem_resposta` | só quem ainda não respondeu |
+| entrou na supressão | `opt_out` | de qualquer aberto |
+
+Em shadow mode nada se move para `contatado`, e o teste confirma: ninguém foi contatado, então o
+funil não pode dizer que foi. É a mesma distinção que a tela da campanha faz desde o D36.
+
+#### O que este D repete, e o que ele acrescenta
+
+Repete o de sempre: coluna sem consumidor é decoração (D31, D46); silêncio é pior que exceção
+(D35); a porta única vale se o privilégio a sustentar (D54).
+
+Acrescenta uma coisa nova, e ela é de método: **este é o primeiro arquivo do projeto escrito a
+partir de defeitos de outros projetos da casa, e não dos nossos.** Quatro das asserções de
+`tests/funil.sql` existem por causa de bugs que este repositório nunca teve. Sai mais barato assim.

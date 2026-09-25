@@ -712,6 +712,93 @@ export async function lerEventosDaCampanha(
 }
 
 // ---------------------------------------------------------------------------
+// O funil (D57)
+// ---------------------------------------------------------------------------
+
+export type TipoEstagio = 'aberto' | 'ganho' | 'perdido';
+export type OrigemMovimento = 'motor' | 'ia' | 'pessoa';
+
+export interface Estagio {
+  id: string;
+  nome: string;
+  /** O que o CÓDIGO conhece. `nome` é rótulo e pode ser renomeado à vontade —
+   *  era exatamente assim que quebrava nos projetos que buscavam pelo nome. */
+  slug: string;
+  posicao: number;
+  cor: string | null;
+  tipo: TipoEstagio;
+}
+
+export interface Card {
+  id: string;
+  contact_id: string;
+  stage_id: string;
+  entrou_no_estagio_em: string;
+  movido_por: OrigemMovimento;
+  motivo: string | null;
+  contato: string;
+  campanha: string | null;
+}
+
+export async function lerEstagios(): Promise<Estagio[]> {
+  const { data, error } = await sb
+    .from('pipeline_stages')
+    .select('id, nome, slug, posicao, cor, tipo')
+    .order('posicao');
+  if (error) throw error;
+  return (data ?? []) as Estagio[];
+}
+
+export async function lerCards(): Promise<Card[]> {
+  const { data, error } = await sb
+    .from('deals')
+    .select('id, contact_id, stage_id, entrou_no_estagio_em, movido_por, motivo,'
+          + ' contacts(nome), campaigns(nome)')
+    .order('entrou_no_estagio_em', { ascending: false });
+  if (error) throw error;
+
+  return (data ?? []).map((d) => {
+    const l = d as unknown as {
+      id: string; contact_id: string; stage_id: string; entrou_no_estagio_em: string;
+      movido_por: OrigemMovimento; motivo: string | null;
+      contacts: { nome: string | null } | { nome: string | null }[] | null;
+      campaigns: { nome: string } | { nome: string }[] | null;
+    };
+    const c = Array.isArray(l.contacts) ? l.contacts[0] : l.contacts;
+    const camp = Array.isArray(l.campaigns) ? l.campaigns[0] : l.campaigns;
+    return {
+      id: l.id,
+      contact_id: l.contact_id,
+      stage_id: l.stage_id,
+      entrou_no_estagio_em: l.entrou_no_estagio_em,
+      movido_por: l.movido_por,
+      motivo: l.motivo,
+      contato: c?.nome ?? '(sem nome)',
+      campanha: camp?.nome ?? null,
+    };
+  });
+}
+
+/**
+ * A única porta para mover um card.
+ *
+ * Não existe UPDATE em `deals` para o cliente (D54): a função grava a
+ * atividade, carimba a entrada no estágio e aplica a regra de que automação
+ * não tira card de ganho nem de perdido. Aqui sempre vai como `pessoa` —
+ * quem chama é alguém arrastando.
+ */
+export async function moverCard(deal: string, slug: string, motivo?: string): Promise<boolean> {
+  const { data, error } = await sb.rpc('mover_deal', {
+    p_deal_id: deal,
+    p_stage_slug: slug,
+    p_origem: 'pessoa',
+    p_motivo: motivo ?? null,
+  });
+  if (error) throw error;
+  return Boolean(data);
+}
+
+// ---------------------------------------------------------------------------
 // O que as pessoas responderam (D56)
 // ---------------------------------------------------------------------------
 

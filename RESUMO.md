@@ -149,6 +149,26 @@ brigar com o CRM por quem manda em cada campo.
 
 ---
 
+## Onde cada lead está — o Funil
+
+A tela **Funil** mostra o Kanban: **Em prospecção → Contatado → Respondeu → Sem resposta**, mais
+**Oportunidade** e **Pediu para sair**.
+
+O motor move sozinho conforme os fatos acontecem — inscreveu, saiu mensagem de verdade, respondeu,
+a cadência acabou, pediu para sair. Você move arrastando quando souber algo que ele não sabe.
+
+Três regras que valem conhecer:
+
+- **Em shadow mode ninguém vira "Contatado".** Nada saiu, então ninguém foi contatado.
+- **Uma campanha nova reabre quem estava em "Sem resposta"** — mas **nunca** quem pediu para sair.
+- **O motor nunca tira um card de "Oportunidade".** Só você faz isso.
+
+**Uma coisa que ainda não é automática:** nada move cards para **Oportunidade** sozinho. Marcar
+uma resposta como positiva é seu, por enquanto — a tela diz isso na própria coluna. O classificador
+que faria esse julgamento é o próximo passo.
+
+---
+
 ## Quando alguém responde
 
 A resposta aparece na tela **Respostas**, com o texto, a mensagem que a provocou e a data. É leitura:

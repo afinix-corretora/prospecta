@@ -121,6 +121,7 @@ rodar devolucao  "$RAIZ/tests/devolucao.sql"
 rodar superficie "$RAIZ/tests/superficie_de_escrita.sql"
 rodar cadencia   "$RAIZ/tests/cadencia.sql"
 rodar respostas  "$RAIZ/tests/respostas.sql"
+rodar funil      "$RAIZ/tests/funil.sql"
 
 # ---------------------------------------------------------------------------
 # Adapters de canal — TypeScript, sem rede (fetch injetado).

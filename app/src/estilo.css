@@ -304,3 +304,42 @@ button.item:hover { border-color: var(--line-strong); transform: translateX(2px)
    de baixo, que parece defeito. O painel da campanha precisa dos cinco:
    resposta e clique são coisas diferentes (D7) e não dá para fundir. */
 .kpis.cinco { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)) }
+
+/* ---------------------------------------------------------------------------
+   Funil (D57) — colunas roláveis lado a lado, cards arrastáveis.
+   Sem biblioteca: o drag-and-drop nativo dá conta, e todo card também tem um
+   seletor de destino, que é o que funciona no celular e no teclado.
+--------------------------------------------------------------------------- */
+.kanban {
+  display: flex; gap: 12px; overflow-x: auto; padding-bottom: 10px;
+  align-items: flex-start;
+}
+.kanban .coluna {
+  flex: 0 0 248px; background: var(--surface-2, var(--surface));
+  border: 1.5px solid var(--line); border-radius: 12px; padding: 10px;
+  min-height: 120px;
+}
+.kanban .coluna[data-sobre="true"] { border-color: var(--accent); background: var(--accent-soft) }
+.kanban .coluna-topo { display: flex; align-items: center; justify-content: space-between; gap: 6px }
+.kanban .coluna-topo b { font-size: 13.5px }
+.kanban .coluna-nota { font-size: 11.5px; color: var(--ink-3); margin: 3px 0 9px }
+.kanban .coluna-vazia {
+  font-size: 11.5px; color: var(--ink-3); background: var(--surface);
+  border: 1px dashed var(--line); border-radius: 9px; padding: 8px; margin: 0;
+}
+.kanban .card {
+  background: var(--surface); border: 1.5px solid var(--line); border-radius: 10px;
+  padding: 9px; margin-bottom: 8px; cursor: grab;
+}
+.kanban .card:active { cursor: grabbing }
+.kanban .card b { display: block; font-size: 13px; color: var(--ink) }
+.kanban .card-campanha {
+  display: inline-block; font-size: 11px; color: var(--ink-3);
+  background: var(--ok-soft); border-radius: 999px; padding: 1px 7px; margin-top: 4px;
+}
+.kanban .card-rodape { display: block; font-size: 11px; color: var(--ink-3); margin-top: 5px }
+.kanban .card-mover {
+  width: 100%; margin-top: 7px; font: inherit; font-size: 11.5px; padding: 4px 6px;
+  border: 1px solid var(--line); border-radius: 7px;
+  background: var(--surface); color: var(--ink-2);
+}

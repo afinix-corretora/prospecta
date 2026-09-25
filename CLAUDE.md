@@ -317,6 +317,18 @@ e elas têm teste automatizado obrigatório.**
 - **Nunca** dar estado a uma tela de leitura só porque a lista parece uma caixa de entrada. "Lida",
   "respondida" e atribuição seriam colunas sem quem as escreva, cometendo o `tem_adapter` do D31 na
   mesma tela que existe para consertá-lo (D56).
+- **Nunca** referenciar estágio de funil por NOME. O código conhece `slug` e `tipo`; `nome` é
+  rótulo de tela e o cliente renomeia. Dois projetos da casa quebraram exatamente assim (D57).
+- **Nunca** deixar automação tirar card de `ganho` ou de `perdido`. Num projeto anterior a análise
+  de sentimento moveu para "Perdeu" uma conversa que tinha acabado de agendar reunião. Pessoa move
+  de onde quiser; automação, não (D57).
+- **Nunca** deixar uma coluna de funil parecer automática quando não é. `oportunidade` não tem
+  produtor até o classificador existir, e a tela DIZ isso — é o "gerenciado por IA só na UI" que a
+  base da casa registra em dois projetos (D57).
+- **Sempre** consultar a base de conhecimento da casa antes de construir um padrão que outros
+  projetos do grupo já implementaram. O Kanban veio com sete implementações comparadas e as
+  armadilhas já pagas em produção; quatro asserções de `tests/funil.sql` existem por bugs que este
+  repositório nunca teve (D57).
 
 ---
 
@@ -373,6 +385,14 @@ e elas têm teste automatizado obrigatório.**
 > (`resumo_da_campanha`) e lido de `message_events` (`eventos_da_campanha`). É ela que torna o
 > shadow mode legível — sem ela, "rodou tudo e não enviou nada" é igual a "está quebrado".
 >
+> O **funil** existe desde o **D57**: `pipelines`, `pipeline_stages`, `deals` e `deal_activities`,
+> com Kanban na tela. O desenho veio da nota `Padrão - Kanban e Pipeline` da base de conhecimento
+> do grupo, que cataloga o padrão em sete projetos anteriores — estágio por `slug` e nunca por
+> nome, `mover_deal` como porta única (DEFINER, com o UPDATE de `deals` revogado do cliente),
+> automação que não tira card de `ganho` nem de `perdido`, e `sem_resposta` do tipo `aberto` para
+> que uma campanha nova reabra o lead. O motor move nos fatos que já produzia; `oportunidade`
+> nasce sem produtor **de propósito**, e a tela diz isso.
+>
 > As **respostas** ganharam tela no **D56**, e a falta era grave: o texto era gravado desde o D48 e
 > o único leitor era o classificador de opt-out. A pessoa respondia, a invariante 4 encerrava a
 > cadência dela em todas as campanhas, e ninguém no produto conseguia ler o que ela disse — lead
@@ -420,7 +440,7 @@ e elas têm teste automatizado obrigatório.**
 > **derivados do schema** cobram `tenant_id`, RLS e FK composta de toda tabela nova — lista escrita
 > à mão envelhece sem avisar, e essa já tinha perdido a `provider_servers` (D31).
 >
-> O schema está **aplicado no projeto `hucuwjvihqgftdjpnych`** (44 migrations no repositório, 50
+> O schema está **aplicado no projeto `hucuwjvihqgftdjpnych`** (46 migrations no repositório, 52
 > registros no projeto — duas corretivas de texto, uma separação, duas do D46 (superfície e
 > tenant explícito), o bootstrap do tenant de teste e a corretiva de `search_path` do D54, ver
 > D32, D39, D46, D53 e D54), conferido por
