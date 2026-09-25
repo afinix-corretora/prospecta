@@ -119,6 +119,7 @@ rodar flow_campanha "$RAIZ/tests/flow_da_campanha.sql"
 rodar opt_out   "$RAIZ/tests/opt_out.sql"
 rodar devolucao  "$RAIZ/tests/devolucao.sql"
 rodar superficie "$RAIZ/tests/superficie_de_escrita.sql"
+rodar cadencia   "$RAIZ/tests/cadencia.sql"
 
 # ---------------------------------------------------------------------------
 # Adapters de canal — TypeScript, sem rede (fetch injetado).
@@ -168,6 +169,11 @@ echo "→ o que o produto consegue entregar hoje (TypeScript)"
 node --experimental-strip-types --test "$RAIZ/tests/entregaveis.test.ts" \
   | grep -E "^# (tests|pass|fail)|^not ok"
 
+echo ""
+echo "→ o que a tela lê como variável de template (TypeScript)"
+node --experimental-strip-types --test "$RAIZ/tests/variaveis.test.ts" \
+  | grep -E "^# (tests|pass|fail)|^not ok"
+
 # ---------------------------------------------------------------------------
 # A fronteira. Os testes acima trabalham com cópias — o de TypeScript repete
 # as expressões da trava, o de SQL usa identidades escritas à mão. Aqui a
@@ -189,6 +195,15 @@ echo "→ catálogo x registro de adapters (tem_adapter)"
 BANCO_REG="$(novo_banco registro)"
 node --experimental-strip-types "$RAIZ/tests/registro_para_sql.ts" \
   | psql -v ON_ERROR_STOP=1 -d "$BANCO_REG" -f -
+
+# A terceira fronteira: `renderizar` em SQL e `variaveisDoTexto` em TypeScript
+# leem a MESMA marcação, cada um com a sua regexp. Divergir não dá erro — dá a
+# tela garantindo que o texto está inteiro sobre uma chave que o motor apaga.
+echo ""
+echo "→ variáveis de template: tela x motor"
+BANCO_VAR="$(novo_banco variaveis)"
+node --experimental-strip-types "$RAIZ/tests/variaveis_para_sql.ts" \
+  | psql -v ON_ERROR_STOP=1 -d "$BANCO_VAR" -f -
 
 # ---------------------------------------------------------------------------
 # Concorrência: o agendador precisa de SKIP LOCKED de verdade, não só no texto

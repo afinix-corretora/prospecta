@@ -91,7 +91,10 @@ e elas têm teste automatizado obrigatório.**
   que não seja composta `(tenant_id, id)`. RLS não alcança o worker, que roda com service key.
 - **Nunca** deixar tenant implícito em assinatura de função. É como bug entre clientes acontece.
 - **Nunca** criar função em `public` que não seja API de verdade. `public` é publicado pelo PostgREST;
-  RLS, gatilhos e motor moram em `privado`. Função nova não nasce com EXECUTE — conceder é decisão.
+  RLS, gatilhos e motor moram em `privado`. E atenção à forma exata: no Postgres, função nova
+  **nasce** com EXECUTE para `PUBLIC`, do qual `anon` é membro — o que o D19 tirou foi o *default
+  privilege* nominal, não o implícito. Conceder a `authenticated` sem `REVOKE ALL ... FROM PUBLIC,
+  anon` antes é acrescentar um grant ao lado de uma porta aberta, não decidir (D55).
 - **Nunca** adicionar `privado` aos *Exposed schemas* do projeto. É o que separa motor de endpoint.
 - **Nunca** cadastrar remetente com provedor fora de `channel_provider_catalog`, nem gravar em
   `sender_accounts.config` um campo que o catálogo marca como segredo. Segredo vai para o Vault.
@@ -287,6 +290,19 @@ e elas têm teste automatizado obrigatório.**
 - **Nunca** deixar duas listas escritas à mão, em linguagens diferentes, dizerem a mesma coisa sem
   se compararem. `tem_adapter` no catálogo e `PROVEDORES_POR_CANAL` no registro divergem em
   silêncio dos dois lados: uma vira falha da mensagem, a outra vira passo adiado para sempre (D54).
+- **Nunca** deixar uma tabela do domínio sem porta. `flows`, `flow_versions` e `flow_steps`
+  existiam desde a primeira migration e a única forma de gravar neles era instanciar um dos sete
+  modelos do catálogo — é o D41 da supressão de novo, e o D54 dos freios (D55).
+- **Nunca** deixar "correto e silencioso" passar por pronto. Publicar versão nova não repontar
+  campanha nenhuma é a decisão certa (a conferência do D47 é uma a uma); não dizer que não
+  repontou é a pessoa editar o texto e ir embora achando que mudou algo (D55).
+- **Nunca** gravar um valor que o motor não lê. O atraso do primeiro passo nunca é usado — o
+  agendador olha o do passo seguinte —, então ele é gravado 0 e a tela escreve o fato. Aceitar o
+  número digitado seria guardar decoração e devolvê-la depois como se fosse garantia (D55).
+- **Nunca** reproduzir em TypeScript uma regra que o SQL já decide sem pôr as duas frente a frente.
+  `renderizar` e `variaveisDoTexto` leem a mesma marcação: divergir faz a tela garantir que o texto
+  está inteiro sobre uma chave que o motor apaga — o D42 chegando tarde porque o aviso que existe
+  para chegar cedo estava errado (D55).
 
 ---
 
@@ -343,7 +359,16 @@ e elas têm teste automatizado obrigatório.**
 > (`resumo_da_campanha`) e lido de `message_events` (`eventos_da_campanha`). É ela que torna o
 > shadow mode legível — sem ela, "rodou tudo e não enviou nada" é igual a "está quebrado".
 >
-> E desde o **D54** ela também **manda**: ligar e desligar a campanha, pausar e retomar as
+> As **cadências** ganharam tela no **D55**: até então, a única forma de existir um `flow_version`
+> era instanciar um dos sete modelos do catálogo — o schema inteiro sem porta, que é o D41 da
+> supressão outra vez. `publicar_versao_de_flow` só INSERE (editar é publicar a seguinte, D9), não
+> reponta campanha nenhuma (repontar é `definir_flow_da_campanha`, uma a uma, onde mora a
+> conferência do D47) e a tela mostra quantas campanhas ficaram na versão anterior, porque
+> "correto e silencioso" é a combinação a evitar. `variaveis_disponiveis` conta as chaves que a
+> base do cliente tem, e `tests/variaveis_para_sql.ts` põe a leitura de marcação do SQL contra a
+> do TypeScript — a terceira ponte do suite, pelo motivo do D32.
+>
+> E desde o **D54** a tela da campanha também **manda**: ligar e desligar a campanha, pausar e retomar as
 > inscrições, apontar qual cadência a campanha roda (o trio do D47, que existia sem consumidor) e
 > atribuir agente por canal. Tirar chip do pool é na tela do canal. Nenhuma dessas escritas ganhou
 > função em `public` — o RLS já autoriza, e pelo D41 repetir a política em PL/pgSQL é o que não se
@@ -362,7 +387,7 @@ e elas têm teste automatizado obrigatório.**
 > **derivados do schema** cobram `tenant_id`, RLS e FK composta de toda tabela nova — lista escrita
 > à mão envelhece sem avisar, e essa já tinha perdido a `provider_servers` (D31).
 >
-> O schema está **aplicado no projeto `hucuwjvihqgftdjpnych`** (40 migrations no repositório, 46
+> O schema está **aplicado no projeto `hucuwjvihqgftdjpnych`** (42 migrations no repositório, 48
 > registros no projeto — duas corretivas de texto, uma separação, duas do D46 (superfície e
 > tenant explícito), o bootstrap do tenant de teste e a corretiva de `search_path` do D54, ver
 > D32, D39, D46, D53 e D54), conferido por

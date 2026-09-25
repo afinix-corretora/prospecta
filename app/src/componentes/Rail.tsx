@@ -50,6 +50,14 @@ export function Rail({ provedores }: { provedores: ProvedorCanal[] }) {
       <nav className="nav">
         <button aria-current={atual('/')} onClick={() => nav('/')}>Campanhas</button>
 
+        {/* Primeiro nível, ao lado das campanhas: é a outra metade da mesma
+            pergunta. A campanha diz PARA QUEM e por quais canais; a cadência
+            diz O QUE se manda e quando. */}
+        <button aria-current={pathname.startsWith('/cadencias')}
+                onClick={() => nav('/cadencias')}>
+          Cadências
+        </button>
+
         {/* Entrada de contato. Primeiro nível porque é o primeiro quadro do
             diagrama: sem ela o motor não tem sobre o que rodar. */}
         <button aria-current={atual('/contatos')} onClick={() => nav('/contatos')}>

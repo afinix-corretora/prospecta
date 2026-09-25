@@ -44,10 +44,30 @@ permite conferir tudo antes de a primeira mensagem sair.
 
 | Quero mudar | Onde |
 |---|---|
-| O texto das mensagens e o intervalo entre elas | Flow novo pela tela. **Editar um flow existente não é possível de propósito** — editar cria uma versão nova, e quem já está em cadência termina na versão em que entrou |
+| O texto das mensagens e o intervalo entre elas | Tela **Cadências**. **Editar não altera o que existe, de propósito** — salvar publica a *versão seguinte*, e quem já está em cadência termina na versão em que entrou |
+| Fazer uma campanha passar a usar a versão nova | Na própria tela da cadência, campanha por campanha. Publicar **não** troca ninguém sozinho: a versão nova pode ter deixado de tocar um canal que a campanha habilita, e cada troca é conferida à parte |
 | Quais canais uma campanha usa | Campo `canais_habilitados` da campanha |
-| Qual flow a campanha roda | `definir_flow_da_campanha`. Ele **recusa** flow que não compartilha canal nenhum com a campanha |
-| Quantas mensagens por dia cada remetente manda | `quota_diaria` do remetente |
+| Qual cadência a campanha roda | Tela da campanha, seção **Cadência**. Ela **recusa** a cadência que não compartilha canal nenhum com a campanha |
+| Quem responde quando o contato responde | Tela da campanha, seção **Quem responde** — um agente por canal |
+| Quantas mensagens por dia cada remetente manda | `quota_diaria` do remetente, na tela do canal |
+
+**As variáveis do texto.** `{{nome}}` e as chaves que vieram na importação viram o valor do
+contato. Chave sem valor é **apagada** — o texto sai "Olá ,". A tela de cadência lista, antes de
+publicar, quais chaves a sua base realmente tem e com quantos contatos, e acusa a chave que o texto
+pede e ninguém tem.
+
+### Parar
+
+Tudo o que começa, para. Três freios, de alcances diferentes:
+
+| Quero parar | Onde | Alcance |
+|---|---|---|
+| A campanha inteira | Tela da campanha, **Desligar a campanha** | Nada novo é criado. A mensagem que já estava na fila **não é cancelada** — fica segura, porque religar precisa poder recriá-la |
+| Só algumas pessoas | Tela da campanha, **Pausar as inscrições** | O relógio de cada uma fica onde estava; retomar continua de onde parou |
+| Um chip ou inbox | Tela do canal, **Tirar do pool** | Sai das escolhas futuras **e** as mensagens pendentes que o usavam são passadas para outra conta |
+
+Encerrar uma inscrição à mão não existe, e não por esquecimento: encerramento é fato do motor
+(resposta, fim dos passos, supressão), e o banco recusa a escrita que tentar inventá-lo.
 
 ### Quem nunca recebe
 

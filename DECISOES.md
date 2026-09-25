@@ -1556,3 +1556,114 @@ Restam tabelas com `UPDATE` de tabela inteira para `authenticated` que nenhuma t
 carrega estado do motor como as seis acima, e por isso não entraram agora: a regra a escrever é
 "quem não escreve não tem privilégio", e ela merece uma passada própria, derivada do schema como os
 três meta-testes do D18 — não uma lista à mão que envelhece sem avisar.
+
+---
+
+### D55 — Escrever a cadência, não só escolher um modelo
+
+**Contexto.** A auditoria do D54 perguntava, entre outras coisas, se existia "o esquema de fluxos
+para construir de acordo com os canais que queremos rodar". Existia — inteiro, desde a primeira
+migration: `flows`, `flow_versions`, `flow_steps`, com a imutabilidade do D9 garantida por gatilho.
+**O que não existia era porta.** A única forma de nascer um `flow_version` era
+`criar_campanha_de_modelo`; o catálogo tinha sete receitas, e quem quisesse a oitava escrevia
+`INSERT` à mão.
+
+É a mesma forma do D41 (a supressão sustentava quatro decisões e não tinha como ser preenchida) e
+do D54 (os três freios existiam e ninguém os puxava). A tabela certa, sem porta, é uma tabela vazia.
+
+#### Publicar, nunca editar
+
+`publicar_versao_de_flow` **só insere**. Não há `UPDATE` em `flow_versions` nem em `flow_steps`, e
+não por disciplina: o gatilho `recusar_escrita` os recusa desde a primeira migration. "Editar a
+cadência" é publicar a versão seguinte, e quem já está inscrito termina na versão em que entrou.
+
+O teste que sustenta isso não olha a coluna — olha o **enrollment**. Publicar a v2 e conferir que
+`enrollments.flow_version_id` continua na v1 é a prova; conferir que a função inseriu uma linha
+nova não prova nada sobre o D9.
+
+#### Publicar NÃO reponta
+
+A decisão que mais valeu discussão. Depois de publicar a v2, a campanha continua rodando a v1 — e
+isso é o comportamento correto, porque a v2 pode ter deixado de tocar um canal que a campanha
+habilita, e a conferência que pega isso mora em `definir_flow_da_campanha` (D47), uma campanha de
+cada vez.
+
+Só que "correto e silencioso" é a combinação que este arquivo inteiro existe para evitar. A pessoa
+edita o texto, publica, e vai embora achando que mudou algo. Então a função não reponta e a **tela
+mostra quantas campanhas ficaram para trás**, com um botão por campanha. O que se evita é o
+silêncio, não a troca.
+
+#### Nada de cast em valor do cliente (D34, outra vez)
+
+`'whatsap'::canal` aborta a chamada inteira com uma mensagem de Postgres sobre tipo de enum. Quem
+está na tela precisa ler **qual passo** está errado e o que escreveu. Então o canal é casado contra
+`pg_enum` e a recusa nomeia o índice: `passo 2: canal desconhecido (telegram)`. `atraso_horas` passa
+por `^[0-9]+$` antes de virar número — o que também recusa o negativo sem depender do CHECK.
+
+#### O atraso do primeiro passo é uma mentira que não se guarda
+
+O agendador marca `next_run_at = now() + atraso do passo SEGUINTE`. O atraso do primeiro passo
+**nunca é lido**: o primeiro disparo é o `next_run_at` que a inscrição gravou.
+`criar_campanha_de_modelo` já gravava 0 ali; a função nova faz o mesmo, e a tela, em vez de um campo
+desabilitado, escreve o fato — "assim que a inscrição vencer".
+
+Aceitar um número que não tem efeito e devolvê-lo depois na tela é o mesmo defeito das colunas do
+D46: parece garantia, é decoração.
+
+#### A terceira lista que ninguém comparava
+
+`privado.renderizar` decide, em SQL, o que é uma marcação num template: troca a chave conhecida e
+**apaga** a que sobrou. A tela precisa da mesma decisão para dizer quais chaves o texto pede — e
+escreveu a sua própria regexp em TypeScript.
+
+Duas regexps à mão sobre a mesma regra é a forma exata do D32, uma camada acima. A divergência não
+dá erro: a tela diria "todas as variáveis existem na base" sobre uma chave que o motor vai apagar, e
+o contato receberia "Olá ,". Seria o D42 chegando tarde **porque o aviso que existe para chegar cedo
+estava errado**.
+
+`tests/variaveis_para_sql.ts` põe as duas uma contra a outra — não comparando as regexps, que
+alguém pode reescrever, mas o **efeito** das duas sobre a mesma lista de textos. Sabotada com a
+regexp sem `\s*`, caem dois casos: `{{ nome }}` com espaço, que o motor apaga e a tela não via.
+
+E o outro lado do mesmo aviso: `variaveis_disponiveis` conta, no banco, quais chaves a base do
+cliente realmente tem, com quantos contatos cada uma. Escrever `{{plano}}` quando a coluna é
+`plano_atual` passa a ser visível **antes** de publicar, e não depois, na tela da campanha, quando o
+template já rodou.
+
+#### E o meta-teste cobrou o que eu tinha lido errado
+
+A primeira versão desta migration concedeu `EXECUTE` das duas funções a `authenticated` e parou
+por aí. O suite ficou vermelho numa asserção que não é sobre cadência nenhuma:
+
+```
+FALHA | anon não chama absolutamente nada em public | publicar_versao_de_flow, variaveis_disponiveis
+```
+
+A anti-regra do `CLAUDE.md` dizia "função nova não nasce com EXECUTE — conceder é decisão", e eu a
+segui ao pé da letra. Ela estava **imprecisa**, e a imprecisão é exatamente onde o erro coube: no
+Postgres, função nova nasce **sim** com `EXECUTE` para `PUBLIC`, e `anon` é membro de `PUBLIC`. O
+que o D19 removeu foi o *default privilege* **nominal** que o Supabase instala (`GRANT ALL ON
+FUNCTIONS TO anon, authenticated`), não o grant implícito do Postgres. Conceder a `authenticated`
+sem revogar de `PUBLIC` antes é acrescentar um grant ao lado de uma porta que já estava aberta.
+
+Na prática: `/rest/v1/rpc/publicar_versao_de_flow` respondia a visitante sem login. O RLS ainda
+barrava a escrita — as políticas de `flows` e `flow_versions` pedem `pode_operar` —, então não era
+gravação de estranho; mas `variaveis_disponiveis` só lê, e a lista de chaves de metadados de um
+cliente não é coisa que se devolva a quem não entrou.
+
+Duas coisas ficam disso. A anti-regra foi corrigida para dizer a forma exata, porque foi a leitura
+dela que me levou ao erro. E o achado é do **meta-teste derivado do schema** (D18) — não de uma
+lista de funções escrita à mão, que não teria a minha lá dentro. É o argumento do D18 se pagando
+pela terceira vez.
+
+#### O que este D repete
+
+O mesmo de sempre, e vale escrever de novo porque foi a terceira vez em dois dias:
+
+1. **Tabela sem porta é tabela vazia** (D41, D54).
+2. **Correto e silencioso é a combinação a evitar.** Publicar sem repontar é certo; publicar sem
+   dizer que não repontou é o D35.
+3. **Duas implementações da mesma regra divergem, e divergem em silêncio** (D32, D54). A terceira
+   ponte do suite nasceu por isso.
+4. **Lista à mão não cobra o que você acabou de escrever** (D18, D31). Quem achou o `anon` aberto
+   foi a asserção derivada do catálogo, e ela achou porque não precisa saber o nome da função.

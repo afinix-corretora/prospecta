@@ -195,11 +195,15 @@ button.item:hover { border-color: var(--line-strong); transform: translateX(2px)
 
 .campo { display: flex; flex-direction: column; gap: 5px; margin-bottom: 14px }
 .campo label { font-size: 12.5px; font-weight: 600 }
-.campo input, .campo select {
+.campo input, .campo select, .campo textarea {
   border: 1.5px solid var(--line); border-radius: 9px; padding: 9px 11px;
   font: inherit; font-size: 14px; background: var(--surface); color: var(--ink); width: 100%;
 }
-.campo input:focus, .campo select:focus { outline: none; border-color: var(--accent) }
+.campo input:focus, .campo select:focus, .campo textarea:focus {
+  outline: none; border-color: var(--accent);
+}
+/* O texto do passo é escrito com quebra de linha, e é assim que ele sai. */
+.campo textarea { resize: vertical; min-height: 68px; line-height: 1.45 }
 /* Sem isto o select fica com o cromo claro do sistema por cima do tema escuro. */
 .campo select {
   appearance: none; cursor: pointer; padding-right: 32px;

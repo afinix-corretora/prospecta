@@ -496,10 +496,12 @@ export async function lerContatos(busca = '', limite = 200): Promise<Contato[]> 
 
 export interface VersaoDeFlow {
   id: string;
+  flow_id: string;
   versao: number;
   flow_nome: string;
   canais: ProvedorCanal['canal'][];
   passos: number;
+  publicado_em: string;
 }
 
 /**
@@ -512,13 +514,13 @@ export interface VersaoDeFlow {
 export async function lerVersoesDeFlow(): Promise<VersaoDeFlow[]> {
   const { data, error } = await sb
     .from('flow_versions')
-    .select('id, versao, flows(nome), flow_steps(canal, ordem)')
+    .select('id, flow_id, versao, publicado_em, flows(nome), flow_steps(canal, ordem)')
     .order('publicado_em', { ascending: false });
   if (error) throw error;
 
   return (data ?? []).map((v) => {
     const linha = v as unknown as {
-      id: string; versao: number;
+      id: string; flow_id: string; versao: number; publicado_em: string;
       flows: { nome: string } | { nome: string }[] | null;
       flow_steps: { canal: ProvedorCanal['canal'] }[] | null;
     };
@@ -526,12 +528,71 @@ export async function lerVersoesDeFlow(): Promise<VersaoDeFlow[]> {
     const passos = linha.flow_steps ?? [];
     return {
       id: linha.id,
+      flow_id: linha.flow_id,
       versao: linha.versao,
       flow_nome: flow?.nome ?? '(sem nome)',
       canais: [...new Set(passos.map((p) => p.canal))],
       passos: passos.length,
+      publicado_em: linha.publicado_em,
     };
   });
+}
+
+// ---------------------------------------------------------------------------
+// Escrever a cadência (D55)
+// ---------------------------------------------------------------------------
+
+export interface PassoDeFlow {
+  ordem: number;
+  canal: ProvedorCanal['canal'];
+  atraso_horas: number;
+  template: string;
+}
+
+/** Os passos de uma versão, em ordem. É o que a tela carrega para partir de
+ *  uma cadência que já existe — editar é publicar a seguinte (D9). */
+export async function lerPassosDaVersao(versao: string): Promise<PassoDeFlow[]> {
+  const { data, error } = await sb
+    .from('flow_steps')
+    .select('ordem, canal, atraso_horas, template')
+    .eq('flow_version_id', versao)
+    .order('ordem');
+  if (error) throw error;
+  return (data ?? []) as PassoDeFlow[];
+}
+
+export interface VariavelDisponivel { chave: string; contatos: number }
+
+/** As chaves que os templates podem usar, com quantos contatos têm cada uma.
+ *  Variável sem valor é apagada por `renderizar`, e o rastro é o "Olá ," do
+ *  D42 — este número é o mesmo aviso, antes de escrever. */
+export async function lerVariaveisDisponiveis(tenant: string): Promise<VariavelDisponivel[]> {
+  const { data, error } = await sb.rpc('variaveis_disponiveis', { p_tenant: tenant });
+  if (error) throw error;
+  return (data ?? []) as VariavelDisponivel[];
+}
+
+/**
+ * Publica uma versão de cadência. `flowId` nulo cria a cadência.
+ *
+ * NÃO reponta campanha nenhuma: repontar é `definirFlowDaCampanha`, uma a uma,
+ * porque é lá que mora a conferência de canais do D47 — a versão nova pode ter
+ * deixado de tocar um canal que a campanha habilita, e trocar em massa
+ * esconderia isso.
+ */
+export async function publicarVersaoDeFlow(dados: {
+  tenant: string; flowId: string | null; nome: string | null;
+  passos: { canal: string; atraso_horas: number; template: string }[];
+}): Promise<{ flow_id: string; flow_version_id: string; versao: number; passos_criados: number }> {
+  const { data, error } = await sb.rpc('publicar_versao_de_flow', {
+    p_tenant: dados.tenant,
+    p_flow_id: dados.flowId,
+    p_nome: dados.nome,
+    p_passos: dados.passos,
+  });
+  if (error) throw error;
+  return (data ?? [])[0] as
+    { flow_id: string; flow_version_id: string; versao: number; passos_criados: number };
 }
 
 export interface ContatoPrevisto {
