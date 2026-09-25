@@ -382,6 +382,30 @@ export async function lerAgentesDaCampanha(campanha: string): Promise<AgenteDaCa
   return (data ?? []) as AgenteDaCampanha[];
 }
 
+/**
+ * Campanha que não vem de modelo (D55).
+ *
+ * A cadência é apontada dentro da mesma transação, e não por uma segunda
+ * chamada daqui: inserir a campanha e apontar o flow de fora é a janela do
+ * D54 — criou, caiu a rede, campanha órfã.
+ */
+export async function criarCampanha(dados: {
+  tenant: string; nome: string; tipo: 'morna' | 'fria'; baseLegal: string;
+  canais: string[]; objetivo: string; versao: string | null;
+}): Promise<string> {
+  const { data, error } = await sb.rpc('criar_campanha', {
+    p_tenant: dados.tenant,
+    p_nome: dados.nome,
+    p_tipo: dados.tipo,
+    p_base_legal: dados.baseLegal,
+    p_canais: dados.canais,
+    p_objetivo: dados.objetivo,
+    p_flow_version_id: dados.versao,
+  });
+  if (error) throw error;
+  return data as string;
+}
+
 export async function criarTenant(nome: string, slug: string): Promise<string> {
   const { data, error } = await sb.rpc('criar_tenant', { p_nome: nome, p_slug: slug });
   if (error) throw error;

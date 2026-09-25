@@ -3,12 +3,13 @@ import { useNavigate } from 'react-router-dom';
 import { useSessao } from '../sessao';
 import { mensagemDeErro } from '../supabase';
 import {
-  criarCampanhaDeModelo, lerAgentes, lerCampanhas, lerCanaisEntregaveis, lerCredenciaisIA,
-  lerModelos, lerProvedoresCanal, lerProvedoresIA, lerRemetentes, salvarCredencialIA,
+  criarCampanha, criarCampanhaDeModelo, lerAgentes, lerCampanhas, lerCanaisEntregaveis,
+  lerCredenciaisIA, lerModelos, lerProvedoresCanal, lerProvedoresIA, lerRemetentes,
+  lerVersoesDeFlow, salvarCredencialIA,
 } from '../dados';
 import type {
   Agente, CanalEntregavel, Campanha, CredencialIA, Modelo, MotivoDoCanal,
-  ProvedorCanal, ProvedorIA,
+  ProvedorCanal, ProvedorIA, VersaoDeFlow,
 } from '../dados';
 import {
   Aviso, Campo, Kpi, LinhaIndice, NOME_CANAL, Secao, corCanal,
@@ -60,15 +61,18 @@ export function Hub() {
       // despachante não tem como fazer (D31) — e o efeito seria o silêncio de
       // sempre: campanha criada, ninguém recebe, nada dá erro.
       entregaveis: await lerCanaisEntregaveis(),
+      versoes: await lerVersoesDeFlow(),
     }), [tenant?.tenant_id],
   );
   const [criando, setCriando] = useState<Modelo | null>(null);
+  const [emBranco, setEmBranco] = useState(false);
 
   if (carregando) return <div className="wrap"><p className="vazio">Carregando…</p></div>;
 
   const campanhas: Campanha[] = dados?.campanhas ?? [];
   const modelos: Modelo[] = dados?.modelos ?? [];
   const entregaveis: CanalEntregavel[] = dados?.entregaveis ?? [];
+  const versoes: VersaoDeFlow[] = dados?.versoes ?? [];
   const ativas = campanhas.filter((c) => c.ativa).length;
 
   const motivoDe = (canal: string): MotivoDoCanal =>
@@ -159,9 +163,29 @@ export function Hub() {
         })}
       </section>
 
+      {/* O outro caminho, e ele só existe desde que dá para escrever cadência
+          (D55): campanha em branco. Sem isto, quem escreveu a sua cadência
+          precisava instanciar um modelo qualquer e repontar — ficando com o
+          `template_slug` e a base legal de um modelo que não é o dela. */}
+      {opera && !criando && (
+        <section className="indice">
+          <LinhaIndice
+            icone="campanha" titulo="Campanha em branco"
+            descricao="para rodar uma cadência escrita por você, com a sua base legal"
+            contagem="nova" aoClicar={() => setEmBranco(true)}
+          />
+        </section>
+      )}
+
       {criando && (
         <CriarCampanha modelo={criando} tenant={tenant?.tenant_id ?? ''}
                        aoFechar={() => setCriando(null)} aoCriar={recarregar} />
+      )}
+
+      {emBranco && !criando && (
+        <CampanhaEmBranco tenant={tenant?.tenant_id ?? ''} versoes={versoes}
+                          entregaveis={entregaveis}
+                          aoFechar={() => setEmBranco(false)} aoCriar={recarregar} />
       )}
     </div>
   );
@@ -213,6 +237,155 @@ function CriarCampanha({ modelo, tenant, aoFechar, aoCriar }: {
         {msg && <Aviso tipo={msg.tipo}>{msg.texto}</Aviso>}
         <div style={{ display: 'flex', gap: 9 }}>
           <button className="btn prim" disabled={estado === 'criando' || !nome || !canais.length}>
+            {estado === 'criando' ? 'Criando…' : 'Criar campanha'}
+          </button>
+          <button type="button" className="btn" onClick={aoFechar}>Cancelar</button>
+        </div>
+      </form>
+    </>
+  );
+}
+
+/**
+ * Campanha em branco (D55).
+ *
+ * O modelo traz tipo, base legal, canais e cadência num pacote só. Quem
+ * escreveu a própria cadência precisa do avesso disso — e precisava,
+ * literalmente, instanciar um modelo qualquer e repontar, ficando com o
+ * `template_slug` e a base legal de um modelo que não é o dela.
+ *
+ * A base legal é campo de texto e é obrigatória, na função e aqui. Não é
+ * burocracia: é o que autoriza falar com a pessoa, e o D4 a guarda na campanha
+ * para que a resposta exista por escrito quando alguém perguntar. Um `NOT NULL`
+ * preenchido com espaço seria a decoração do D46.
+ */
+function CampanhaEmBranco({ tenant, versoes, entregaveis, aoFechar, aoCriar }: {
+  tenant: string; versoes: VersaoDeFlow[]; entregaveis: CanalEntregavel[];
+  aoFechar(): void; aoCriar(): Promise<void>;
+}) {
+  const [f, setF] = useState({
+    nome: '', objetivo: '', tipo: 'morna' as 'morna' | 'fria',
+    baseLegal: 'Opt-in registrado na base própria', versao: '',
+  });
+  const [canais, setCanais] = useState<string[]>(['whatsapp']);
+  const [estado, setEstado] = useState<'parado' | 'criando'>('parado');
+  const [msg, setMsg] = useState<{ tipo: 'erro' | 'ok'; texto: string } | null>(null);
+
+  const alvo = versoes.find((v) => v.id === f.versao) ?? null;
+  const cruzam = alvo ? alvo.canais.filter((c) => canais.includes(c)) : null;
+  const motivoDe = (c: string) => entregaveis.find((e) => e.canal === c)?.motivo ?? 'sem_adapter';
+
+  async function criar(e: React.FormEvent) {
+    e.preventDefault();
+    setMsg(null); setEstado('criando');
+    try {
+      await criarCampanha({
+        tenant, nome: f.nome, tipo: f.tipo, baseLegal: f.baseLegal,
+        canais, objetivo: f.objetivo, versao: f.versao || null,
+      });
+      setMsg({ tipo: 'ok', texto: 'Campanha criada.' });
+      await aoCriar();
+      aoFechar();
+    } catch (e2) { setMsg({ tipo: 'erro', texto: mensagemDeErro(e2) }); }
+    finally { setEstado('parado'); }
+  }
+
+  return (
+    <>
+      <Secao titulo="Campanha em branco"
+             nota="tipo, base legal e canais escritos por você; a cadência é uma das suas" />
+      <form className="painel" onSubmit={criar}>
+        <Campo id="cb-nome" rotulo="Nome da campanha" valor={f.nome}
+               aoMudar={(v) => setF({ ...f, nome: v })} />
+        <Campo id="cb-obj" rotulo="Objetivo (opcional)" valor={f.objetivo}
+               aoMudar={(v) => setF({ ...f, objetivo: v })}
+               ajuda="Uma linha para você reconhecer a campanha na lista." />
+
+        <div className="campo">
+          <label htmlFor="cb-tipo">Tipo</label>
+          <select id="cb-tipo" value={f.tipo}
+                  onChange={(e) => setF({
+                    ...f,
+                    tipo: e.target.value as 'morna' | 'fria',
+                    // A base legal padrão acompanha o tipo, porque são a mesma
+                    // decisão: morna é base própria com opt-in, fria não tem
+                    // relação prévia. Quem quiser outra, escreve por cima.
+                    baseLegal: e.target.value === 'morna'
+                      ? 'Opt-in registrado na base própria'
+                      : 'Interesse legítimo (LGPD art. 7º, IX)',
+                  })}>
+            <option value="morna">Morna — base própria, com opt-in</option>
+            <option value="fria">Fria — lista sem relação prévia</option>
+          </select>
+          <span className="ajuda">
+            O tipo não é rótulo: ele restringe o pool de remetentes (D4). Campanha
+            fria não usa o número nem o domínio da operação institucional, e o
+            motor recusa a mensagem que tentar.
+          </span>
+        </div>
+
+        <Campo id="cb-base" rotulo="Base legal" valor={f.baseLegal}
+               aoMudar={(v) => setF({ ...f, baseLegal: v })}
+               ajuda="O que autoriza falar com estas pessoas. Fica gravado na campanha para a resposta existir por escrito quando alguém perguntar." />
+
+        <div className="campo">
+          <label>Canais habilitados</label>
+          <div className="chips">
+            {(['whatsapp', 'email', 'sms', 'instagram'] as const).map((c) => {
+              const on = canais.includes(c);
+              const motivo = motivoDe(c);
+              return (
+                <button key={c} type="button" className="chip" aria-pressed={on}
+                        style={on ? { background: 'var(--accent-soft)', color: 'var(--accent)' } : undefined}
+                        onClick={() => setCanais(on ? canais.filter((x) => x !== c) : [...canais, c])}>
+                  {NOME_CANAL[c] ?? c}
+                  {motivo !== 'entrega' && (
+                    <span style={{ marginLeft: 5, color: 'var(--ink-3)' }}>
+                      {motivo === 'sem_adapter' ? 'sem adapter' : 'sem chip'}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+          <span className="ajuda">
+            Passo cujo canal a campanha não habilita é pulado, não falha. Canal sem
+            remetente faz o passo ser adiado, nunca queimado (D31).
+          </span>
+        </div>
+
+        <div className="campo">
+          <label htmlFor="cb-cad">Cadência (opcional agora)</label>
+          <select id="cb-cad" value={f.versao}
+                  onChange={(e) => setF({ ...f, versao: e.target.value })}>
+            <option value="">escolher depois…</option>
+            {versoes.map((v) => (
+              <option key={v.id} value={v.id}>
+                {v.flow_nome} · v{v.versao} · {v.passos} passos ·{' '}
+                {v.canais.map((c) => NOME_CANAL[c] ?? c).join(', ')}
+              </option>
+            ))}
+          </select>
+          <span className="ajuda">
+            Sem cadência a campanha existe e não inscreve ninguém — a inscrição
+            recusa alto, em vez de criar quem encerraria vazio.
+          </span>
+        </div>
+
+        {cruzam?.length === 0 && (
+          <Aviso tipo="erro">
+            Esta cadência usa {alvo?.canais.map((c) => NOME_CANAL[c] ?? c).join(', ')} e a
+            campanha habilita {canais.map((c) => NOME_CANAL[c] ?? c).join(', ')}. Sem canal
+            em comum, todo passo seria pulado — a criação é recusada.
+          </Aviso>
+        )}
+
+        {msg && <Aviso tipo={msg.tipo}>{msg.texto}</Aviso>}
+
+        <div style={{ display: 'flex', gap: 9 }}>
+          <button className="btn prim"
+                  disabled={estado === 'criando' || !f.nome.trim() || !f.baseLegal.trim()
+                            || !canais.length || cruzam?.length === 0}>
             {estado === 'criando' ? 'Criando…' : 'Criar campanha'}
           </button>
           <button type="button" className="btn" onClick={aoFechar}>Cancelar</button>

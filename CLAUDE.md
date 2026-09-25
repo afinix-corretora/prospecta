@@ -303,6 +303,13 @@ e elas têm teste automatizado obrigatório.**
   `renderizar` e `variaveisDoTexto` leem a mesma marcação: divergir faz a tela garantir que o texto
   está inteiro sobre uma chave que o motor apaga — o D42 chegando tarde porque o aviso que existe
   para chegar cedo estava errado (D55).
+- **Nunca** deixar a tela prometer efeito de um dado que ninguém consome. Atribuir agente por canal
+  grava a atribuição e nada mais: nenhum adapter, edge function ou função de despacho lê
+  `campaign_agents`. A tela diz isso em voz alta, porque o jeito de descobrir sozinho seria um lead
+  sem resposta (D55).
+- **Nunca** criar num lugar e completar no outro quando as duas escritas formam um só fato. Inserir
+  a campanha pela tela e apontar o flow numa segunda chamada é a campanha órfã do D54 de novo — a
+  função faz as duas na mesma transação (D55).
 
 ---
 
@@ -359,6 +366,11 @@ e elas têm teste automatizado obrigatório.**
 > (`resumo_da_campanha`) e lido de `message_events` (`eventos_da_campanha`). É ela que torna o
 > shadow mode legível — sem ela, "rodou tudo e não enviou nada" é igual a "está quebrado".
 >
+> Os **agentes** continuam sem consumidor: `campaign_agents` e `agente_do_canal` existem, a tela da
+> campanha atribui um por canal — e **nada no motor os lê**. Resposta encerra a cadência
+> (invariante 4) e ninguém conversa depois. A tela diz isso em voz alta desde o D55; escrever um
+> editor de agente antes de existir o laço de conversa seria construir decoração com capricho.
+>
 > As **cadências** ganharam tela no **D55**: até então, a única forma de existir um `flow_version`
 > era instanciar um dos sete modelos do catálogo — o schema inteiro sem porta, que é o D41 da
 > supressão outra vez. `publicar_versao_de_flow` só INSERE (editar é publicar a seguinte, D9), não
@@ -366,7 +378,9 @@ e elas têm teste automatizado obrigatório.**
 > conferência do D47) e a tela mostra quantas campanhas ficaram na versão anterior, porque
 > "correto e silencioso" é a combinação a evitar. `variaveis_disponiveis` conta as chaves que a
 > base do cliente tem, e `tests/variaveis_para_sql.ts` põe a leitura de marcação do SQL contra a
-> do TypeScript — a terceira ponte do suite, pelo motivo do D32.
+> do TypeScript — a terceira ponte do suite, pelo motivo do D32. E `criar_campanha` fecha o par:
+> campanha em branco, com tipo, base legal e canais próprios, apontando a cadência **na mesma
+> transação** — inserir aqui e apontar lá fora seria a campanha órfã do D54 pelo outro caminho.
 >
 > E desde o **D54** a tela da campanha também **manda**: ligar e desligar a campanha, pausar e retomar as
 > inscrições, apontar qual cadência a campanha roda (o trio do D47, que existia sem consumidor) e
@@ -387,7 +401,7 @@ e elas têm teste automatizado obrigatório.**
 > **derivados do schema** cobram `tenant_id`, RLS e FK composta de toda tabela nova — lista escrita
 > à mão envelhece sem avisar, e essa já tinha perdido a `provider_servers` (D31).
 >
-> O schema está **aplicado no projeto `hucuwjvihqgftdjpnych`** (42 migrations no repositório, 48
+> O schema está **aplicado no projeto `hucuwjvihqgftdjpnych`** (43 migrations no repositório, 49
 > registros no projeto — duas corretivas de texto, uma separação, duas do D46 (superfície e
 > tenant explícito), o bootstrap do tenant de teste e a corretiva de `search_path` do D54, ver
 > D32, D39, D46, D53 e D54), conferido por

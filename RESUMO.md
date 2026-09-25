@@ -44,6 +44,8 @@ permite conferir tudo antes de a primeira mensagem sair.
 
 | Quero mudar | Onde |
 |---|---|
+| Criar uma campanha do catálogo | Hub → um dos modelos prontos. Vem com tipo, base legal, canais e cadência |
+| Criar uma campanha sua | Hub → **Campanha em branco**. Você escreve o tipo, a base legal e os canais, e escolhe uma cadência sua |
 | O texto das mensagens e o intervalo entre elas | Tela **Cadências**. **Editar não altera o que existe, de propósito** — salvar publica a *versão seguinte*, e quem já está em cadência termina na versão em que entrou |
 | Fazer uma campanha passar a usar a versão nova | Na própria tela da cadência, campanha por campanha. Publicar **não** troca ninguém sozinho: a versão nova pode ter deixado de tocar um canal que a campanha habilita, e cada troca é conferida à parte |
 | Quais canais uma campanha usa | Campo `canais_habilitados` da campanha |
@@ -144,6 +146,21 @@ brigar com o CRM por quem manda em cada campo.
 | Quantas vezes um writeback tenta antes de desistir | `registrar_resultado_writeback` | 8 tentativas, espera dobrando até 6h |
 | A partir de quantas horas a tela acusa dreno parado | `situacao_do_writeback.ts` | 6 horas |
 | Quanto tempo uma mensagem fica reservada por um worker | "lease" das funções de despacho | 5 minutos |
+
+---
+
+## Os agentes ainda não respondem
+
+A tela da campanha deixa escolher **quem responde** em cada canal, e a escolha fica gravada — mas
+**nada no motor a lê**. Quando o contato responde, a cadência é encerrada (é a invariante 4) e a
+conversa não continua sozinha. Não há adapter, função ou worker que consulte o agente.
+
+Isso está escrito na própria tela, de propósito: oferecer a escolha e deixar você supor que ela
+produz efeito seria o pior jeito de descobrir — por um lead sem resposta.
+
+O laço de conversa é uma decisão que ainda não foi tomada, e não é pequena: a resposta de um agente
+não cabe na tabela de mensagens, cuja chave é "uma mensagem por passo da cadência". Quando for a
+hora, é um capítulo próprio.
 
 ---
 

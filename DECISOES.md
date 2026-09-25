@@ -1667,3 +1667,42 @@ O mesmo de sempre, e vale escrever de novo porque foi a terceira vez em dois dia
    ponte do suite nasceu por isso.
 4. **Lista à mão não cobra o que você acabou de escrever** (D18, D31). Quem achou o `anon` aberto
    foi a asserção derivada do catálogo, e ela achou porque não precisa saber o nome da função.
+
+#### Campanha em branco, porque escrever a cadência sem isso não fecha nada
+
+Dar como escrever a própria cadência e deixar a criação de campanha só pelo catálogo é meio
+caminho: o modelo traz tipo, base legal, canais e cadência num pacote, e quem escreveu a sua
+precisava instanciar um modelo **qualquer** e repontar — ficando com o `template_slug` e a base
+legal de um modelo que não é o dela.
+
+`criar_campanha` existe por um motivo específico, e não por simetria: apontar o flow é uma **segunda
+escrita**. Inserir a campanha pela tela (o que o RLS autorizaria, pelo D41) e chamar
+`definir_flow_da_campanha` em seguida é a janela do D54 outra vez — criou, caiu a rede, campanha
+órfã. Dentro da função as duas são uma transação só, e o apontamento é feito **chamando**
+`definir_flow_da_campanha`, onde mora a conferência do D47. Aqui ela serve mais do que em
+`criar_campanha_de_modelo`: lá os passos são filtrados pelos canais da campanha e cruzar é
+garantido; aqui a pessoa escolheu as duas coisas separadamente.
+
+A base legal é obrigatória, na função e na tela. Não é burocracia: é o que autoriza falar com a
+pessoa, e o D4 a guarda na campanha para que a resposta exista por escrito quando alguém perguntar.
+Um `NOT NULL` preenchido com espaço seria a decoração do D46.
+
+#### E o que a tela passou a dizer sobre os agentes
+
+Ao fechar o ponto 4 do D54 eu liguei a atribuição de agente por canal na tela da campanha e escrevi,
+no aviso de canal sem agente, que *"o agente entra quando alguém responde"*.
+
+Conferindo antes de construir a tela de agentes: **nada no motor lê `campaign_agents`.** Nem
+adapter, nem edge function, nem função SQL do despacho. `agente_do_canal` tem grant e não tem
+chamador; `agents.ai_credential_id` é preenchido com NULL na cópia do catálogo e ninguém o lê. A
+resposta encerra a cadência pela invariante 4, e ninguém conversa depois.
+
+Ou seja: a escolha grava a escolha, e é tudo. A frase que eu tinha escrito descrevia uma
+funcionalidade que não existe — que é exatamente o `tem_adapter` do D31 com cara de recurso, e cujo
+jeito de descobrir seria um lead sem resposta. O texto da tela foi corrigido para dizer isso em voz
+alta.
+
+Fica registrado aqui em vez de virar uma tela de edição de agente: escrever um editor para uma
+persona que nenhuma parte do sistema consulta seria construir decoração com capricho. O laço de
+conversa é decisão de produto e de modelagem — uma resposta do agente não cabe em `messages`, cuja
+chave é `(enrollment_id, step_id)` —, e por isso não foi tomada de passagem.

@@ -222,6 +222,95 @@ SELECT cd.confere('nenhuma chave inventada aparece',
   NOT EXISTS (SELECT 1 FROM variaveis_disponiveis('00000000-0000-0000-0000-0000000000aa')
                WHERE chave NOT IN ('plano_atual','corretor','nome')));
 
+-- ===========================================================================
+-- 5. Campanha sem modelo, com a cadência apontada na mesma transação
+-- ===========================================================================
+
+DO $$
+DECLARE v_camp uuid; v_outra uuid; v_v1 uuid; v_erro text; v_antes integer;
+BEGIN
+  SELECT fv.id INTO v_v1 FROM flows f JOIN flow_versions fv ON fv.flow_id = f.id
+   WHERE f.nome = 'Resgate escrito à mão' AND fv.versao = 1;
+
+  v_camp := criar_campanha('00000000-0000-0000-0000-0000000000aa', 'Minha campanha',
+                           'fria', 'interesse legítimo', '{whatsapp,email}',
+                           'testar o caminho sem modelo', v_v1);
+
+  PERFORM cd.confere('campanha sem modelo nasce apontando a cadência escolhida',
+    (SELECT flow_version_id = v_v1 FROM campaigns WHERE id = v_camp));
+
+  PERFORM cd.confere('e sem template_slug: ela não descende de modelo nenhum',
+    (SELECT template_slug IS NULL FROM campaigns WHERE id = v_camp));
+
+  PERFORM cd.confere('tipo, base legal e canais são os que foram passados',
+    (SELECT tipo = 'fria' AND base_legal = 'interesse legítimo'
+        AND canais_habilitados = '{whatsapp,email}'::canal[]
+       FROM campaigns WHERE id = v_camp));
+
+  -- Chamada e conferência em instruções SEPARADAS: o SELECT ao lado da
+  -- chamada lê o snapshot do início da instrução e não enxerga a linha
+  -- recém-gravada. Escrevi as duas juntas na primeira versão deste arquivo e
+  -- as duas asserções falharam — é o D38, de novo e por escrito.
+  v_outra := criar_campanha('00000000-0000-0000-0000-0000000000aa', 'Sem objetivo',
+                            'morna', 'opt-in', '{whatsapp}', '   ');
+  PERFORM cd.confere('objetivo em branco vira NULL, não string vazia',
+    (SELECT objetivo IS NULL FROM campaigns WHERE id = v_outra));
+
+  -- A cadência é opcional (D47 deixou a coluna NULL-ável de propósito).
+  v_outra := criar_campanha('00000000-0000-0000-0000-0000000000aa', 'Sem cadência',
+                            'morna', 'opt-in', '{whatsapp}');
+  PERFORM cd.confere('dá para criar a campanha antes de ter cadência',
+    (SELECT flow_version_id IS NULL FROM campaigns WHERE id = v_outra));
+
+  -- E o que mais importa: a conferência do D47 vale aqui, e a recusa desfaz a
+  -- campanha junto — senão seria a campanha órfã do D54 pelo outro caminho.
+  SELECT count(*) INTO v_antes FROM campaigns;
+  BEGIN
+    -- v1 tem passo de whatsapp e de email; uma campanha só de SMS não cruza.
+    PERFORM criar_campanha('00000000-0000-0000-0000-0000000000aa', 'Nao cruza',
+                           'morna', 'opt-in', '{sms}', NULL, v_v1);
+    v_erro := '(aceitou)';
+  EXCEPTION WHEN invalid_parameter_value THEN v_erro := 'recusou';
+  END;
+  PERFORM cd.confere('cadência que não cruza canal nenhum é recusada na criação',
+    v_erro = 'recusou', v_erro);
+  PERFORM cd.confere('e a campanha recusada não ficou gravada pela metade',
+    (SELECT count(*) = v_antes FROM campaigns));
+END;
+$$;
+
+DO $$
+DECLARE v_erro text;
+BEGIN
+  BEGIN
+    PERFORM criar_campanha('00000000-0000-0000-0000-0000000000aa', '  ',
+                           'morna', 'opt-in', '{whatsapp}');
+    v_erro := '(aceitou)';
+  EXCEPTION WHEN invalid_parameter_value THEN v_erro := SQLERRM;
+  END;
+  PERFORM cd.confere('campanha sem nome é recusada',
+    v_erro LIKE '%precisa de nome%', v_erro);
+
+  BEGIN
+    PERFORM criar_campanha('00000000-0000-0000-0000-0000000000aa', 'Sem base',
+                           'fria', '   ', '{whatsapp}');
+    v_erro := '(aceitou)';
+  EXCEPTION WHEN invalid_parameter_value THEN v_erro := SQLERRM;
+  END;
+  PERFORM cd.confere('campanha sem base legal é recusada',
+    v_erro LIKE '%base legal%', v_erro);
+
+  BEGIN
+    PERFORM criar_campanha('00000000-0000-0000-0000-0000000000aa', 'Sem canal',
+                           'morna', 'opt-in', '{}');
+    v_erro := '(aceitou)';
+  EXCEPTION WHEN invalid_parameter_value THEN v_erro := SQLERRM;
+  END;
+  PERFORM cd.confere('campanha sem canal habilitado é recusada',
+    v_erro LIKE '%canal habilitado%', v_erro);
+END;
+$$;
+
 SELECT CASE WHEN ok THEN 'PASS' ELSE 'FAIL' END AS status, nome, detalhe
   FROM cd.resultado ORDER BY id;
 
