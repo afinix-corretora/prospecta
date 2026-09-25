@@ -239,7 +239,7 @@
             "ator": "motor",
             "canal": null,
             "contato": "(sem nome)",
-            "detalhe": "whatsapp até 23/09 00:00",
+            "detalhe": "whatsapp até 26/09 00:00",
             "momento": 0,
             "remetente": null
         },
@@ -266,7 +266,7 @@
             "ator": "provedor",
             "canal": "whatsapp",
             "contato": "Marina Alves",
-            "detalhe": "PROV-9e41b36c",
+            "detalhe": "PROV-6fe307a3",
             "momento": 0,
             "remetente": "+55 11 99000-0002"
         },
@@ -275,7 +275,7 @@
             "ator": "provedor",
             "canal": "whatsapp",
             "contato": "Otávio Lima",
-            "detalhe": "PROV-1c5b3845",
+            "detalhe": "PROV-a524acc6",
             "momento": 0,
             "remetente": "+55 11 99000-0002"
         },
@@ -293,7 +293,7 @@
             "ator": "provedor",
             "canal": "whatsapp",
             "contato": "Paula Ribeiro",
-            "detalhe": "PROV-9dc3d193",
+            "detalhe": "PROV-0d8a74c6",
             "momento": 0,
             "remetente": "+55 11 99000-0002"
         },
@@ -302,7 +302,7 @@
             "ator": "provedor",
             "canal": "whatsapp",
             "contato": "Rui Nogueira",
-            "detalhe": "PROV-1a620be0",
+            "detalhe": "PROV-8ed9d952",
             "momento": 0,
             "remetente": "+55 11 99000-0002"
         },
@@ -311,7 +311,7 @@
             "ator": "provedor",
             "canal": "whatsapp",
             "contato": "Sônia Prado",
-            "detalhe": "PROV-4b0eb806",
+            "detalhe": "PROV-4bb9011e",
             "momento": 0,
             "remetente": "+55 11 98000-0009"
         },
@@ -329,8 +329,8 @@
             "ator": "motor",
             "canal": null,
             "contato": "(sem nome)",
-            "detalhe": "whatsapp até 23/09 00:00",
-            "momento": 7,
+            "detalhe": "whatsapp até 26/09 00:00",
+            "momento": 11,
             "remetente": null
         },
         {
@@ -338,17 +338,8 @@
             "ator": "motor",
             "canal": null,
             "contato": "(sem nome)",
-            "detalhe": "whatsapp até 23/09 00:00",
-            "momento": 14,
-            "remetente": null
-        },
-        {
-            "acao": "adiado_sem_remetente",
-            "ator": "motor",
-            "canal": null,
-            "contato": "(sem nome)",
-            "detalhe": "whatsapp até 23/09 00:00",
-            "momento": 21,
+            "detalhe": "whatsapp até 26/09 00:00",
+            "momento": 22,
             "remetente": null
         },
         {
@@ -357,7 +348,7 @@
             "canal": null,
             "contato": null,
             "detalhe": "dia 2 da cadência — quotas diárias renovadas",
-            "momento": 28,
+            "momento": 33,
             "remetente": null
         },
         {
@@ -366,7 +357,7 @@
             "canal": "whatsapp",
             "contato": "(sem nome)",
             "detalhe": "1",
-            "momento": 28,
+            "momento": 33,
             "remetente": "+55 11 98000-0009"
         },
         {
@@ -374,9 +365,18 @@
             "ator": "provedor",
             "canal": "whatsapp",
             "contato": "(sem nome)",
-            "detalhe": "PROV-f09eda91",
-            "momento": 28,
+            "detalhe": "PROV-e6f616ad",
+            "momento": 33,
             "remetente": "+55 11 98000-0009"
+        },
+        {
+            "acao": "suprimida",
+            "ator": "operador",
+            "canal": null,
+            "contato": "Paula Ribeiro",
+            "detalhe": "pediu remoção por telefone; entra na lista global",
+            "momento": 33,
+            "remetente": null
         },
         {
             "acao": "novo_dia",
@@ -406,11 +406,11 @@
             "remetente": "+55 11 99000-0002"
         },
         {
-            "acao": "passo_pulado_sem_identidade",
+            "acao": "encerrado_supressao",
             "ator": "motor",
             "canal": "whatsapp",
             "contato": "Paula Ribeiro",
-            "detalhe": "email",
+            "detalhe": "contato suprimido",
             "momento": 48,
             "remetente": "+55 11 99000-0002"
         },
@@ -437,7 +437,7 @@
             "ator": "provedor",
             "canal": "email",
             "contato": "Marina Alves",
-            "detalhe": "PROV-4f2d2364",
+            "detalhe": "PROV-209930c9",
             "momento": 48,
             "remetente": "resgate@afinix-relaciona.com.br"
         },
@@ -446,7 +446,7 @@
             "ator": "provedor",
             "canal": "email",
             "contato": "Rui Nogueira",
-            "detalhe": "PROV-96920dff",
+            "detalhe": "PROV-de28491f",
             "momento": 48,
             "remetente": "resgate@afinix-relaciona.com.br"
         },
@@ -458,24 +458,6 @@
             "detalhe": "a pessoa respondeu antes do despacho: o toque seguinte não saiu (D40)",
             "momento": 48,
             "remetente": null
-        },
-        {
-            "acao": "suprimida",
-            "ator": "operador",
-            "canal": null,
-            "contato": "Paula Ribeiro",
-            "detalhe": "pediu remoção por telefone; entra na lista global",
-            "momento": 48,
-            "remetente": null
-        },
-        {
-            "acao": "encerrado_supressao",
-            "ator": "motor",
-            "canal": "whatsapp",
-            "contato": "Paula Ribeiro",
-            "detalhe": "contato suprimido",
-            "momento": 48,
-            "remetente": "+55 11 99000-0002"
         },
         {
             "acao": "novo_dia",
@@ -509,7 +491,7 @@
             "ator": "provedor",
             "canal": "whatsapp",
             "contato": "Sônia Prado",
-            "detalhe": "PROV-44e25502",
+            "detalhe": "PROV-fb131bb4",
             "momento": 96,
             "remetente": "+55 11 98000-0009"
         },
@@ -572,7 +554,7 @@
             "ator": "provedor",
             "canal": "whatsapp",
             "contato": "Marina Alves",
-            "detalhe": "PROV-a77d4b28",
+            "detalhe": "PROV-7457f83e",
             "momento": 120,
             "remetente": "+55 11 99000-0002"
         },
@@ -591,7 +573,7 @@
             "canal": "whatsapp",
             "contato": "(sem nome)",
             "detalhe": "2",
-            "momento": 124,
+            "momento": 129,
             "remetente": "+55 11 98000-0009"
         },
         {
@@ -599,16 +581,61 @@
             "ator": "provedor",
             "canal": "whatsapp",
             "contato": "(sem nome)",
-            "detalhe": "PROV-75b8d807",
-            "momento": 124,
+            "detalhe": "PROV-d7983556",
+            "momento": 129,
             "remetente": "+55 11 98000-0009"
         }
     ],
     "outbox": [
         {
+            "fato": "opt_out",
+            "autoria": "motor-prospeccao",
+            "contato": "Tulio Barros"
+        },
+        {
             "fato": "identidade_invalida",
             "autoria": "motor-prospeccao",
             "contato": "Vera Castro"
+        },
+        {
+            "fato": "opt_out",
+            "autoria": "motor-prospeccao",
+            "contato": "Paula Ribeiro"
+        },
+        {
+            "fato": "respondido",
+            "autoria": "motor-prospeccao",
+            "contato": "Otávio Lima"
+        },
+        {
+            "fato": "campanha_concluida",
+            "autoria": "motor-prospeccao",
+            "contato": "Sônia Prado"
+        },
+        {
+            "fato": "campanha_concluida",
+            "autoria": "motor-prospeccao",
+            "contato": "Vera Castro"
+        },
+        {
+            "fato": "campanha_concluida",
+            "autoria": "motor-prospeccao",
+            "contato": "Marina Alves"
+        },
+        {
+            "fato": "campanha_concluida",
+            "autoria": "motor-prospeccao",
+            "contato": "Rui Nogueira"
+        },
+        {
+            "fato": "opt_out",
+            "autoria": "motor-prospeccao",
+            "contato": "Rui Nogueira"
+        },
+        {
+            "fato": "campanha_concluida",
+            "autoria": "motor-prospeccao",
+            "contato": "(sem nome)"
         }
     ],
     "agentes": [
@@ -896,6 +923,15 @@
             "passo": 1,
             "buraco": false,
             "status": "enviado",
+            "contato": "Paula Ribeiro",
+            "conteudo": "Oi Paula Ribeiro, aqui é da Afinix. Podemos retomar aquela cotação?",
+            "remetente": "Retenção"
+        },
+        {
+            "canal": "whatsapp",
+            "passo": 1,
+            "buraco": false,
+            "status": "enviado",
             "contato": "Otávio Lima",
             "conteudo": "Oi Otávio Lima, aqui é da Afinix. Podemos retomar aquela cotação?",
             "remetente": "Retenção"
@@ -908,15 +944,6 @@
             "contato": "Otávio Lima",
             "conteudo": "Otávio Lima, separei duas opções que cabem no que você falou.",
             "remetente": "Domínio de relacionamento"
-        },
-        {
-            "canal": "whatsapp",
-            "passo": 1,
-            "buraco": false,
-            "status": "enviado",
-            "contato": "Paula Ribeiro",
-            "conteudo": "Oi Paula Ribeiro, aqui é da Afinix. Podemos retomar aquela cotação?",
-            "remetente": "Retenção"
         },
         {
             "canal": "whatsapp",
@@ -1244,7 +1271,7 @@
             "provedor": "uazapi",
             "servidor": "dd000000-0000-0000-0000-0000000000d1",
             "identificador": "+55 11 98000-0009",
-            "webhook_token": "73d17cee-387c-483d-afb5-627b7b5423a3"
+            "webhook_token": "ed79c224-3e16-49b5-9619-b0df57d33260"
         },
         {
             "tipo": "morna",
@@ -1261,7 +1288,7 @@
             "provedor": "gupshup",
             "servidor": null,
             "identificador": "+55 11 99000-0001",
-            "webhook_token": "291a8b17-15a1-47a9-a7db-b0b8e5bad6d1"
+            "webhook_token": "eef69e70-862f-4cf5-bd00-86332f918af8"
         },
         {
             "tipo": "morna",
@@ -1278,7 +1305,7 @@
             "provedor": "gupshup",
             "servidor": null,
             "identificador": "+55 11 99000-0002",
-            "webhook_token": "a2b5830e-cc0f-4ede-a1eb-36411777ca5f"
+            "webhook_token": "29e29d5e-58ca-4f92-91db-ca23412f5c97"
         },
         {
             "tipo": "morna",
@@ -1296,7 +1323,7 @@
             "provedor": "resend",
             "servidor": null,
             "identificador": "resgate@afinix-relaciona.com.br",
-            "webhook_token": "531f4f28-25d9-4534-bc4c-03673213ed1f"
+            "webhook_token": "02de9166-2273-4490-bdc7-4d769b8c1d1a"
         }
     ],
     "servidores": [
@@ -1326,7 +1353,7 @@
             "campanha": "Resgate 2024"
         },
         {
-            "passo": 2,
+            "passo": 1,
             "motivo": "supressao",
             "status": "encerrado",
             "contato": "Paula Ribeiro",
@@ -1361,7 +1388,7 @@
             "campanha": "Lista fria SP"
         }
     ],
-    "horas_simuladas": 124,
+    "horas_simuladas": 129,
     "provedores_canal": [
         {
             "docs": "https://resend.com/docs",

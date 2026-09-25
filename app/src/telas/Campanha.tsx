@@ -13,10 +13,13 @@ import { useParams } from 'react-router-dom';
 import { useSessao } from '../sessao';
 import { Aviso, Kpi, NOME_CANAL, Secao, corCanal } from '../componentes/base';
 import {
-  lerCampanhas, lerEventosDaCampanha, lerMensagensDaCampanha, lerResumoDaCampanha,
+  alternarCampanha, atribuirAgente, definirFlowDaCampanha, lerAgentes,
+  lerAgentesDaCampanha, lerCampanhas, lerEventosDaCampanha, lerMensagensDaCampanha,
+  lerResumoDaCampanha, lerVersoesDeFlow, pausarInscricoes,
 } from '../dados';
 import type {
-  Campanha as Camp, EventoDaCampanha, MensagemComposta, ResumoDaCampanha,
+  Agente, AgenteDaCampanha, Campanha as Camp, EventoDaCampanha, MensagemComposta,
+  ResumoDaCampanha, VersaoDeFlow,
 } from '../dados';
 import { mensagemDeErro } from '../supabase';
 
@@ -47,11 +50,14 @@ const STATUS: Record<string, string> = {
 
 export function Campanha() {
   const { id = '' } = useParams();
-  const { tenant } = useSessao();
+  const { tenant, opera } = useSessao();
   const [campanha, setCampanha] = useState<Camp | null>(null);
   const [resumo, setResumo] = useState<ResumoDaCampanha | null>(null);
   const [eventos, setEventos] = useState<EventoDaCampanha[]>([]);
   const [mensagens, setMensagens] = useState<MensagemComposta[]>([]);
+  const [versoes, setVersoes] = useState<VersaoDeFlow[]>([]);
+  const [agentes, setAgentes] = useState<Agente[]>([]);
+  const [daCampanha, setDaCampanha] = useState<AgenteDaCampanha[]>([]);
   const [erro, setErro] = useState('');
   const [carregando, setCarregando] = useState(true);
 
@@ -59,16 +65,22 @@ export function Campanha() {
     if (!tenant || !id) return;
     setErro('');
     try {
-      const [cs, r, ev, ms] = await Promise.all([
+      const [cs, r, ev, ms, vs, ags, ca] = await Promise.all([
         lerCampanhas(),
         lerResumoDaCampanha(tenant.tenant_id, id),
         lerEventosDaCampanha(tenant.tenant_id, id),
         lerMensagensDaCampanha(tenant.tenant_id, id),
+        lerVersoesDeFlow(),
+        lerAgentes(),
+        lerAgentesDaCampanha(id),
       ]);
       setCampanha(cs.find((c) => c.id === id) ?? null);
       setResumo(r);
       setEventos(ev);
       setMensagens(ms);
+      setVersoes(vs);
+      setAgentes(ags);
+      setDaCampanha(ca);
     } catch (e) { setErro(mensagemDeErro(e)); }
     finally { setCarregando(false); }
   }
@@ -87,8 +99,18 @@ export function Campanha() {
     <>
       <Secao
         titulo={campanha.nome}
-        nota={`${campanha.tipo} · ${campanha.canais_habilitados.map((c) => NOME_CANAL[c] ?? c).join(', ')}`}
+        nota={`${campanha.tipo} · ${campanha.canais_habilitados.map((c) => NOME_CANAL[c] ?? c).join(', ')}`
+              + (campanha.ativa ? '' : ' · DESLIGADA')}
       />
+
+      <Comando campanha={campanha} resumo={resumo} podeOperar={opera}
+               aoMudar={recarregar} aoFalhar={setErro} />
+
+      <Cadencia campanha={campanha} versoes={versoes} podeOperar={opera}
+                aoMudar={recarregar} aoFalhar={setErro} />
+
+      <Agentes campanha={campanha} agentes={agentes} atribuidos={daCampanha}
+               podeOperar={opera} aoMudar={recarregar} aoFalhar={setErro} />
 
       <div className="kpis cinco">
         <Kpi rotulo="Em cadência" valor={resumo.inscritos_ativos}
@@ -175,6 +197,271 @@ export function Campanha() {
       )}
 
       <button className="btn" onClick={() => void recarregar()}>Atualizar</button>
+    </>
+  );
+}
+
+/**
+ * O freio (D54).
+ *
+ * O motor sempre soube parar: `processar_vencidos` pula campanha com
+ * `ativa = false` e enrollment `pausado`. O que faltava era alguém puxar —
+ * até aqui, começar uma cadência dava-se pelo produto e pará-la exigia o
+ * painel do Supabase.
+ *
+ * São dois freios de alcance diferente, e a tela diz qual é qual, porque
+ * confundi-los é o tipo de engano que só aparece depois:
+ *
+ *   * desligar a CAMPANHA para tudo o que ela ainda faria, e é reversível —
+ *     religar continua de onde parou;
+ *   * pausar as INSCRIÇÕES segura pessoa por pessoa, e o relógio de cada uma
+ *     fica onde estava. Retomar volta para um horário já vencido, então a
+ *     próxima batida anda.
+ *
+ * Nenhum dos dois cancela mensagem que já está na fila: quem decide isso é o
+ * despacho, que não envia por campanha desligada nem por enrollment pausado,
+ * e segura a mensagem em vez de cancelá-la, porque parada que volta atrás não
+ * pode queimar a chave `(enrollment_id, step_id)` (D40).
+ */
+function Comando({ campanha, resumo, podeOperar, aoMudar, aoFalhar }: {
+  campanha: Camp; resumo: ResumoDaCampanha; podeOperar: boolean;
+  aoMudar(): Promise<void>; aoFalhar(m: string): void;
+}) {
+  const [ocupado, setOcupado] = useState('');
+  const [nota, setNota] = useState('');
+
+  async function fazer(rotulo: string, acao: () => Promise<string>) {
+    setOcupado(rotulo); setNota(''); aoFalhar('');
+    try { setNota(await acao()); await aoMudar(); }
+    catch (e) { aoFalhar(mensagemDeErro(e)); }
+    finally { setOcupado(''); }
+  }
+
+  return (
+    <div className="painel">
+      <b>{campanha.ativa ? 'Campanha ligada' : 'Campanha desligada'}</b>
+      <p style={{ color: 'var(--ink-2)', fontSize: 13 }}>
+        {campanha.ativa
+          ? 'O agendador considera esta campanha a cada batida.'
+          : 'O agendador ignora esta campanha. Nada novo é criado, e a mensagem '
+            + 'que já estava na fila fica segura — não é cancelada, porque religar '
+            + 'precisa poder recriá-la.'}
+      </p>
+
+      {!podeOperar ? (
+        <p className="vazio" style={{ margin: 0 }}>
+          Seu papel é de leitura: ligar, desligar e pausar são de operador.
+        </p>
+      ) : (
+        <div style={{ display: 'flex', gap: 9, flexWrap: 'wrap' }}>
+          <button className="btn prim" disabled={!!ocupado}
+                  onClick={() => void fazer('campanha', async () => {
+                    await alternarCampanha(campanha.id, !campanha.ativa);
+                    return campanha.ativa ? 'Campanha desligada.' : 'Campanha ligada.';
+                  })}>
+            {ocupado === 'campanha' ? 'um instante…'
+              : campanha.ativa ? 'Desligar a campanha' : 'Ligar a campanha'}
+          </button>
+
+          <button className="btn" disabled={!!ocupado || resumo.inscritos_ativos === 0}
+                  onClick={() => void fazer('pausar', async () => {
+                    const n = await pausarInscricoes(campanha.id, true);
+                    return `${n} ${n === 1 ? 'inscrição pausada' : 'inscrições pausadas'}.`;
+                  })}>
+            {ocupado === 'pausar' ? 'um instante…'
+              : `Pausar as ${resumo.inscritos_ativos} em cadência`}
+          </button>
+
+          <button className="btn" disabled={!!ocupado || resumo.inscritos_pausados === 0}
+                  onClick={() => void fazer('retomar', async () => {
+                    const n = await pausarInscricoes(campanha.id, false);
+                    return `${n} ${n === 1 ? 'inscrição retomada' : 'inscrições retomadas'}.`;
+                  })}>
+            {ocupado === 'retomar' ? 'um instante…'
+              : `Retomar as ${resumo.inscritos_pausados} pausadas`}
+          </button>
+        </div>
+      )}
+
+      {nota && <Aviso tipo="ok">{nota}</Aviso>}
+    </div>
+  );
+}
+
+/**
+ * Qual cadência esta campanha roda (D47).
+ *
+ * A pergunta é da campanha, e não de cada inscrição: perguntá-la N vezes é dar
+ * N chances de responder diferente, e a resposta errada não dá erro — dá
+ * campanha "concluída" sem mensagem nenhuma (D35).
+ *
+ * Repontar não move quem já está inscrito. Cada enrollment carrega o seu
+ * `flow_version_id` desde a primeira migration, e é ele que o agendador lê:
+ * quem está em curso termina na versão em que entrou (D9).
+ */
+function Cadencia({ campanha, versoes, podeOperar, aoMudar, aoFalhar }: {
+  campanha: Camp; versoes: VersaoDeFlow[]; podeOperar: boolean;
+  aoMudar(): Promise<void>; aoFalhar(m: string): void;
+}) {
+  const [escolha, setEscolha] = useState('');
+  const [salvando, setSalvando] = useState(false);
+
+  const atual = versoes.find((v) => v.id === campanha.flow_version_id) ?? null;
+  const alvo = versoes.find((v) => v.id === escolha) ?? null;
+
+  // O cruzamento, calculado antes de qualquer chamada. Vazio é recusado pela
+  // função; parcial é legítimo e só precisa ser dito.
+  const cruzam = alvo
+    ? alvo.canais.filter((c) => campanha.canais_habilitados.includes(c))
+    : null;
+
+  async function ligar() {
+    setSalvando(true); aoFalhar('');
+    try { await definirFlowDaCampanha(campanha.id, escolha); setEscolha(''); await aoMudar(); }
+    catch (e) { aoFalhar(mensagemDeErro(e)); }
+    finally { setSalvando(false); }
+  }
+
+  return (
+    <>
+      <Secao titulo="Cadência" nota={atual ? `${atual.passos} passos` : 'ainda não ligada'} />
+      <div className="painel">
+        {atual ? (
+          <p style={{ color: 'var(--ink-2)', fontSize: 13, marginTop: 0 }}>
+            <b style={{ color: 'var(--ink)' }}>{atual.flow_nome}</b> · v{atual.versao} ·{' '}
+            {atual.passos} {atual.passos === 1 ? 'passo' : 'passos'} em{' '}
+            {atual.canais.map((c) => NOME_CANAL[c] ?? c).join(', ')}
+          </p>
+        ) : (
+          <Aviso tipo="erro">
+            Esta campanha não aponta cadência nenhuma. Inscrever alguém agora
+            criaria uma inscrição sem passo para percorrer — e isso não dá
+            erro: dá uma campanha &ldquo;concluída&rdquo; sem que ninguém tenha
+            recebido nada.
+          </Aviso>
+        )}
+
+        {podeOperar && (
+          <>
+            <div className="campo">
+              <label htmlFor="cad-v">{atual ? 'Trocar por' : 'Escolher a cadência'}</label>
+              <select id="cad-v" value={escolha} onChange={(e) => setEscolha(e.target.value)}>
+                <option value="">escolha…</option>
+                {versoes.filter((v) => v.id !== campanha.flow_version_id).map((v) => (
+                  <option key={v.id} value={v.id}>
+                    {v.flow_nome} · v{v.versao} · {v.passos} passos ·{' '}
+                    {v.canais.map((c) => NOME_CANAL[c] ?? c).join(', ')}
+                  </option>
+                ))}
+              </select>
+              <span className="ajuda">
+                Trocar aqui não move quem já está inscrito: cada inscrição
+                termina na versão em que entrou.
+              </span>
+            </div>
+
+            {cruzam?.length === 0 && (
+              <Aviso tipo="erro">
+                Nenhum canal em comum: a cadência usa{' '}
+                {alvo?.canais.map((c) => NOME_CANAL[c] ?? c).join(', ')} e a campanha
+                habilita {campanha.canais_habilitados.map((c) => NOME_CANAL[c] ?? c).join(', ')}.
+                Todo passo seria pulado. A ligação é recusada.
+              </Aviso>
+            )}
+
+            {alvo && cruzam && cruzam.length > 0 && cruzam.length < alvo.canais.length && (
+              <Aviso tipo="neutro">
+                Cruzamento parcial, e isso é permitido: os passos em{' '}
+                {alvo.canais.filter((c) => !cruzam.includes(c))
+                  .map((c) => NOME_CANAL[c] ?? c).join(', ')}{' '}
+                são pulados porque a campanha não habilita esses canais.
+              </Aviso>
+            )}
+
+            <button className="btn prim"
+                    disabled={!escolha || salvando || cruzam?.length === 0}
+                    onClick={() => void ligar()}>
+              {salvando ? 'ligando…' : atual ? 'Trocar a cadência' : 'Ligar a cadência'}
+            </button>
+          </>
+        )}
+      </div>
+    </>
+  );
+}
+
+/**
+ * Quem responde por cada canal desta campanha.
+ *
+ * `atribuir_agente` deriva o canal do próprio agente — um argumento a menos
+ * para errar — e a chave `(campaign_id, canal)` garante um agente por canal.
+ * Canal habilitado sem agente aparece escrito, porque o efeito de não ter um
+ * é o mesmo silêncio de sempre: a resposta chega e ninguém a responde.
+ */
+function Agentes({ campanha, agentes, atribuidos, podeOperar, aoMudar, aoFalhar }: {
+  campanha: Camp; agentes: Agente[]; atribuidos: AgenteDaCampanha[]; podeOperar: boolean;
+  aoMudar(): Promise<void>; aoFalhar(m: string): void;
+}) {
+  const [salvando, setSalvando] = useState('');
+
+  async function atribuir(agente: string) {
+    setSalvando(agente); aoFalhar('');
+    try { await atribuirAgente(campanha.id, agente); await aoMudar(); }
+    catch (e) { aoFalhar(mensagemDeErro(e)); }
+    finally { setSalvando(''); }
+  }
+
+  const semAgente = campanha.canais_habilitados.filter(
+    (c) => !atribuidos.some((a) => a.canal === c));
+
+  return (
+    <>
+      <Secao titulo="Quem responde"
+             nota={`${atribuidos.length} de ${campanha.canais_habilitados.length} canais com agente`} />
+      <div className="painel">
+        {campanha.canais_habilitados.map((canal) => {
+          const atual = atribuidos.find((a) => a.canal === canal);
+          // Só agentes DO canal: o agente carrega o seu, e a função o deriva.
+          const candidatos = agentes.filter((a) => a.canal === canal);
+          return (
+            <div className="campo" key={canal}>
+              <label htmlFor={`ag-${canal}`} style={{ color: corCanal(canal) }}>
+                {NOME_CANAL[canal] ?? canal}
+              </label>
+              {candidatos.length === 0 ? (
+                <p style={{ color: 'var(--ink-2)', fontSize: 13, margin: '2px 0 0' }}>
+                  Nenhum agente cadastrado para este canal.
+                </p>
+              ) : podeOperar ? (
+                <select id={`ag-${canal}`} value={atual?.agent_id ?? ''}
+                        disabled={!!salvando}
+                        onChange={(e) => { if (e.target.value) void atribuir(e.target.value); }}>
+                  <option value="">ninguém ainda</option>
+                  {candidatos.map((a) => (
+                    <option key={a.id} value={a.id}>
+                      {a.nome} · {a.papel}{a.pronto ? '' : ' · incompleto'}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <p style={{ color: 'var(--ink-2)', fontSize: 13, margin: '2px 0 0' }}>
+                  {agentes.find((a) => a.id === atual?.agent_id)?.nome ?? 'ninguém ainda'}
+                </p>
+              )}
+            </div>
+          );
+        })}
+
+        {semAgente.length > 0 && (
+          <Aviso tipo="neutro">
+            Sem agente em{' '}
+            {semAgente.map((c) => NOME_CANAL[c] ?? c).join(', ')}. A cadência roda
+            igual — o agente entra quando alguém responde, e resposta encerra o
+            enrollment de qualquer forma (D7). O que se perde é ter quem
+            converse depois disso.
+          </Aviso>
+        )}
+      </div>
     </>
   );
 }

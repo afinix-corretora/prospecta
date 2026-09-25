@@ -59,6 +59,12 @@ GRANT ALL ON ALL TABLES IN SCHEMA public TO authenticated;
 -- provaria nada sobre as políticas.
 GRANT SELECT ON ALL TABLES IN SCHEMA public TO anon;
 GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO authenticated;
+-- E logo em seguida estreita de volta. No Supabase o GRANT ALL acima vem do
+-- default privilege e acontece no CREATE TABLE, então o REVOKE da migration
+-- fica de pé; aqui ele viria DEPOIS e desfaria a migration em silêncio, e o
+-- suite conferiria uma superfície mais larga que a de produção. A grade mora
+-- numa função justamente para poder ser chamada pelo nome daqui (D54).
+DO \$\$ BEGIN PERFORM privado.estreitar_escrita_do_cliente(); END \$\$;
 -- Sem GRANT EXECUTE em massa: a migration de endurecimento decide, nominalmente,
 -- o que o papel authenticated pode chamar. Conceder tudo aqui faria o teste
 -- rodar numa superfície mais larga que a de produção.
@@ -112,6 +118,7 @@ rodar dreno       "$RAIZ/tests/dreno.sql"
 rodar flow_campanha "$RAIZ/tests/flow_da_campanha.sql"
 rodar opt_out   "$RAIZ/tests/opt_out.sql"
 rodar devolucao  "$RAIZ/tests/devolucao.sql"
+rodar superficie "$RAIZ/tests/superficie_de_escrita.sql"
 
 # ---------------------------------------------------------------------------
 # Adapters de canal — TypeScript, sem rede (fetch injetado).
@@ -156,6 +163,11 @@ echo "→ para onde o link de acesso volta (TypeScript)"
 node --experimental-strip-types --test "$RAIZ/tests/retorno.test.ts" \
   | grep -E "^# (tests|pass|fail)|^not ok"
 
+echo ""
+echo "→ o que o produto consegue entregar hoje (TypeScript)"
+node --experimental-strip-types --test "$RAIZ/tests/entregaveis.test.ts" \
+  | grep -E "^# (tests|pass|fail)|^not ok"
+
 # ---------------------------------------------------------------------------
 # A fronteira. Os testes acima trabalham com cópias — o de TypeScript repete
 # as expressões da trava, o de SQL usa identidades escritas à mão. Aqui a
@@ -167,6 +179,16 @@ echo "→ planilha ponta a ponta (PlanilhaSource → ingerir_contato)"
 BANCO_FONTE="$(novo_banco fonte)"
 node --experimental-strip-types "$RAIZ/tests/planilha_para_sql.ts" \
   | psql -v ON_ERROR_STOP=1 -d "$BANCO_FONTE" -f -
+
+# A outra fronteira, e da mesma natureza: duas listas escritas à mão, em
+# linguagens diferentes, que precisam concordar. `tem_adapter` no catálogo é o
+# que o pool lê; `adapters/registro.ts` é o que o despachante consulta. Nada as
+# comparava, e as duas divergências possíveis falham em silêncio.
+echo ""
+echo "→ catálogo x registro de adapters (tem_adapter)"
+BANCO_REG="$(novo_banco registro)"
+node --experimental-strip-types "$RAIZ/tests/registro_para_sql.ts" \
+  | psql -v ON_ERROR_STOP=1 -d "$BANCO_REG" -f -
 
 # ---------------------------------------------------------------------------
 # Concorrência: o agendador precisa de SKIP LOCKED de verdade, não só no texto

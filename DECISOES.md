@@ -1405,3 +1405,154 @@ teste, que é imutável e não se apaga.
 Entrar no app ainda depende da lista de endereços do Supabase (D50): o link chega apontando para
 `localhost:3000`. O tenant existir não conserta isso — são dois bloqueios independentes, e este era
 o que estava do meu lado.
+
+---
+
+### D54 — Você conseguia começar e não conseguia parar
+
+**Contexto.** Com o tenant de teste criado e o Hub abrindo, a pergunta deixou de ser "o schema está
+certo" e passou a ser "o produto faz o que promete". A auditoria das quatro vertentes — UI, canais,
+alocação de remetente, esquema de flows — achou quatro buracos, e os quatro são da mesma família:
+**o motor sabia fazer, e nenhuma tela mandava.**
+
+#### 1. Os três freios existiam e ninguém os puxava
+
+`processar_vencidos` pula campanha com `ativa = false` desde a primeira migration. Pula enrollment
+`pausado`. `remetentes_disponiveis` pula conta fora do estado `ativo`. Os três estão testados desde
+sempre — e **nenhuma tela escrevia nenhuma das três colunas.** Dava para começar uma cadência pelo
+produto e não dava para pará-la sem abrir o painel do Supabase, que é justamente o que o D26 diz
+que o produto não pode exigir.
+
+O RLS já autorizava: `pode_operar` para campanha e enrollment, `pode_administrar` para remetente.
+Pelo D41, então, a tela escreve **direto na tabela** — criar `pausar_campanha()` em `public` seria
+repetir em PL/pgSQL o que a política já diz.
+
+#### 2. Mas o privilégio por baixo da política estava largo
+
+Aqui o conserto virou outra coisa. A grade que o Supabase instala por padrão dá `UPDATE` de
+**tabela inteira** ao papel `authenticated`, e **RLS decide quais LINHAS, nunca quais COLUNAS.** Um
+cliente autenticado do próprio tenant podia, por uma chamada de PostgREST:
+
+| o que | por que importa |
+|---|---|
+| `UPDATE sender_accounts SET enviados_na_janela = 0` | a invariante 3 furada **por fora** do motor: manda-se o dobro da quota |
+| `UPDATE enrollments SET next_run_at = ...` | escolher quando o agendador dispara |
+| `UPDATE enrollments SET passo_atual = ...` | escolher **o que** ele dispara |
+| `UPDATE campaigns SET tipo = 'morna'` | mudar o pool permitido (D4) sem tocar em remetente nenhum |
+
+Nada disso nasceu com a tela de ligar/desligar. A tela só foi a primeira vez que alguém precisou de
+**uma** dessas colunas — e foi a hora de parar de dar as outras vinte junto. A grade passou a ser
+por coluna:
+
+```
+campaigns        → (nome, objetivo, ativa, flow_version_id)
+enrollments      → (status)
+sender_accounts  → (apelido, quota_diaria, estado)
+```
+
+Encerrar um enrollment à mão continua impossível, e **não por grant**: o CHECK
+`enrollments_encerramento_coerente` exige que `encerrado` venha com `encerrado_em` e
+`motivo_encerramento`. Sem privilégio nessas duas colunas, o `UPDATE` que tentar
+`status = 'encerrado'` bate no CHECK — e ressuscitar um encerrado bate no mesmo CHECK pelo outro
+lado. Encerramento é fato do motor, e agora é fato do motor **por construção**.
+
+#### 3. E o vizinho, que só apareceu ao conferir
+
+Conferir a grade no projeto depois de aplicar mostrou o que estava ao lado: `messages`,
+`message_events` e `outbox` continuavam com INSERT, UPDATE e DELETE de tabela inteira — e nenhuma
+tela jamais escreveu em nenhuma das três. O que isso deixava fazer:
+
+- `UPDATE messages SET status = 'enviado'` numa `pendente`: a mensagem nunca sai e o painel diz que
+  saiu. Ao contrário, `enviado` → `pendente` é despachar de novo, a invariante 1 furada por fora;
+- `UPDATE messages SET conteudo = ...` numa que está na fila: o texto que o shadow mode mostrou
+  (D42) não é o que vai sair;
+- `INSERT INTO message_events (tipo = 'respondido')`: o gatilho `encerrar_por_resposta` encerra a
+  cadência inteira de quem não respondeu nada. **A invariante 4 disparada por quem quiser**;
+- `INSERT INTO outbox`: escrever no CRM do cliente um fato inventado, pela porta que o D3 abriu
+  justamente para ser estreita.
+
+Revogado o INSERT/UPDATE/DELETE das três, `SELECT` mantido (a tela da campanha lê mensagem e
+evento). Antes de revogar, conferida uma a uma cada função que escreve nelas: todas são do worker, e
+`authenticated` não pode executar nenhuma.
+
+Fechar `enrollments.next_run_at` e deixar `messages.status` aberta seria trocar de porta, não
+fechar.
+
+#### 4. A campanha nascia sem flow
+
+O D47 deu à campanha a coluna `flow_version_id` e o ato de apontá-la — e deixou de fora o único
+lugar do produto que cria os dois lados na mesma chamada. `criar_campanha_de_modelo` cria campanha,
+flow, versão e passos, **devolve os dois ids, e não os liga.** Toda campanha nascida pelo Hub
+nascia órfã.
+
+O efeito é do tipo que este arquivo já catalogou: campanha sem flow não dá erro na tela; ela faz
+`inscrever_pela_campanha` recusar quando alguém finalmente for inscrever — depois de importar a
+planilha, depois de escolher os contatos. É a pergunta do D47 ("qual flow esta campanha roda")
+respondida com "nunca".
+
+A ligação passou a ser feita **chamando `definir_flow_da_campanha`**, e não com um `UPDATE` ali
+dentro: a conferência de canais do D47 mora nela. Cruzar não pode falhar neste caminho — os passos
+foram filtrados justamente pelos canais da campanha — e é por isso que chamar custa nada e repetir
+a regra custaria a próxima divergência entre as duas cópias.
+
+E dentro da função, não na tela, porque `tests/tenants.sql` e o backfill chamam
+`criar_campanha_de_modelo` direto: ligar do lado de fora deixaria esses caminhos com o defeito, e
+deixaria uma janela — criou, caiu a rede, campanha órfã — que dentro da função não existe.
+
+#### 5. O trio do D47 não tinha consumidor
+
+`definir_flow_da_campanha`, `inscrever_pela_campanha` e `prever_inscricao_pela_campanha` estavam
+escritas, testadas, com `EXECUTE` concedido a `authenticated` — e **zero chamadas no app**. A tela
+de contatos continuava pedindo a versão de flow numa lista de todas as versões do cliente, com o
+canal escrito dos dois lados para a pessoa mesma reparar se cruzavam. Era o contorno que o D47
+existe para remover, sobrevivendo ao D47.
+
+Agora a tela da campanha aponta o flow (uma vez), e a tela de contatos só **mostra** qual é.
+
+#### 6. "Resgate por Direct" era oferecido e não podia enviar
+
+O Hub oferecia um modelo só de Instagram num catálogo onde nenhum provedor de Instagram tem
+adapter. Criar funcionava, inscrever funcionava, e o motor adiava passo a passo para sempre.
+
+O cruzamento agora é feito **antes de oferecer**, e separa dois "não" que não são o mesmo:
+
+- **`sem_adapter`** — nenhum provedor do canal sabe enviar. Não é configuração que falta, é código
+  que não existe (D30). O modelo aparece marcado e não abre.
+- **`sem_remetente`** — o canal sabe enviar, este cliente ainda não tem conta. Abre, com aviso:
+  criar a campanha antes de cadastrar o chip é ordem legítima de trabalho.
+
+Fundir os dois num "indisponível" mandaria a pessoa procurar uma configuração que não existe.
+
+#### 7. E a pergunta que ninguém tinha feito: as duas listas concordam?
+
+`channel_provider_catalog.tem_adapter` é o que o pool lê (D31). `adapters/registro.ts` é o que o
+despachante consulta. Duas listas escritas à mão, em linguagens diferentes, e **nada as comparava.**
+As duas divergências possíveis falham de jeitos opostos:
+
+- `tem_adapter = true` sem entrada no registro → o pool oferece, o despachante levanta "provedor sem
+  adapter" na hora do envio, e fica como falha **da mensagem**, não como erro de cadastro;
+- entrada no registro com `tem_adapter = false` → o adapter existe, funciona, e o pool nunca oferece
+  a conta. O passo é adiado para sempre e **nada aparece como erro**.
+
+`tests/registro_para_sql.ts` deriva a tabela do próprio `PROVEDORES_POR_CANAL` e compara, pelo mesmo
+padrão de `planilha_para_sql.ts`. O `smtp` cai do lado certo pela regra, não por exceção escrita —
+que é o que prova que a regra está certa.
+
+#### O que este D repete dos anteriores
+
+Três coisas, e todas já estavam escritas aqui:
+
+1. **Coluna que ninguém lê é decoração** (D31, D46). `ativa`, `status = 'pausado'` e
+   `estado = 'desativado'` eram três `tem_adapter` esperando.
+2. **Falha silenciosa é pior que exceção** (D35, D45, D47). Campanha órfã, modelo sem adapter e
+   registro divergente não dão erro nenhum — dão campanha "concluída" sem mensagem.
+3. **Ao abrir uma porta, olhar as vizinhas.** A grade de `enrollments` só vale se a de `messages`
+   também valer. É o "o que mais assume que ele é curto?" do D37, aplicado a privilégio.
+
+#### O que fica para depois
+
+Restam tabelas com `UPDATE` de tabela inteira para `authenticated` que nenhuma tela escreve —
+`contacts`, `contact_identities`, `flow_steps`, `flow_versions`, `flows`, `agents`. Nenhuma delas
+carrega estado do motor como as seis acima, e por isso não entraram agora: a regra a escrever é
+"quem não escreve não tem privilégio", e ela merece uma passada própria, derivada do schema como os
+três meta-testes do D18 — não uma lista à mão que envelhece sem avisar.

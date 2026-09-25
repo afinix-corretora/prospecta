@@ -5,6 +5,10 @@
  * que alguém esquecesse, ninguém notaria a diferença.
  */
 import { sb } from './supabase';
+import { cruzarEntregaveis } from './entregaveis';
+import type { CanalEntregavel, MotivoDoCanal } from './entregaveis';
+
+export type { CanalEntregavel, MotivoDoCanal };
 
 export interface ProvedorCanal {
   slug: string;
@@ -13,6 +17,9 @@ export interface ProvedorCanal {
   descricao: string;
   oficial: boolean;
   tem_adapter: boolean;
+  /** Fora do ar no catálogo. O pool pergunta `tem_adapter AND ativo` antes de
+   *  escolher (D31), então a tela lê as duas colunas, não uma. */
+  ativo: boolean;
   campos: CampoProvedor[];
   docs_url: string | null;
   ordem: number;
@@ -60,6 +67,9 @@ export interface Campanha {
   ativa: boolean;
   canais_habilitados: string[];
   template_slug: string | null;
+  /** A versão de flow que esta campanha roda hoje. NULL = ainda não ligada,
+   *  e nesse estado inscrever recusa alto em vez de encerrar vazio (D47). */
+  flow_version_id: string | null;
 }
 
 export interface Modelo {
@@ -117,7 +127,7 @@ async function tabela<T>(nome: string, colunas: string, ordem?: string): Promise
 
 export const lerProvedoresCanal = () =>
   tabela<ProvedorCanal>('channel_provider_catalog',
-    'slug, canal, nome, descricao, oficial, tem_adapter, campos, docs_url, ordem', 'ordem');
+    'slug, canal, nome, descricao, oficial, tem_adapter, ativo, campos, docs_url, ordem', 'ordem');
 
 export const lerProvedoresIA = () =>
   tabela<ProvedorIA>('ai_provider_catalog',
@@ -135,7 +145,8 @@ export const lerServidores = () =>
   tabela<Servidor>('provider_servers', 'id, provedor, nome, base_url, admin_secret_id, ativo', 'nome');
 
 export const lerCampanhas = () =>
-  tabela<Campanha>('campaigns', 'id, nome, tipo, objetivo, ativa, canais_habilitados, template_slug');
+  tabela<Campanha>('campaigns',
+    'id, nome, tipo, objetivo, ativa, canais_habilitados, template_slug, flow_version_id');
 
 export const lerModelos = () =>
   tabela<Modelo>('campaign_templates', 'slug, nome, descricao, objetivo, tipo, canais, passos, ordem', 'ordem');
@@ -268,6 +279,107 @@ export async function criarCampanhaDeModelo(dados: {
   });
   if (error) throw error;
   return (data ?? [])[0] as { campaign_id: string; flow_version_id: string; passos_criados: number };
+}
+
+// ---------------------------------------------------------------------------
+// O que este cliente consegue entregar hoje (D54)
+// ---------------------------------------------------------------------------
+
+/**
+ * Cruza o catálogo com as contas do cliente. A regra mora em
+ * `entregaveis.ts`, pura, porque é ela que tem teste; aqui só entra a leitura.
+ */
+export async function lerCanaisEntregaveis(): Promise<CanalEntregavel[]> {
+  const [provedores, remetentes] = await Promise.all([lerProvedoresCanal(), lerRemetentes()]);
+  return cruzarEntregaveis(provedores, remetentes);
+}
+
+// ---------------------------------------------------------------------------
+// Ligar e desligar (D54)
+// ---------------------------------------------------------------------------
+//
+// As quatro escritas abaixo vão DIRETO na tabela, sem função em `public`. O
+// RLS já diz quem pode: `pode_operar` para campanha e inscrição,
+// `pode_administrar` para remetente. Criar `pausar_campanha()` só para repetir
+// isso em PL/pgSQL é o que o D41 manda não fazer.
+//
+// O que torna isso seguro não é esta camada — é a grade de privilégio por
+// coluna do D54: `authenticated` só tem UPDATE em `campaigns(ativa, ...)`,
+// `enrollments(status)` e `sender_accounts(apelido, quota_diaria, estado)`.
+// Uma tela errada aqui não alcança `next_run_at` nem `enviados_na_janela`.
+
+/** O freio da campanha inteira: o agendador pula campanha com `ativa` falso. */
+export async function alternarCampanha(id: string, ativa: boolean) {
+  const { error } = await sb.from('campaigns').update({ ativa }).eq('id', id);
+  if (error) throw error;
+}
+
+/**
+ * Pausa ou retoma TODAS as inscrições em curso de uma campanha.
+ *
+ * Pausar não apaga `next_run_at`: o relógio fica onde estava e retomar volta
+ * para o horário que já era devido. É por isso que o filtro olha o status de
+ * origem — retomar não pode ressuscitar quem encerrou, e `encerrado` é
+ * inalcançável daqui de qualquer forma (o CHECK de coerência pede
+ * `motivo_encerramento`, coluna que a tela não escreve).
+ *
+ * Devolve quantas linhas mudaram, para a tela dizer o que aconteceu em vez de
+ * só piscar.
+ */
+export async function pausarInscricoes(campanha: string, pausar: boolean): Promise<number> {
+  const { data, error } = await sb
+    .from('enrollments')
+    .update({ status: pausar ? 'pausado' : 'ativo' })
+    .eq('campaign_id', campanha)
+    .eq('status', pausar ? 'ativo' : 'pausado')
+    .select('id');
+  if (error) throw error;
+  return (data ?? []).length;
+}
+
+/** Tirar o chip do pool à mão. `circuito_aberto` é do breaker, não daqui. */
+export async function alternarRemetente(id: string, ativo: boolean) {
+  const { error } = await sb
+    .from('sender_accounts')
+    .update({ estado: ativo ? 'ativo' : 'desativado' })
+    .eq('id', id);
+  if (error) throw error;
+}
+
+// ---------------------------------------------------------------------------
+// A campanha aponta o seu flow (D47)
+// ---------------------------------------------------------------------------
+
+/** Liga a campanha a uma versão de flow. `null` desliga. */
+export async function definirFlowDaCampanha(campanha: string, versao: string | null) {
+  const { error } = await sb.rpc('definir_flow_da_campanha', {
+    p_campaign_id: campanha,
+    p_flow_version_id: versao,
+  });
+  if (error) throw error;
+}
+
+/** Quem responde por cada canal desta campanha. */
+export async function atribuirAgente(campanha: string, agente: string) {
+  const { error } = await sb.rpc('atribuir_agente', {
+    p_campaign_id: campanha,
+    p_agent_id: agente,
+  });
+  if (error) throw error;
+}
+
+export interface AgenteDaCampanha {
+  canal: ProvedorCanal['canal'];
+  agent_id: string;
+}
+
+export async function lerAgentesDaCampanha(campanha: string): Promise<AgenteDaCampanha[]> {
+  const { data, error } = await sb
+    .from('campaign_agents')
+    .select('canal, agent_id')
+    .eq('campaign_id', campanha);
+  if (error) throw error;
+  return (data ?? []) as AgenteDaCampanha[];
 }
 
 export async function criarTenant(nome: string, slug: string): Promise<string> {
@@ -430,14 +542,21 @@ export interface ContatoPrevisto {
   problema: string | null;
 }
 
-/** O que `inscrever` faria com cada contato, sem inscrever ninguém. */
+/**
+ * O que a inscrição faria com cada contato, sem inscrever ninguém.
+ *
+ * Sem `versao` de propósito (D47): qual flow a campanha roda é pergunta da
+ * campanha, e perguntá-la a cada inscrição é dar N chances de responder
+ * diferente — sendo que a resposta errada não dá erro, dá campanha
+ * "concluída" sem mensagem nenhuma. Campanha ainda sem flow não devolve lista
+ * vazia: devolve uma linha por contato dizendo por que não daria.
+ */
 export async function preverInscricao(dados: {
-  tenant: string; campanha: string; versao: string; contatos: string[];
+  tenant: string; campanha: string; contatos: string[];
 }): Promise<ContatoPrevisto[]> {
-  const { data, error } = await sb.rpc('prever_inscricao', {
+  const { data, error } = await sb.rpc('prever_inscricao_pela_campanha', {
     p_tenant: dados.tenant,
     p_campaign_id: dados.campanha,
-    p_flow_version_id: dados.versao,
     p_contatos: dados.contatos,
   });
   if (error) throw error;
@@ -450,12 +569,11 @@ export async function preverInscricao(dados: {
  * contato, pela mesma razão da importação: a que falha não leva as outras.
  */
 export async function inscrever(dados: {
-  contato: string; campanha: string; versao: string;
+  contato: string; campanha: string;
 }): Promise<string | null> {
-  const { data, error } = await sb.rpc('inscrever', {
+  const { data, error } = await sb.rpc('inscrever_pela_campanha', {
     p_contact_id: dados.contato,
     p_campaign_id: dados.campanha,
-    p_flow_version_id: dados.versao,
   });
   if (error) throw error;
   return (data ?? null) as string | null;

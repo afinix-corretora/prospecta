@@ -52,6 +52,11 @@ BEGIN
   PERFORM mo.confere('campanha guarda de qual modelo nasceu',
     v_camp.template_slug = 'resgate-multicanal');
   PERFORM mo.confere('campanha nasce ativa', v_camp.ativa);
+  -- D54: nasce LIGADA ao flow que ela mesma criou. Sem esta linha, o Hub
+  -- produzia campanha órfã e a descoberta ficava para a hora de inscrever.
+  PERFORM mo.confere('campanha nasce apontando a versão de flow criada',
+    v_camp.flow_version_id = r.flow_version_id,
+    coalesce(v_camp.flow_version_id::text, '(NULL — campanha órfã)'));
 
   PERFORM mo.confere('passos ficam em ordem contígua a partir de 1',
     (SELECT array_agg(ordem ORDER BY ordem) = ARRAY[1,2,3,4]
@@ -67,6 +72,31 @@ BEGIN
 
   PERFORM mo.confere('versão criada é a 1',
     (SELECT versao = 1 FROM flow_versions WHERE id = r.flow_version_id));
+END;
+$$;
+
+-- Em bloco próprio: se `inscrever_pela_campanha` levantar exceção (é o que ela
+-- faz com campanha sem flow), o rollback leva junto as asserções que já
+-- estavam gravadas no bloco — e o teste encolhe em vez de apontar (D38).
+DO $$
+DECLARE v_camp uuid;
+BEGIN
+  SELECT id INTO v_camp FROM campaigns WHERE nome = 'Resgate Q4';
+
+  INSERT INTO contacts (id, nome, origem)
+  VALUES ('0d000000-0000-0000-0000-0000000000d1', 'Contato do modelo', 'planilha');
+  INSERT INTO contact_identities (contact_id, canal, valor, valor_norm, origem)
+  VALUES ('0d000000-0000-0000-0000-0000000000d1', 'whatsapp',
+          '+55 11 97000-7001', '5511970007001', 'planilha');
+
+  -- O que a ligação compra, medido pelo efeito e não pela coluna: dá para
+  -- inscrever sem dizer a versão. Antes do D54 isto recusava dizendo que a
+  -- campanha não tem flow — no fim da importação, não na criação.
+  PERFORM mo.confere('dá para inscrever sem escolher versão de flow (D47)',
+    inscrever_pela_campanha('0d000000-0000-0000-0000-0000000000d1', v_camp) IS NOT NULL);
+EXCEPTION WHEN others THEN
+  PERFORM mo.confere('dá para inscrever sem escolher versão de flow (D47)',
+    false, SQLSTATE || ': ' || SQLERRM);
 END;
 $$;
 

@@ -157,7 +157,7 @@ function Suprimir({ tenant, contato, aoSuprimir }: {
     } catch (e) { setErro(mensagemDeErro(e)); }
   }
 
-  if (erro) return <span style={{ color: 'var(--erro, crimson)', fontSize: 11 }}>{erro}</span>;
+  if (erro) return <span style={{ color: 'var(--crit)', fontSize: 11 }}>{erro}</span>;
 
   if (!confirmando) {
     return (
@@ -216,7 +216,6 @@ function Inscricao({ tenant, contatos, aoTerminar }: {
   const [campanhas, setCampanhas] = useState<Campanha[]>([]);
   const [versoes, setVersoes] = useState<VersaoDeFlow[]>([]);
   const [campanha, setCampanha] = useState('');
-  const [versao, setVersao] = useState('');
   const [passo, setPasso] = useState<Passo>('escolher');
   const [previsao, setPrevisao] = useState<ContatoPrevisto[]>([]);
   const [feitos, setFeitos] = useState(0);
@@ -230,10 +229,17 @@ function Inscricao({ tenant, contatos, aoTerminar }: {
   }, []);
 
   const campanhaAtual = campanhas.find((c) => c.id === campanha);
-  const versaoAtual = versoes.find((v) => v.id === versao);
 
-  // O aviso mais útil da tela, e ele aparece antes de qualquer chamada: um
-  // flow cujos canais não estão habilitados na campanha não manda nada.
+  // A versão NÃO é escolhida aqui: ela vem da campanha (D47). Esta tela só a
+  // exibe, para quem inscreve saber o que vai rodar — a escolha mora na tela
+  // da campanha, onde é feita uma vez.
+  const versaoAtual = useMemo(
+    () => versoes.find((v) => v.id === campanhaAtual?.flow_version_id) ?? null,
+    [versoes, campanhaAtual],
+  );
+
+  // Cruzamento parcial é legítimo: o motor pula o passo cujo canal a campanha
+  // não habilita (D4). O que este número mostra é quantos passos sobram de pé.
   const canaisUteis = useMemo(() => {
     if (!campanhaAtual || !versaoAtual) return null;
     return versaoAtual.canais.filter((c) => campanhaAtual.canais_habilitados.includes(c));
@@ -242,7 +248,7 @@ function Inscricao({ tenant, contatos, aoTerminar }: {
   async function prever() {
     setErro('');
     try {
-      setPrevisao(await preverInscricao({ tenant, campanha, versao, contatos }));
+      setPrevisao(await preverInscricao({ tenant, campanha, contatos }));
       setPasso('previsto');
     } catch (e) { setErro(mensagemDeErro(e)); }
   }
@@ -254,7 +260,7 @@ function Inscricao({ tenant, contatos, aoTerminar }: {
 
     for (const p of entram) {
       try {
-        const id = await inscrever({ contato: p.contact_id, campanha, versao });
+        const id = await inscrever({ contato: p.contact_id, campanha });
         if (id) r.ok += 1; else r.nulos += 1;
       } catch (e) {
         r.falhas.push(`${comoChamar(p)}: ${mensagemDeErro(e)}`);
@@ -287,36 +293,63 @@ function Inscricao({ tenant, contatos, aoTerminar }: {
           </select>
         </div>
 
-        <div className="campo">
-          <label htmlFor="i-fv">Versão de flow</label>
-          <select id="i-fv" value={versao}
-                  onChange={(e) => { setVersao(e.target.value); setPasso('escolher'); }}>
-            <option value="">escolha…</option>
-            {versoes.map((v) => (
-              <option key={v.id} value={v.id}>
-                {v.flow_nome} · v{v.versao} · {v.passos} passos · {v.canais.join(', ')}
-              </option>
-            ))}
-          </select>
-          {/* O schema não liga campanha a flow — a dupla só existe dentro de
-              `enrollments`. Por isso as duas escolhas são independentes, e por
-              isso o canal aparece no rótulo das duas. */}
-          <span className="ajuda">
-            Campanha e flow são escolhidos separadamente: o schema não guarda
-            essa ligação, ela nasce na inscrição.
-          </span>
-        </div>
+        {/* A cadência não se escolhe aqui: ela é da campanha (D47). Aparece
+            escrita porque quem inscreve precisa saber o que vai rodar — só
+            não precisa decidir de novo. */}
+        {campanhaAtual && (
+          <div className="campo">
+            <label>Cadência desta campanha</label>
+            {versaoAtual ? (
+              <p style={{ color: 'var(--ink-2)', fontSize: 13, margin: '2px 0 0' }}>
+                <b style={{ color: 'var(--ink)' }}>{versaoAtual.flow_nome}</b>{' '}
+                · v{versaoAtual.versao} · {versaoAtual.passos}{' '}
+                {versaoAtual.passos === 1 ? 'passo' : 'passos'} ·{' '}
+                {versaoAtual.canais.map((c) => NOME_CANAL[c] ?? c).join(', ')}
+              </p>
+            ) : (
+              <p style={{ color: 'var(--ink-2)', fontSize: 13, margin: '2px 0 0' }}>
+                <i>ainda não ligada</i>
+              </p>
+            )}
+            <span className="ajuda">
+              Qual cadência a campanha roda é escolhido na tela da campanha, uma
+              vez. Trocar lá não move quem já está inscrito: cada inscrição
+              carrega a versão em que entrou.
+            </span>
+          </div>
+        )}
 
-        {canaisUteis?.length === 0 && (
+        {campanhaAtual && !versaoAtual && (
           <Aviso tipo="erro">
-            Nenhum passo deste flow usa um canal habilitado na campanha
-            ({campanhaAtual?.canais_habilitados.join(', ')}). Inscrever não
-            daria erro — o motor percorreria todos os passos e encerraria como
-            concluído, sem mandar nada para ninguém.
+            Esta campanha ainda não aponta uma cadência. Inscrever agora seria
+            criar uma inscrição que não tem passo nenhum para percorrer — e
+            isso não dá erro, dá campanha &ldquo;concluída&rdquo; sem mensagem
+            nenhuma. Abra a campanha e escolha a cadência primeiro.
           </Aviso>
         )}
 
-        {campanha && versao && passo === 'escolher' && (
+        {canaisUteis?.length === 0 && (
+          <Aviso tipo="erro">
+            Nenhum passo desta cadência usa um canal habilitado na campanha
+            ({campanhaAtual?.canais_habilitados.map((c) => NOME_CANAL[c] ?? c).join(', ')}).
+            Inscrever não daria erro — o motor percorreria todos os passos e
+            encerraria como concluído, sem mandar nada para ninguém.
+          </Aviso>
+        )}
+
+        {canaisUteis && versaoAtual && canaisUteis.length > 0
+          && canaisUteis.length < versaoAtual.canais.length && (
+          <Aviso tipo="neutro">
+            A campanha habilita {canaisUteis.map((c) => NOME_CANAL[c] ?? c).join(', ')},
+            e a cadência também tem passo em{' '}
+            {versaoAtual.canais.filter((c) => !canaisUteis.includes(c))
+              .map((c) => NOME_CANAL[c] ?? c).join(', ')}. Esses passos são
+            pulados, não falham — é o comportamento esperado de flow multicanal
+            numa campanha de menos canais.
+          </Aviso>
+        )}
+
+        {campanha && versaoAtual && passo === 'escolher' && (
           <button className="btn prim" onClick={() => void prever()}>
             Conferir quem entraria
           </button>

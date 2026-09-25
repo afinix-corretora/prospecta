@@ -265,6 +265,28 @@ e elas têm teste automatizado obrigatório.**
   bundler: o arquivo é enviado e não faz parte do pacote. O fecho de imports conta ele de
   propósito, porque errar para o lado de pedir uma republicação a mais é barato, e errar para o
   outro é o digest passando verde sobre diferença real (D52).
+- **Nunca** deixar o motor com um freio que nenhuma tela puxa. `ativa`, `status = 'pausado'` e
+  `estado = 'desativado'` existiam desde a primeira migration, testados, e parar uma campanha
+  exigia o painel do Supabase — que é o D26 furado por omissão (D54).
+- **Nunca** confundir o que o RLS garante com o que o privilégio garante. Política decide quais
+  LINHAS; `GRANT UPDATE` de tabela inteira deixa escrever QUALQUER COLUNA delas. Foi assim que
+  zerar `enviados_na_janela` — a invariante 3 — ficou a uma chamada de PostgREST (D54).
+- **Nunca** dar privilégio de escrita numa tabela que nenhuma tela escreve. `messages`,
+  `message_events` e `outbox` são do worker: com INSERT aberto, `tipo = 'respondido'` encerrava a
+  cadência de quem não respondeu nada (D54).
+- **Nunca** fechar uma porta sem olhar as vizinhas. Estreitar `enrollments.next_run_at` e deixar
+  `messages.status` aberta é trocar de porta, não fechar — é o "o que mais assume isso?" do D37
+  aplicado a privilégio (D54).
+- **Nunca** criar os dois lados de uma ligação e não ligá-los. `criar_campanha_de_modelo` criava
+  campanha e versão de flow, devolvia os dois ids e deixava a campanha órfã: quem descobria era
+  quem fosse inscrever, depois de importar a planilha (D54).
+- **Nunca** oferecer no produto um canal que nenhum provedor sabe enviar, e nunca fundir esse "não
+  dá" com o "ainda não". `sem_remetente` se resolve cadastrando um chip; `sem_adapter` não se
+  resolve por tela nenhuma, e juntar os dois manda a pessoa procurar configuração que não existe
+  (D54).
+- **Nunca** deixar duas listas escritas à mão, em linguagens diferentes, dizerem a mesma coisa sem
+  se compararem. `tem_adapter` no catálogo e `PROVEDORES_POR_CANAL` no registro divergem em
+  silêncio dos dois lados: uma vira falha da mensagem, a outra vira passo adiado para sempre (D54).
 
 ---
 
@@ -321,6 +343,16 @@ e elas têm teste automatizado obrigatório.**
 > (`resumo_da_campanha`) e lido de `message_events` (`eventos_da_campanha`). É ela que torna o
 > shadow mode legível — sem ela, "rodou tudo e não enviou nada" é igual a "está quebrado".
 >
+> E desde o **D54** ela também **manda**: ligar e desligar a campanha, pausar e retomar as
+> inscrições, apontar qual cadência a campanha roda (o trio do D47, que existia sem consumidor) e
+> atribuir agente por canal. Tirar chip do pool é na tela do canal. Nenhuma dessas escritas ganhou
+> função em `public` — o RLS já autoriza, e pelo D41 repetir a política em PL/pgSQL é o que não se
+> faz. O que mudou por baixo foi o privilégio: `authenticated` deixou de ter `UPDATE` de tabela
+> inteira em `campaigns`, `enrollments` e `sender_accounts` (agora é por coluna) e deixou de
+> escrever em `messages`, `message_events` e `outbox`, que são do worker. `tests/run.sh` chama
+> `privado.estreitar_escrita_do_cliente()` pelo NOME depois de imitar o `GRANT ALL` do Supabase,
+> senão o suite conferiria uma superfície mais larga que a real.
+>
 > Falta da Fase 2: o backfill em si, que depende de acesso aos dados do projeto legado
 > `gtivnngoeccqbvfjiyne` — e com ele a comparação contra o Disparador.
 >
@@ -330,9 +362,10 @@ e elas têm teste automatizado obrigatório.**
 > **derivados do schema** cobram `tenant_id`, RLS e FK composta de toda tabela nova — lista escrita
 > à mão envelhece sem avisar, e essa já tinha perdido a `provider_servers` (D31).
 >
-> O schema está **aplicado no projeto `hucuwjvihqgftdjpnych`** (36 migrations no repositório, 42
+> O schema está **aplicado no projeto `hucuwjvihqgftdjpnych`** (40 migrations no repositório, 46
 > registros no projeto — duas corretivas de texto, uma separação, duas do D46 (superfície e
-> tenant explícito) e o bootstrap do tenant de teste, ver D32, D39, D46 e D53), conferido por
+> tenant explícito), o bootstrap do tenant de teste e a corretiva de `search_path` do D54, ver
+> D32, D39, D46, D53 e D54), conferido por
 > digest estrutural contra o banco de teste — colunas, constraints, índices, políticas, corpos de
 > função e a grade de privilégios batem byte a byte.
 >

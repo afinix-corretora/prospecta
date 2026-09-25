@@ -3,10 +3,13 @@ import { useNavigate } from 'react-router-dom';
 import { useSessao } from '../sessao';
 import { mensagemDeErro } from '../supabase';
 import {
-  criarCampanhaDeModelo, lerAgentes, lerCampanhas, lerCredenciaisIA, lerModelos,
-  lerProvedoresCanal, lerProvedoresIA, lerRemetentes, salvarCredencialIA,
+  criarCampanhaDeModelo, lerAgentes, lerCampanhas, lerCanaisEntregaveis, lerCredenciaisIA,
+  lerModelos, lerProvedoresCanal, lerProvedoresIA, lerRemetentes, salvarCredencialIA,
 } from '../dados';
-import type { Agente, Campanha, CredencialIA, Modelo, ProvedorCanal, ProvedorIA } from '../dados';
+import type {
+  Agente, CanalEntregavel, Campanha, CredencialIA, Modelo, MotivoDoCanal,
+  ProvedorCanal, ProvedorIA,
+} from '../dados';
 import {
   Aviso, Campo, Kpi, LinhaIndice, NOME_CANAL, Secao, corCanal,
 } from '../componentes/base';
@@ -52,6 +55,11 @@ export function Hub() {
     async () => ({
       campanhas: await lerCampanhas(),
       modelos: await lerModelos(),
+      // O que este cliente consegue entregar hoje. Oferecer um modelo cujo
+      // canal nenhum provedor sabe enviar é prometer um envio que o
+      // despachante não tem como fazer (D31) — e o efeito seria o silêncio de
+      // sempre: campanha criada, ninguém recebe, nada dá erro.
+      entregaveis: await lerCanaisEntregaveis(),
     }), [tenant?.tenant_id],
   );
   const [criando, setCriando] = useState<Modelo | null>(null);
@@ -60,7 +68,20 @@ export function Hub() {
 
   const campanhas: Campanha[] = dados?.campanhas ?? [];
   const modelos: Modelo[] = dados?.modelos ?? [];
+  const entregaveis: CanalEntregavel[] = dados?.entregaveis ?? [];
   const ativas = campanhas.filter((c) => c.ativa).length;
+
+  const motivoDe = (canal: string): MotivoDoCanal =>
+    entregaveis.find((e) => e.canal === canal)?.motivo ?? 'sem_adapter';
+
+  // Sem adapter em TODOS os canais é "não dá", e nenhuma tela resolve.
+  // Sem remetente é "ainda não", e cadastrar um chip resolve. A diferença
+  // decide se o modelo é bloqueado ou só avisado.
+  const impossivel = (m: Modelo) => m.canais.every((c) => motivoDe(c) === 'sem_adapter');
+  const semChip = (m: Modelo) =>
+    !impossivel(m) && m.canais.every((c) => motivoDe(c) !== 'entrega');
+
+  const bloqueados = modelos.filter(impossivel);
 
   return (
     <div className="wrap">
@@ -99,15 +120,43 @@ export function Hub() {
       </section>
 
       <Secao titulo="Modelos prontos" nota="cadência, base legal e canais já definidos — é só escolher" />
+
+      {bloqueados.length > 0 && (
+        <Aviso tipo="neutro">
+          {bloqueados.length === 1
+            ? <><b>{bloqueados[0]!.nome}</b> está </>
+            : <><b>{bloqueados.length} modelos</b> estão </>}
+          sem como enviar: nenhum provedor de{' '}
+          {[...new Set(bloqueados.flatMap((m) => m.canais))]
+            .map((c) => NOME_CANAL[c] ?? c).join(', ')}{' '}
+          tem adapter no catálogo. Não é configuração que falta — é código que
+          ainda não existe, e por isso o modelo aparece marcado em vez de
+          desaparecer: some da lista seria um mistério, marcado é uma resposta.
+        </Aviso>
+      )}
+
       <section className="indice">
-        {modelos.map((m) => (
-          <LinhaIndice
-            key={m.slug} icone="modelo" titulo={m.nome}
-            descricao={`${m.descricao} · ${m.passos.length} passos · ${m.canais.map((x) => NOME_CANAL[x] ?? x).join(', ')}`}
-            contagem={m.tipo}
-            aoClicar={opera ? () => setCriando(m) : undefined}
-          />
-        ))}
+        {modelos.map((m) => {
+          const nao = impossivel(m);
+          const talvez = semChip(m);
+          return (
+            <LinhaIndice
+              key={m.slug} icone="modelo" titulo={m.nome}
+              descricao={
+                `${m.descricao} · ${m.passos.length} passos · `
+                + `${m.canais.map((x) => NOME_CANAL[x] ?? x).join(', ')}`
+                + (nao ? ' · sem adapter para este canal'
+                   : talvez ? ' · nenhum remetente cadastrado ainda' : '')
+              }
+              contagem={nao ? 'não dá' : talvez ? 'falta chip' : m.tipo}
+              // Bloqueado só o que nenhuma tela resolve. "Falta chip" abre:
+              // criar a campanha antes de cadastrar o remetente é ordem
+              // legítima de trabalho, e a campanha nasce desligada de efeito
+              // de qualquer forma — o passo é adiado, não queimado (D31).
+              aoClicar={opera && !nao ? () => setCriando(m) : undefined}
+            />
+          );
+        })}
       </section>
 
       {criando && (

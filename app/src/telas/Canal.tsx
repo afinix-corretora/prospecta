@@ -3,7 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { useSessao } from '../sessao';
 import { mensagemDeErro, BASE_FUNCOES } from '../supabase';
 import {
-  criarRemetente, lerProvedoresCanal, lerRemetentes, lerServidores,
+  alternarRemetente, criarRemetente, lerProvedoresCanal, lerRemetentes, lerServidores,
   provisionarInstancia, salvarCredencial, salvarServidor,
 } from '../dados';
 import type { ProvedorCanal, Remetente, Servidor } from '../dados';
@@ -98,7 +98,10 @@ export function Canal() {
         <>
           <Secao titulo="Contas conectadas" nota={contas.length ? `${contas.length} no pool` : 'nenhuma ainda'} />
           <section className="indice">
-            {contas.length ? contas.map((r) => <LinhaConta key={r.id} conta={r} provedores={provedores} />) : (
+            {contas.length ? contas.map((r) => (
+              <LinhaConta key={r.id} conta={r} provedores={provedores}
+                          administra={administra} aoMudar={recarregar} />
+            )) : (
               <div className="item" style={{ cursor: 'default' }}><span className="txt">
                 <b>Nenhuma conta conectada</b>
                 <p>Sem conta, o motor adia o passo em vez de prometer envio que não acontece.</p>
@@ -124,24 +127,68 @@ export function Canal() {
   );
 }
 
-function LinhaConta({ conta, provedores }: { conta: Remetente; provedores: ProvedorCanal[] }) {
+/** O que cada estado de remetente significa para o pool (D54). */
+const ESTADO_CONTA: Record<string, string> = {
+  ativo: 'no pool',
+  // Quem escreve este é o breaker, e ele volta sozinho quando a janela passa.
+  // Por isso a tela o mostra e não o edita: mexer aqui seria discordar do
+  // motor sobre um fato que é dele.
+  circuito_aberto: 'fora do pool pelo circuito — o breaker devolve sozinho',
+  desativado: 'fora do pool à mão',
+};
+
+function LinhaConta({ conta, provedores, administra, aoMudar }: {
+  conta: Remetente; provedores: ProvedorCanal[];
+  administra: boolean; aoMudar(): Promise<void>;
+}) {
   const p = provedores.find((x) => x.slug === conta.provedor);
   const pct = conta.quota_diaria ? Math.round((conta.enviados_na_janela / conta.quota_diaria) * 100) : 0;
   const url = `${BASE_FUNCOES}/canal-webhook/${conta.webhook_token}`;
+  const [mexendo, setMexendo] = useState(false);
+  const [erro, setErro] = useState('');
+
+  const ativo = conta.estado === 'ativo';
+
+  async function alternar() {
+    setMexendo(true); setErro('');
+    try { await alternarRemetente(conta.id, !ativo); await aoMudar(); }
+    catch (e) { setErro(mensagemDeErro(e)); }
+    finally { setMexendo(false); }
+  }
+
   return (
     <div className="item" style={{ cursor: 'default', alignItems: 'flex-start' }}>
       <Icone nome={conta.canal} cor={corCanal(conta.canal)} />
       <span className="txt">
-        <b>{conta.apelido || conta.identificador}</b>
+        <b style={{ opacity: ativo ? 1 : 0.6 }}>{conta.apelido || conta.identificador}</b>
         <p>
           {p?.nome ?? conta.provedor} · pool {conta.tipo_permitido} ·{' '}
-          {conta.enviados_na_janela}/{conta.quota_diaria} hoje
+          {conta.enviados_na_janela}/{conta.quota_diaria} hoje ·{' '}
+          <b style={{ color: ativo ? 'var(--ok)' : 'var(--warn)' }}>
+            {ESTADO_CONTA[conta.estado] ?? conta.estado}
+          </b>
           {conta.provider_server_id ? ' · criado pela plataforma' : ''}
         </p>
         <p style={{ marginTop: 6 }}>
           <span style={{ color: 'var(--ink-3)' }}>webhook deste chip: </span>
           <Copiar texto={url} />
         </p>
+        {/* Só `ativo` e `desativado` são da tela. `circuito_aberto` é do
+            breaker: tirar a conta do circuito à mão seria mandar o motor
+            tentar de novo o que ele acabou de ver falhar. */}
+        {administra && conta.estado !== 'circuito_aberto' && (
+          <p style={{ marginTop: 6 }}>
+            <button className="btn" style={{ fontSize: 11, padding: '3px 8px' }}
+                    disabled={mexendo} onClick={() => void alternar()}>
+              {mexendo ? 'um instante…' : ativo ? 'Tirar do pool' : 'Devolver ao pool'}
+            </button>
+            <span className="ajuda" style={{ marginLeft: 8 }}>
+              Tirar do pool não cancela o que já está na fila: o despacho
+              rebalanceia as pendentes para outra conta (D37).
+            </span>
+          </p>
+        )}
+        {erro && <p style={{ color: 'var(--crit)', fontSize: 11 }}>{erro}</p>}
       </span>
       <span className={`delta ${pct >= 100 ? 'baixa' : pct > 60 ? 'neutra' : ''}`}>{pct}%</span>
     </div>
