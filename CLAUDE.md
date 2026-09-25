@@ -329,6 +329,25 @@ e elas têm teste automatizado obrigatório.**
   projetos do grupo já implementaram. O Kanban veio com sete implementações comparadas e as
   armadilhas já pagas em produção; quatro asserções de `tests/funil.sql` existem por bugs que este
   repositório nunca teve (D57).
+- **Nunca** perguntar "esta resposta é positiva?". A pergunta é "é recusa?", e o que não for recusa
+  vai para uma pessoa. Detectar entusiasmo foi o que falhou no projeto anterior — o classificador
+  reperguntava dados e reativava tarde e duplicado (D58).
+- **Nunca** tratar recusa da oferta como pedido de saída. "Não tenho interesse" é *não quero esta
+  oferta*, não *nunca mais fale comigo* — e estava na lista de opt-out valendo sozinho, suprimindo
+  para sempre quem só recusou. Supressão é irreversível; recusa não (D58).
+- **Nunca** fatorar dois classificadores que têm assimetrias opostas. `pedido_de_saida` erra para o
+  lado de não suprimir; `eh_recusa` erra para o lado de entregar o lead. Uma função comum convida a
+  "melhorar as duas de uma vez", que é o que não pode acontecer (D58).
+- **Nunca** isentar uma tabela de um meta-teste antes de conferir de QUAL pergunta ela está sendo
+  isenta. `recusa_termos` é catálogo e não tem `tenant_id` com razão — mas a mesma lista a isentava
+  também do teste de RLS, e ela precisava de RLS. Quem pegou foi o advisor (D58).
+- **Sempre** reler o que as TELAS afirmam depois de ligar uma automação nova. A coluna
+  "Oportunidade" dizia "nenhuma automação move cards para cá ainda" e ficou falsa no mesmo dia em
+  que o classificador entrou. Texto de tela envelhece como número escrito à mão (D58).
+- **Sempre** conferir se um teste antigo codifica o mundo ANTES da mudança. `tests/funil.sql` usava
+  "tenho interesse" como resposta que para em `respondeu`; com o classificador, ela vai para
+  `oportunidade` — o teste estava certo ontem e errado hoje, e o conserto é o texto do cenário,
+  não a asserção (D58).
 
 ---
 
@@ -385,6 +404,13 @@ e elas têm teste automatizado obrigatório.**
 > (`resumo_da_campanha`) e lido de `message_events` (`eventos_da_campanha`). É ela que torna o
 > shadow mode legível — sem ela, "rodou tudo e não enviou nada" é igual a "está quebrado".
 >
+> A resposta é **classificada** desde o **D58**: a pergunta é "é recusa?", nunca "é positiva?", e o
+> que não for recusa vira `oportunidade` no funil, marcado como decisão de classificador (`ia`).
+> `recusa_termos` é a lista, com a assimetria INVERTIDA em relação ao opt-out do D48 — lá o erro
+> caro é suprimir quem queria comprar, aqui é não entregar um lead bom. Foi ao pôr as duas listas
+> lado a lado que apareceu o defeito: "nao tenho interesse" e "sem interesse" estavam no opt-out
+> valendo sozinhos, suprimindo para sempre quem só tinha recusado a oferta.
+>
 > O **funil** existe desde o **D57**: `pipelines`, `pipeline_stages`, `deals` e `deal_activities`,
 > com Kanban na tela. O desenho veio da nota `Padrão - Kanban e Pipeline` da base de conhecimento
 > do grupo, que cataloga o padrão em sete projetos anteriores — estágio por `slug` e nunca por
@@ -440,7 +466,7 @@ e elas têm teste automatizado obrigatório.**
 > **derivados do schema** cobram `tenant_id`, RLS e FK composta de toda tabela nova — lista escrita
 > à mão envelhece sem avisar, e essa já tinha perdido a `provider_servers` (D31).
 >
-> O schema está **aplicado no projeto `hucuwjvihqgftdjpnych`** (46 migrations no repositório, 52
+> O schema está **aplicado no projeto `hucuwjvihqgftdjpnych`** (49 migrations no repositório, 55
 > registros no projeto — duas corretivas de texto, uma separação, duas do D46 (superfície e
 > tenant explícito), o bootstrap do tenant de teste e a corretiva de `search_path` do D54, ver
 > D32, D39, D46, D53 e D54), conferido por

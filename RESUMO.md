@@ -163,9 +163,20 @@ Três regras que valem conhecer:
 - **Uma campanha nova reabre quem estava em "Sem resposta"** — mas **nunca** quem pediu para sair.
 - **O motor nunca tira um card de "Oportunidade".** Só você faz isso.
 
-**Uma coisa que ainda não é automática:** nada move cards para **Oportunidade** sozinho. Marcar
-uma resposta como positiva é seu, por enquanto — a tela diz isso na própria coluna. O classificador
-que faria esse julgamento é o próximo passo.
+**E quem responde vira Oportunidade sozinho.** O motor não tenta adivinhar se a resposta foi
+entusiasmada: ele pergunta **"isto é uma recusa?"**. Se não for — e dúvida conta como não —, o card
+vai para Oportunidade e chega até você. Descartar um que não servia custa dois segundos; perder um
+lead bom é silencioso.
+
+O que conta como recusa está em `recusa_termos`: "sem interesse", "não tenho interesse", "não
+obrigado", e afins. **"Já tenho plano" NÃO é recusa**, de propósito — é exatamente quem quer trocar
+de operadora.
+
+**Importante, e é uma mudança:** quem responde *"não tenho interesse"* **deixou de ser suprimido**.
+Antes, essa resposta entrava na lista de opt-out e apagava a pessoa para sempre. Recusar esta oferta
+não é pedir para nunca mais ser contatado — quem quer isso diz "pare", "descadastrar", "não envie
+mais", e esses continuam suprimindo. Se você preferir o comportamento antigo, é uma linha na tabela
+`opt_out_termos`; me diga e eu volto.
 
 ---
 

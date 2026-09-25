@@ -139,10 +139,14 @@ SELECT fu.confere('mensagem enviada de verdade marca como contatado',
   fu.estagio('f0000000-0000-0000-0000-0000000000d2') = 'contatado',
   fu.estagio('f0000000-0000-0000-0000-0000000000d2'));
 
--- Respondeu.
+-- Respondeu — e o texto é uma RECUSA de propósito.
+--
+-- Desde o D58 uma resposta que não é recusa vai direto para `oportunidade`.
+-- Este arquivo testa o movimento do FUNIL, não a classificação, então usa um
+-- texto que para em `respondeu`. A classificação tem arquivo próprio.
 INSERT INTO message_events (tenant_id, message_id, tipo, payload)
 VALUES (:tenant, 'f0000000-0000-0000-0000-00000000aa03', 'respondido',
-        '{"texto":"tenho interesse"}'::jsonb);
+        '{"texto":"nao tenho interesse, obrigado"}'::jsonb);
 
 SELECT fu.confere('responder move para respondeu',
   fu.estagio('f0000000-0000-0000-0000-0000000000d3') = 'respondeu',
@@ -266,8 +270,11 @@ VALUES ('f0000000-0000-0000-0000-00000000aa06', :tenant, 'f0000000-0000-0000-000
         (SELECT id FROM contact_identities WHERE contact_id = 'f0000000-0000-0000-0000-0000000000d6'),
         'f0000000-0000-0000-0000-00000000005a', 'whatsapp', 'pendente', 'oi');
 UPDATE messages SET status = 'enviado' WHERE id = 'f0000000-0000-0000-0000-00000000aa06';
+-- Recusa, de novo: aqui o que se testa é achar o estágio pelo slug depois de
+-- renomeá-lo, e um texto não-recusa levaria o card para `oportunidade`.
 INSERT INTO message_events (tenant_id, message_id, tipo, payload)
-VALUES (:tenant, 'f0000000-0000-0000-0000-00000000aa06', 'respondido', '{"texto":"oi"}'::jsonb);
+VALUES (:tenant, 'f0000000-0000-0000-0000-00000000aa06', 'respondido',
+        '{"texto":"sem interesse"}'::jsonb);
 
 SELECT fu.confere('com o estágio renomeado, o motor continua achando pelo slug',
   fu.estagio('f0000000-0000-0000-0000-0000000000d6') = 'respondeu',

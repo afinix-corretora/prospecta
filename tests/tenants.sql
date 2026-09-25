@@ -350,7 +350,11 @@ CREATE VIEW tn.sem_dono AS SELECT unnest(ARRAY[
   -- de cliente. "pare" quer dizer a mesma coisa para todo mundo. Se um dia um
   -- cliente precisar de vocabulário próprio, isso é decisão — e a decisão
   -- passa por tirar esta linha daqui, que é exatamente o ponto da lista (D48).
-  'opt_out_termos'
+  'opt_out_termos',
+  -- `recusa_termos` pelo mesmo motivo, e é o par do de cima: um diz quem pede
+  -- para sair, o outro quem recusa a oferta. Foi por estarem lado a lado que
+  -- se viu que "nao tenho interesse" estava na lista errada (D58).
+  'recusa_termos'
 ]) AS tabela;
 
 CREATE VIEW tn.dominio AS

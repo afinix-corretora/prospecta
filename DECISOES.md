@@ -1865,3 +1865,98 @@ Repete o de sempre: coluna sem consumidor é decoração (D31, D46); silêncio �
 Acrescenta uma coisa nova, e ela é de método: **este é o primeiro arquivo do projeto escrito a
 partir de defeitos de outros projetos da casa, e não dos nossos.** Quatro das asserções de
 `tests/funil.sql` existem por causa de bugs que este repositório nunca teve. Sai mais barato assim.
+
+---
+
+### D58 — "Não tenho interesse" não é "pare de me mandar"
+
+**Contexto.** O pedido era fechar o laço do funil: resposta positiva encerra a cadência, o contato
+sai da fila e vira lead ganho. A base de conhecimento da casa tem o playbook, e ele começa por uma
+correção de rumo que custou caro ao projeto anterior:
+
+> IA qualificadora no resgate reperguntava dados e reativava tarde e duplicado → **classificador de
+> UMA mensagem** · prompt classificador **RECUSA × NÃO-RECUSA (dúvida = não-recusa)**
+
+A pergunta certa não é *"esta resposta é positiva?"*. É *"esta resposta é uma recusa?"* — e tudo o
+que não for recusa vai para uma pessoa. Tentar detectar entusiasmo é o que falhou; detectar recusa
+e entregar o resto é o que funcionou.
+
+#### A assimetria é o inverso da do D48
+
+O D48 é sobre opt-out, e lá o erro caro é o **falso positivo**: suprimir é imutável, e suprimir quem
+queria comprar apaga o cliente para sempre. A trava ficou apertada.
+
+Aqui é ao contrário:
+
+| erro | custo |
+|---|---|
+| falso positivo de recusa | um lead bom nunca chega ao consultor. **Caro e silencioso** |
+| falso negativo de recusa | alguém sem interesse aparece na coluna Oportunidade e uma pessoa descarta em dois segundos. **Barato e visível** |
+
+Então a trava muda de lado: a barra para chamar algo de recusa é **alta**. `ja tenho plano` fica de
+fora de propósito — quem já tem plano e respondeu é exatamente quem quer trocar de operadora.
+
+#### E aí apareceu o defeito que eu não estava procurando
+
+Com as duas listas lado a lado, ficou visível que `opt_out_termos` — do D48 — traz:
+
+```
+'nao tenho interesse'   vale sozinho
+'sem interesse'         vale sozinho
+```
+
+Ou seja: **quem respondia "não tenho interesse, obrigado" era suprimido para sempre**, em todos os
+canais, em todas as campanhas futuras, e o CRM recebia `opt_out` dizendo que a pessoa pediu para
+sair. Ela não pediu.
+
+Isso contradiz o que o próprio D48 escreveu:
+
+> Termo que nao tem outra leitura possivel numa resposta a prospeccao — "pare", "descadastrar" —
+> vale sozinho. **Falso positivo aqui e irreversivel.**
+
+"Não tenho interesse" **tem** outra leitura, e é a mais comum: *não quero esta oferta*. Não é *nunca
+mais fale comigo*. É a mesma família de erro que o D48 evitou em "quero sair do meu plano" — só que
+escapou nestes dois.
+
+Os dois termos saíram do opt-out e ficaram só na recusa. Quem quer de fato sair continua dizendo
+"pare", "descadastrar", "me tira da lista", "não envie mais" — esses não têm segunda leitura.
+
+**É decisão de operação, e é reversível em uma linha:** o vocabulário mora numa tabela exatamente
+para isso. O lado conservador (suprimir) protege de reclamação; o lado escolhido protege o lead.
+Escolhi o segundo porque a supressão é irreversível e a recusa não — que é o critério que o D48 já
+tinha escrito e não tinha aplicado a estes dois.
+
+#### Por que a função foi repetida em vez de fatorada
+
+`privado.eh_recusa` usa o mesmo algoritmo de `privado.pedido_de_saida`: normaliza, procura termo
+inteiro, exige contexto nas três palavras seguintes quando o termo é ambíguo. Fatorar as duas numa
+função comum seria a refatoração óbvia — e seria errada. **As duas listas têm assimetrias opostas**,
+e uma função comum convidaria alguém a "melhorar as duas de uma vez", que é precisamente o que não
+pode acontecer. A duplicação está escrita na migration com esse motivo.
+
+#### A ordem dos gatilhos, e a rede embaixo dela
+
+Os gatilhos de `message_events` disparam em ordem alfabética de nome:
+
+```
+message_events_encerra_enrollment      invariante 4
+message_events_funil                   D57: move para `respondeu`
+message_events_opt_out_no_texto        D48: suprime se pediu para sair
+message_events_qualifica_resposta      D58: este
+```
+
+O `q` não é estético — precisa rodar depois do opt-out. E se alguém mudar a ordem, `mover_deal`
+recusa de qualquer forma: quem pediu para sair está em `opt_out`, que é `perdido`, e automação não
+tira card de lá (D57). **A checagem explícita é para quem lê; a regra é para quando alguém mexer.**
+
+#### Dois achados de processo
+
+**O advisor pegou o que o suite não pega, pela terceira vez.** `recusa_termos` nasceu sem RLS, e o
+`get_advisors` marcou em nível ERROR. O suite não pegou porque eu tinha acabado de pôr a tabela na
+lista de isenção do meta-teste — ela é catálogo, não tem `tenant_id`, e isso está certo. Só que a
+lista isenta das **duas** perguntas de uma vez, e "catálogo sem tenant" e "tabela sem RLS" não são a
+mesma isenção. É a divisão do D19 funcionando exatamente como projetada.
+
+**O primeiro conserto foi o errado.** Quando o meta-teste apontou `recusa_termos`, minha primeira
+reação foi isentá-la no teste. Isentar é o que se faz com uma regra que não se aplica; aqui a regra
+se aplicava e a tabela é que estava errada. O advisor não deixou passar.

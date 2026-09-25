@@ -39,8 +39,6 @@ BEGIN
     'quero sair da lista',
     'pode descartar',
     'descartar meu cadastro',
-    'nao tenho interesse',
-    'sem interesse',
     'isso e spam',
     'me descadastre',
     'nao perturbe',
@@ -51,6 +49,38 @@ BEGIN
     END IF;
   END LOOP;
   PERFORM oo.confere('todo pedido de saída é reconhecido', v_escapou = '', v_escapou);
+END;
+$$;
+
+-- D58: "nao tenho interesse" e "sem interesse" SAÍRAM desta lista.
+--
+-- Estavam aqui valendo sozinhos, e o efeito era suprimir para sempre quem só
+-- tinha recusado a oferta. Recusar não é pedir para sair: quem não quer plano
+-- individual hoje pode querer PME em seis meses. É a mesma leitura que este
+-- arquivo já fazia de "quero sair do meu plano" — só não tinha sido aplicada
+-- a estas duas.
+--
+-- Elas continuam reconhecidas, em `recusa_termos`: o card fica em `respondeu`
+-- e não vira oportunidade. O que muda é que a pessoa não é apagada.
+DO $$
+DECLARE f text; v_suprimiu text := '';
+BEGIN
+  FOREACH f IN ARRAY ARRAY[
+    'nao tenho interesse',
+    'sem interesse',
+    'nao tenho interesse, obrigado'
+  ] LOOP
+    IF privado.pedido_de_saida(f) IS NOT NULL THEN
+      v_suprimiu := v_suprimiu || f || ' | ';
+    END IF;
+    -- E o cenário consegue falhar: se a recusa também deixasse de ser
+    -- reconhecida, a frase não seria classificada por ninguém.
+    IF privado.eh_recusa(f) IS NULL THEN
+      v_suprimiu := v_suprimiu || '(nem recusa: ' || f || ') | ';
+    END IF;
+  END LOOP;
+  PERFORM oo.confere('recusar a oferta não suprime — é recusa, não opt-out (D58)',
+    v_suprimiu = '', v_suprimiu);
 END;
 $$;
 

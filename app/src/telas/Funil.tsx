@@ -31,7 +31,7 @@ const EXPLICA: Record<string, string> = {
   contatado: 'recebeu ao menos uma mensagem de verdade',
   respondeu: 'respondeu — a cadência dele foi encerrada',
   sem_resposta: 'a cadência acabou e ninguém respondeu',
-  oportunidade: 'virou oportunidade',
+  oportunidade: 'respondeu e não recusou',
   opt_out: 'pediu para sair — não fale com esta pessoa',
 };
 
@@ -134,14 +134,15 @@ export function Funil() {
               </div>
               <p className="coluna-nota">{EXPLICA[e.slug] ?? ''}</p>
 
-              {/* A coluna de ganho não tem quem a preencha automaticamente
-                  ainda. Dizer isso é melhor do que deixar parecer que o motor
-                  a alimenta e não alimenta — é o defeito que a base da casa
-                  registra como "gerenciado por IA só na UI". */}
+              {/* Desde o D58 o classificador preenche esta coluna: resposta
+                  que não é recusa vira oportunidade. A frase anterior dizia
+                  que nada a alimentava, e ficou falsa no mesmo dia — é o
+                  oposto do defeito que a base da casa registra, e custa a
+                  mesma confiança. */}
               {e.tipo === 'ganho' && lista.length === 0 && (
                 <p className="coluna-vazia">
-                  Nenhuma automação move cards para cá ainda. Por enquanto, quem
-                  marca uma oportunidade é você.
+                  Vazia porque ninguém respondeu ainda. Quando alguém responder
+                  sem recusar, o card chega aqui sozinho.
                 </p>
               )}
 
@@ -189,6 +190,14 @@ export function Funil() {
           ninguém foi contatado. Responder move para <b>Respondeu</b>; a cadência
           acabar sem resposta move para <b>Sem resposta</b>; pedir para sair move
           para <b>Pediu para sair</b>.
+        </p>
+        <p style={{ color: 'var(--ink-2)', fontSize: 13 }}>
+          E quem responde sem recusar vai direto para <b>Oportunidade</b>. O motor
+          não tenta adivinhar se a resposta foi entusiasmada — ele pergunta
+          apenas <b>&ldquo;isto é uma recusa?&rdquo;</b>, e a dúvida conta como não.
+          Descartar um card que não servia custa dois segundos; perder um lead bom
+          é silencioso. Quem recusa fica em <b>Respondeu</b> e <b>não</b> é
+          suprimido — recusar esta oferta não é pedir para nunca mais ser contatado.
         </p>
         <p style={{ color: 'var(--ink-2)', fontSize: 13, marginBottom: 0 }}>
           Uma campanha nova traz de volta para prospecção quem estava em <b>Sem
