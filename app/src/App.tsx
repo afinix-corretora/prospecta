@@ -9,6 +9,7 @@ import { Importar } from './telas/Importar';
 import { Contatos } from './telas/Contatos';
 import { Campanha } from './telas/Campanha';
 import { Cadencia, Cadencias } from './telas/Cadencias';
+import { Respostas } from './telas/Respostas';
 import { Supressao } from './telas/Supressao';
 import { Writeback } from './telas/Writeback';
 import {
@@ -100,6 +101,7 @@ function Casca() {
           <Route path="/cadencias" element={<Cadencias />} />
           <Route path="/cadencias/:id" element={<Cadencia />} />
           <Route path="/contatos" element={<Contatos />} />
+          <Route path="/respostas" element={<Respostas />} />
           <Route path="/supressao" element={<Supressao />} />
           <Route path="/writeback" element={<Writeback />} />
           <Route path="/contatos/importar" element={<Importar />} />

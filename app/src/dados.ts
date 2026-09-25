@@ -712,6 +712,45 @@ export async function lerEventosDaCampanha(
 }
 
 // ---------------------------------------------------------------------------
+// O que as pessoas responderam (D56)
+// ---------------------------------------------------------------------------
+
+export interface RespostaRecebida {
+  ocorrido_em: string;
+  contact_id: string;
+  contato: string;
+  canal: ProvedorCanal['canal'];
+  destino: string;
+  campanha: string;
+  campaign_id: string;
+  passo: number | null;
+  /** Nulo quando o provedor não mandou o texto como string. Vazio é honesto;
+   *  "[object Object]" seria inventar que a pessoa escreveu isso. */
+  texto: string | null;
+  em_resposta_a: string;
+  suprimido: boolean;
+  motivo_supressao: string | null;
+}
+
+/**
+ * O que chegou de volta, mais recente primeiro.
+ *
+ * Sem `p_campaign_id` traz de todas as campanhas — que é como se olha o dia,
+ * porque resposta encerra a cadência do contato em todas elas (invariante 4).
+ */
+export async function lerRespostas(
+  tenant: string, campanha?: string, limite = 100,
+): Promise<RespostaRecebida[]> {
+  const { data, error } = await sb.rpc('respostas_recebidas', {
+    p_tenant: tenant,
+    p_campaign_id: campanha ?? null,
+    p_limite: limite,
+  });
+  if (error) throw error;
+  return (data ?? []) as RespostaRecebida[];
+}
+
+// ---------------------------------------------------------------------------
 // Writeback: o que o motor tem para contar ao CRM (D46)
 // ---------------------------------------------------------------------------
 

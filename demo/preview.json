@@ -266,7 +266,7 @@
             "ator": "provedor",
             "canal": "whatsapp",
             "contato": "Marina Alves",
-            "detalhe": "PROV-ca39f1b1",
+            "detalhe": "PROV-a1dc311a",
             "momento": 0,
             "remetente": "+55 11 99000-0002"
         },
@@ -275,7 +275,7 @@
             "ator": "provedor",
             "canal": "whatsapp",
             "contato": "Otávio Lima",
-            "detalhe": "PROV-108acc4d",
+            "detalhe": "PROV-12c09316",
             "momento": 0,
             "remetente": "+55 11 99000-0002"
         },
@@ -293,7 +293,7 @@
             "ator": "provedor",
             "canal": "whatsapp",
             "contato": "Paula Ribeiro",
-            "detalhe": "PROV-aa6b065e",
+            "detalhe": "PROV-b7ad14ed",
             "momento": 0,
             "remetente": "+55 11 99000-0002"
         },
@@ -302,7 +302,7 @@
             "ator": "provedor",
             "canal": "whatsapp",
             "contato": "Rui Nogueira",
-            "detalhe": "PROV-937cc68f",
+            "detalhe": "PROV-5c3c9cb5",
             "momento": 0,
             "remetente": "+55 11 99000-0002"
         },
@@ -311,7 +311,7 @@
             "ator": "provedor",
             "canal": "whatsapp",
             "contato": "Sônia Prado",
-            "detalhe": "PROV-2c5625e5",
+            "detalhe": "PROV-8e60c202",
             "momento": 0,
             "remetente": "+55 11 98000-0009"
         },
@@ -365,7 +365,7 @@
             "ator": "provedor",
             "canal": "whatsapp",
             "contato": "(sem nome)",
-            "detalhe": "PROV-96f9c010",
+            "detalhe": "PROV-5f93262e",
             "momento": 32,
             "remetente": "+55 11 98000-0009"
         },
@@ -437,7 +437,7 @@
             "ator": "provedor",
             "canal": "email",
             "contato": "Marina Alves",
-            "detalhe": "PROV-305eda91",
+            "detalhe": "PROV-a5aea2e8",
             "momento": 48,
             "remetente": "resgate@afinix-relaciona.com.br"
         },
@@ -446,7 +446,7 @@
             "ator": "provedor",
             "canal": "email",
             "contato": "Rui Nogueira",
-            "detalhe": "PROV-9961c22f",
+            "detalhe": "PROV-26a5c40d",
             "momento": 48,
             "remetente": "resgate@afinix-relaciona.com.br"
         },
@@ -491,7 +491,7 @@
             "ator": "provedor",
             "canal": "whatsapp",
             "contato": "Sônia Prado",
-            "detalhe": "PROV-ca25feef",
+            "detalhe": "PROV-55794136",
             "momento": 96,
             "remetente": "+55 11 98000-0009"
         },
@@ -554,7 +554,7 @@
             "ator": "provedor",
             "canal": "whatsapp",
             "contato": "Marina Alves",
-            "detalhe": "PROV-03ddaf50",
+            "detalhe": "PROV-3d1bdb9b",
             "momento": 120,
             "remetente": "+55 11 99000-0002"
         },
@@ -581,7 +581,7 @@
             "ator": "provedor",
             "canal": "whatsapp",
             "contato": "(sem nome)",
-            "detalhe": "PROV-4dfb37e2",
+            "detalhe": "PROV-74063066",
             "momento": 128,
             "remetente": "+55 11 98000-0009"
         }
@@ -1271,7 +1271,7 @@
             "provedor": "uazapi",
             "servidor": "dd000000-0000-0000-0000-0000000000d1",
             "identificador": "+55 11 98000-0009",
-            "webhook_token": "1f629107-7177-4946-a817-6ade74bcc6b6"
+            "webhook_token": "59de114a-13c0-43c7-9c2f-780fb3bd21ea"
         },
         {
             "tipo": "morna",
@@ -1288,7 +1288,7 @@
             "provedor": "gupshup",
             "servidor": null,
             "identificador": "+55 11 99000-0001",
-            "webhook_token": "76d44436-7408-4c54-9748-d93654881ac7"
+            "webhook_token": "ec8afd5f-14b9-43b2-be5a-fd307feb0f5a"
         },
         {
             "tipo": "morna",
@@ -1305,7 +1305,7 @@
             "provedor": "gupshup",
             "servidor": null,
             "identificador": "+55 11 99000-0002",
-            "webhook_token": "0afd21b4-56b5-466a-bb87-0be56b7bc177"
+            "webhook_token": "d042ca1d-366d-4e3e-b6ac-0bf0ff7c6e38"
         },
         {
             "tipo": "morna",
@@ -1323,7 +1323,7 @@
             "provedor": "resend",
             "servidor": null,
             "identificador": "resgate@afinix-relaciona.com.br",
-            "webhook_token": "86171101-bd56-4096-819b-396dd76860a4"
+            "webhook_token": "78884486-ee1c-4913-9e42-b63c52b94f8b"
         }
     ],
     "servidores": [

@@ -75,6 +75,13 @@ export function Rail({ provedores }: { provedores: ProvedorCanal[] }) {
           Supressão
         </button>
 
+        {/* A seta que volta. O texto da resposta era gravado e ilegível —
+            pessoa interessada esperando resposta que ninguém sabia que
+            existia. Primeiro nível porque é a pergunta mais urgente do dia. */}
+        <button aria-current={atual('/respostas')} onClick={() => nav('/respostas')}>
+          Respostas
+        </button>
+
         {/* A última seta do diagrama, e a única que sai do motor para fora.
             Primeiro nível porque a pergunta que ela responde — "o CRM já sabe?"
             — é operacional diária, não configuração. */}

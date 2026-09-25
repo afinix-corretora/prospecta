@@ -15,12 +15,13 @@ import { Aviso, Kpi, NOME_CANAL, Secao, corCanal } from '../componentes/base';
 import {
   alternarCampanha, atribuirAgente, definirFlowDaCampanha, lerAgentes,
   lerAgentesDaCampanha, lerCampanhas, lerEventosDaCampanha, lerMensagensDaCampanha,
-  lerResumoDaCampanha, lerVersoesDeFlow, pausarInscricoes,
+  lerRespostas, lerResumoDaCampanha, lerVersoesDeFlow, pausarInscricoes,
 } from '../dados';
 import type {
   Agente, AgenteDaCampanha, Campanha as Camp, EventoDaCampanha, MensagemComposta,
-  ResumoDaCampanha, VersaoDeFlow,
+  RespostaRecebida, ResumoDaCampanha, VersaoDeFlow,
 } from '../dados';
+import { ListaDeRespostas } from './Respostas';
 import { mensagemDeErro } from '../supabase';
 
 // Frases nominais, não verbos: "1 por resposta" funciona com qualquer
@@ -58,6 +59,7 @@ export function Campanha() {
   const [versoes, setVersoes] = useState<VersaoDeFlow[]>([]);
   const [agentes, setAgentes] = useState<Agente[]>([]);
   const [daCampanha, setDaCampanha] = useState<AgenteDaCampanha[]>([]);
+  const [respostas, setRespostas] = useState<RespostaRecebida[]>([]);
   const [erro, setErro] = useState('');
   const [carregando, setCarregando] = useState(true);
 
@@ -65,7 +67,7 @@ export function Campanha() {
     if (!tenant || !id) return;
     setErro('');
     try {
-      const [cs, r, ev, ms, vs, ags, ca] = await Promise.all([
+      const [cs, r, ev, ms, vs, ags, ca, rs] = await Promise.all([
         lerCampanhas(),
         lerResumoDaCampanha(tenant.tenant_id, id),
         lerEventosDaCampanha(tenant.tenant_id, id),
@@ -73,6 +75,7 @@ export function Campanha() {
         lerVersoesDeFlow(),
         lerAgentes(),
         lerAgentesDaCampanha(id),
+        lerRespostas(tenant.tenant_id, id),
       ]);
       setCampanha(cs.find((c) => c.id === id) ?? null);
       setResumo(r);
@@ -81,6 +84,7 @@ export function Campanha() {
       setVersoes(vs);
       setAgentes(ags);
       setDaCampanha(ca);
+      setRespostas(rs);
     } catch (e) { setErro(mensagemDeErro(e)); }
     finally { setCarregando(false); }
   }
@@ -152,6 +156,15 @@ export function Campanha() {
               : 'Ninguém em cadência: ou todos encerraram, ou ninguém foi inscrito ainda.'}
         </p>
       </div>
+
+      {respostas.length > 0 && (
+        <>
+          <Secao titulo="O que responderam"
+                 nota={`${respostas.length} ${respostas.length === 1 ? 'resposta' : 'respostas'} nesta campanha`} />
+          {/* Sem a coluna de campanha: aqui já se sabe qual é. */}
+          <ListaDeRespostas lista={respostas} semCampanha />
+        </>
+      )}
 
       <Mensagens lista={mensagens} />
 

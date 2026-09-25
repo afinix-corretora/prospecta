@@ -149,6 +149,24 @@ brigar com o CRM por quem manda em cada campo.
 
 ---
 
+## Quando alguém responde
+
+A resposta aparece na tela **Respostas**, com o texto, a mensagem que a provocou e a data. É leitura:
+não há "lida" nem "atribuída" — **quem responde é você, no aplicativo do canal**. A tela existe para
+você saber que há o que responder.
+
+Duas coisas que ela marca e valem a atenção:
+
+- **"suprimido"** — a resposta foi um pedido de saída, o motor já suprimiu a pessoa, e **não é para
+  ligar de volta**. A supressão é definitiva.
+- **resposta sem texto** — a pessoa respondeu com áudio, imagem ou anexo, e o provedor não mandou
+  nada legível. A tela diz isso em vez de inventar um texto; abra a conversa no aplicativo.
+
+Responder **encerra a cadência** da pessoa em todas as campanhas, sempre. Isso é uma das quatro
+garantias do motor, não uma configuração.
+
+---
+
 ## Os agentes ainda não respondem
 
 A tela da campanha deixa escolher **quem responde** em cada canal, e a escolha fica gravada — mas

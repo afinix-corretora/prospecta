@@ -1706,3 +1706,81 @@ Fica registrado aqui em vez de virar uma tela de edição de agente: escrever um
 persona que nenhuma parte do sistema consulta seria construir decoração com capricho. O laço de
 conversa é decisão de produto e de modelagem — uma resposta do agente não cabe em `messages`, cuja
 chave é `(enrollment_id, step_id)` —, e por isso não foi tomada de passagem.
+
+---
+
+### D56 — A resposta chegava, e ninguém conseguia ler
+
+**Contexto.** Depois do D55 eu ia construir a tela de agentes. Antes, fui conferir quem consome o
+que já existe — e a conferência achou duas coisas, uma que parou a construção e outra que a
+substituiu.
+
+#### A primeira: os agentes não têm consumidor
+
+Nada no motor lê `campaign_agents`. Nem adapter, nem edge function, nem função SQL do despacho.
+`agente_do_canal` tem grant e não tem chamador. `agents.ai_credential_id` nasce `NULL` na cópia do
+catálogo e ninguém o lê. A resposta encerra a cadência pela invariante 4, e ninguém conversa depois.
+
+Escrever um editor para uma persona que nenhuma parte do sistema consulta seria construir decoração
+com capricho. Está registrado no D55 e na tela.
+
+#### A segunda, que é a que importa
+
+Os cinco adapters gravam o texto da resposta em `message_events.payload ->> 'texto'` desde o D48.
+Contando quem lê esse campo: **um**, o classificador de opt-out, dentro do gatilho.
+`eventos_da_campanha` devolve o TIPO do evento — `respondido` — e não o texto.
+
+Então isto acontece hoje, com **tudo funcionando exatamente como projetado**:
+
+1. a pessoa responde "quero entender a diferença de preço";
+2. a invariante 4 encerra a cadência dela em todas as campanhas — correto;
+3. o D48 confere se é opt-out e conclui que não é — correto;
+4. a linha do tempo da campanha registra "respondido" — correto;
+5. e **ninguém no produto consegue ler o que ela disse**.
+
+Para ver a resposta era preciso abrir o painel do Supabase e escrever SQL, que é precisamente o que
+o D26 diz que o produto não pode exigir.
+
+É a forma do D42 com uma diferença que a piora. Lá, o texto ilegível era o que o motor **ia
+mandar**, e o prejuízo era um template errado. Aqui é o que um lead **acabou de dizer**, e o
+prejuízo é uma pessoa interessada esperando resposta que ninguém sabe que existe. Nenhum teste
+falhava, nenhum alarme tocava: o caminho inteiro está certo, e o resultado é o lead perdido.
+
+Vale a pena olhar a sequência dos três: o D48 fez o dado passar a existir, o D49 refinou o que ele
+significa, e nos dois eu conferi o produtor. Nenhum dos dois perguntou **quem consome**. É a
+pergunta do D46 — "nunca deixar um fato nascer sem quem o consuma" — e ela escapou duas vezes
+seguidas no mesmo dado.
+
+#### O que a função é, e o que ela não é
+
+`respostas_recebidas(tenant, campanha opcional, limite)` devolve quem respondeu, por onde, em qual
+campanha e passo, **o texto**, e — o que faz a diferença entre um lead e um processo — a mensagem
+que provocou a resposta e se ela suprimiu a pessoa (D48, D49).
+
+A mensagem anterior vai junto porque a resposta mais comum é a curta: "sim, pode ser" sem a
+pergunta ao lado não quer dizer nada.
+
+A supressão vai junto porque quem abre a caixa pode estar prestes a ligar de volta para alguém que
+acabou de pedir para sair.
+
+Campanha opcional porque são dois usos da mesma pergunta: quem olha uma campanha quer as dela, quem
+abre o dia quer todas — e resposta encerra a cadência do contato em **todas** elas.
+
+E o texto só vira texto quando o payload é string, pela mesma trava que o D48 pôs no classificador:
+objeto viraria `[object Object]` e número viraria `0`. Vir vazio é honesto — a tela diz "pode ter
+sido áudio, imagem ou anexo; abra a conversa no aplicativo". Inventar que a pessoa escreveu
+`[object Object]` não é.
+
+**O que ela não é:** caixa de entrada com estado. Não há "lida", não há "respondida", não há
+atribuição. Inventar estado aqui seria criar colunas sem quem as escreva — o `tem_adapter` do D31
+outra vez, e desta vez eu estaria cometendo o defeito no mesmo commit em que o descrevo. Quem
+responde é uma pessoa, no aplicativo do canal, e a tela diz isso.
+
+#### O que este D repete
+
+1. **Fato sem consumidor é fato perdido** (D31, D45, D46). Desta vez o fato estava gravado, correto
+   e datado — e ilegível.
+2. **Conferir o produtor não é conferir o par.** O D48 conferiu quem escreve o texto, que era a
+   lição certa naquele momento. Ninguém perguntou quem o lê.
+3. **O pior defeito é o que não quebra nada.** Um teste vermelho avisa. Uma resposta que ninguém lê
+   parece um dia sem resposta.

@@ -310,6 +310,13 @@ e elas têm teste automatizado obrigatório.**
 - **Nunca** criar num lugar e completar no outro quando as duas escritas formam um só fato. Inserir
   a campanha pela tela e apontar o flow numa segunda chamada é a campanha órfã do D54 de novo — a
   função faz as duas na mesma transação (D55).
+- **Nunca** conferir só quem PRODUZ um dado. O D48 fez os adapters gravarem o texto da resposta e
+  conferiu o produtor; ninguém perguntou quem lê. Único leitor: o classificador de opt-out. A
+  pessoa respondia, a cadência encerrava certo, e o que ela disse era ilegível pelo produto — o
+  D42 com um lead no lugar do template (D56).
+- **Nunca** dar estado a uma tela de leitura só porque a lista parece uma caixa de entrada. "Lida",
+  "respondida" e atribuição seriam colunas sem quem as escreva, cometendo o `tem_adapter` do D31 na
+  mesma tela que existe para consertá-lo (D56).
 
 ---
 
@@ -366,6 +373,14 @@ e elas têm teste automatizado obrigatório.**
 > (`resumo_da_campanha`) e lido de `message_events` (`eventos_da_campanha`). É ela que torna o
 > shadow mode legível — sem ela, "rodou tudo e não enviou nada" é igual a "está quebrado".
 >
+> As **respostas** ganharam tela no **D56**, e a falta era grave: o texto era gravado desde o D48 e
+> o único leitor era o classificador de opt-out. A pessoa respondia, a invariante 4 encerrava a
+> cadência dela em todas as campanhas, e ninguém no produto conseguia ler o que ela disse — lead
+> perdido com tudo funcionando como projetado. `respostas_recebidas` traz o texto com a mensagem
+> que o provocou (resposta curta sem a pergunta não quer dizer nada) e com a marca de supressão
+> (quem abre a caixa pode estar prestes a ligar para quem acabou de pedir para sair). É leitura:
+> não há "lida" nem atribuição, porque seriam colunas sem quem as escreva.
+>
 > Os **agentes** continuam sem consumidor: `campaign_agents` e `agente_do_canal` existem, a tela da
 > campanha atribui um por canal — e **nada no motor os lê**. Resposta encerra a cadência
 > (invariante 4) e ninguém conversa depois. A tela diz isso em voz alta desde o D55; escrever um
@@ -401,7 +416,7 @@ e elas têm teste automatizado obrigatório.**
 > **derivados do schema** cobram `tenant_id`, RLS e FK composta de toda tabela nova — lista escrita
 > à mão envelhece sem avisar, e essa já tinha perdido a `provider_servers` (D31).
 >
-> O schema está **aplicado no projeto `hucuwjvihqgftdjpnych`** (43 migrations no repositório, 49
+> O schema está **aplicado no projeto `hucuwjvihqgftdjpnych`** (44 migrations no repositório, 50
 > registros no projeto — duas corretivas de texto, uma separação, duas do D46 (superfície e
 > tenant explícito), o bootstrap do tenant de teste e a corretiva de `search_path` do D54, ver
 > D32, D39, D46, D53 e D54), conferido por
