@@ -1,0 +1,17 @@
+{
+  "canal-webhook": {
+    "digest": "369a6df74567f75c",
+    "em": "2026-09-24 (v3; cada arquivo do bundle lido de volta do projeto e comparado byte a byte)",
+    "versao": 3
+  },
+  "motor-worker": {
+    "digest": "dec6b3eee3ba9223",
+    "em": "2026-09-24 (v3; cada arquivo do bundle lido de volta do projeto e comparado byte a byte)",
+    "versao": 3
+  },
+  "provisionar-instancia": {
+    "digest": "04e0e2a2a81eee09",
+    "em": "2026-09-24 (v3; cada arquivo do bundle lido de volta do projeto e comparado byte a byte)",
+    "versao": 3
+  }
+}
