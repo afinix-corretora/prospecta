@@ -123,6 +123,7 @@ rodar cadencia   "$RAIZ/tests/cadencia.sql"
 rodar respostas  "$RAIZ/tests/respostas.sql"
 rodar funil      "$RAIZ/tests/funil.sql"
 rodar qualifica  "$RAIZ/tests/qualificacao.sql"
+rodar plataformas "$RAIZ/tests/plataformas.sql"
 
 # ---------------------------------------------------------------------------
 # Adapters de canal — TypeScript, sem rede (fetch injetado).

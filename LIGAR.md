@@ -31,6 +31,22 @@ edge function ele precisa se autenticar — com a **service key** do projeto.
 
 No painel do Supabase: **Project Settings ▸ API Keys**.
 
+Para o projeto `hucuwjvihqgftdjpnych`, que é o que está no ar, os dois endereços
+são estes — abrem direto na página certa:
+
+| Passo | Link |
+|---|---|
+| 2.1 pegar a chave | https://supabase.com/dashboard/project/hucuwjvihqgftdjpnych/settings/api-keys |
+| 2.2 guardar no Vault | https://supabase.com/dashboard/project/hucuwjvihqgftdjpnych/settings/vault/secrets |
+| 2.3 conferir | https://supabase.com/dashboard/project/hucuwjvihqgftdjpnych/sql/new |
+
+**A chave não passa por chat, por e-mail nem por mensagem.** Ela vai da página
+2.1 para o campo da página 2.2 e não aparece em lugar nenhum no caminho. Chave
+que passou por um canal de conversa está no histórico daquele canal para
+sempre, e o único conserto é rotacionar a chave — que é trabalho a mais para
+chegar no mesmo lugar. Quem confere que ela chegou certa é o passo 2.3, sem
+nunca devolver o valor (D44).
+
 Lá vão aparecer **duas** chaves, uma debaixo da outra, com o mesmo formato e
 quase o mesmo tamanho:
 
@@ -76,6 +92,14 @@ No SQL editor:
 ```sql
 SELECT * FROM privado.conferir_chave_do_motor(
   'https://SEU-PROJETO.supabase.co/functions/v1/motor-worker'
+);
+```
+
+No projeto que está no ar, é esta linha, pronta para colar:
+
+```sql
+SELECT * FROM privado.conferir_chave_do_motor(
+  'https://hucuwjvihqgftdjpnych.supabase.co/functions/v1/motor-worker'
 );
 ```
 

@@ -354,7 +354,15 @@ CREATE VIEW tn.sem_dono AS SELECT unnest(ARRAY[
   -- `recusa_termos` pelo mesmo motivo, e é o par do de cima: um diz quem pede
   -- para sair, o outro quem recusa a oferta. Foi por estarem lado a lado que
   -- se viu que "nao tenho interesse" estava na lista errada (D58).
-  'recusa_termos'
+  'recusa_termos',
+  -- `crm_provider_catalog` é o terceiro catálogo, e entra pelo motivo dos dois
+  -- primeiros: quais campos o HubSpot pede é software, igual para todos os
+  -- clientes. O que é do cliente é a CONEXÃO — `crm_connections`, que tem
+  -- tenant_id e fica fora desta lista de propósito. Estar aqui isenta de
+  -- tenant_id e de FK composta, não de RLS: o teste de RLS abaixo não consulta
+  -- esta view, e é por isso que ele pegaria esta tabela se ela tivesse nascido
+  -- sem política — que foi o furo do `recusa_termos` no D58.
+  'crm_provider_catalog'
 ]) AS tabela;
 
 CREATE VIEW tn.dominio AS
