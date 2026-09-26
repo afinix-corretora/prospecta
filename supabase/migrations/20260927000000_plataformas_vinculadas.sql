@@ -15,7 +15,7 @@
 --
 -- ATENÇÃO, e é o ponto mais importante deste arquivo: vincular uma plataforma
 -- GUARDA A CREDENCIAL E NADA MAIS. Nenhum adapter de CRM existe — `tem_adapter`
--- é `false` nas sete linhas, e é verdade, não pendência esquecida. O `outbox`
+-- é `false` nas oito linhas, e é verdade, não pendência esquecida. O `outbox`
 -- continua drenando para lugar nenhum até o primeiro adapter existir.
 --
 -- Isso é o D55 (`campaign_agents`) acontecendo de novo por escolha, não por
@@ -315,7 +315,7 @@ END;
 $$;
 
 -- ---------------------------------------------------------------------------
--- As sete plataformas
+-- As oito plataformas
 -- ---------------------------------------------------------------------------
 
 -- `tem_adapter` fica no default `false` em todas: o writeback não existe para

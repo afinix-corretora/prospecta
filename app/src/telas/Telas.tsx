@@ -3,13 +3,14 @@ import { useNavigate } from 'react-router-dom';
 import { useSessao } from '../sessao';
 import { mensagemDeErro } from '../supabase';
 import {
-  criarCampanha, criarCampanhaDeModelo, lerAgentes, lerCampanhas, lerCanaisEntregaveis,
-  lerCredenciaisIA, lerModelos, lerProvedoresCanal, lerProvedoresIA, lerRemetentes,
-  lerVersoesDeFlow, salvarCredencialIA,
+  alternarConexaoCRM, criarCampanha, criarCampanhaDeModelo, lerAgentes, lerCampanhas,
+  lerCanaisEntregaveis, lerConexoesCRM, lerCredenciaisIA, lerModelos, lerProvedoresCRM,
+  lerProvedoresCanal, lerProvedoresIA, lerRemetentes, lerVersoesDeFlow, salvarCredencialCRM,
+  salvarCredencialIA,
 } from '../dados';
 import type {
-  Agente, CanalEntregavel, Campanha, CredencialIA, Modelo, MotivoDoCanal,
-  ProvedorCanal, ProvedorIA, VersaoDeFlow,
+  Agente, CanalEntregavel, Campanha, ConexaoCRM, CredencialIA, Modelo, MotivoDoCanal,
+  ProvedorCRM, ProvedorCanal, ProvedorIA, VersaoDeFlow,
 } from '../dados';
 import {
   Aviso, Campo, Kpi, LinhaIndice, NOME_CANAL, Secao, corCanal,
@@ -449,7 +450,7 @@ export function Config() {
   const { tenant } = useSessao();
   const { dados } = useDados(async () => ({
     ia: await lerProvedoresIA(), agentes: await lerAgentes(), modelos: await lerModelos(),
-    canal: await lerProvedoresCanal(),
+    canal: await lerProvedoresCanal(), crm: await lerProvedoresCRM(),
   }), [tenant?.tenant_id]);
 
   const itens: [string, string, string, string, string][] = [
@@ -465,6 +466,9 @@ export function Config() {
     ['/config/plataformas', 'plataforma', 'Plataformas de contato',
      'Catálogo de provedores por canal — WhatsApp, e-mail, SMS e Instagram.',
      `${dados?.canal.length ?? 0} provedores`],
+    ['/config/vinculadas', 'plataforma', 'Plataformas vinculadas',
+     'O CRM deste cliente: Softcare, Pipefy, HubSpot, Pipedrive, RD Station, Ploomes, Salesforce ou Zoho. A credencial é deste cliente e mora no Vault.',
+     `${dados?.crm.length ?? 0} plataformas`],
   ];
 
   return (
@@ -757,5 +761,232 @@ export function ConfigPlataformas() {
         );
       })}
     </Moldura>
+  );
+}
+
+/** Plataformas vinculadas: o CRM deste cliente, com a credencial deste cliente.
+ *
+ * Terceira tela do mesmo padrão (chip, chave de modelo, CRM) e pelo mesmo
+ * motivo: cada licença é um tenant, e cada tenant traz o CRM que já usa. Um
+ * destino fixo no código seria o produto inteiro apontando para o CRM de um
+ * cliente só.
+ *
+ * **A tela diz, em voz alta, que vincular ainda não escreve no CRM.** Nenhum
+ * adapter existe: `tem_adapter` é falso nas oito linhas do catálogo, e a
+ * `outbox` continua enfileirando para lugar nenhum. É o D55 de propósito —
+ * prometer efeito que ninguém consome se descobre por um lead que o vendedor
+ * nunca viu, e é tarde.
+ */
+export function ConfigVinculadas() {
+  const nav = useNavigate();
+  const { tenant, administra } = useSessao();
+  const { dados, erro, carregando, recarregar } = useDados(
+    async () => ({
+      provedores: await lerProvedoresCRM(),
+      // A RLS de `crm_connections` é de admin inclusive no SELECT. Para quem é
+      // operador isto volta vazio, e é por isso que a lista não diz "nenhuma
+      // vinculada" sem saber quem está olhando.
+      conexoes: administra ? await lerConexoesCRM() : [],
+    }), [tenant?.tenant_id, administra],
+  );
+
+  if (carregando) return <div className="wrap"><p className="vazio">Carregando…</p></div>;
+
+  const provs: ProvedorCRM[] = dados?.provedores ?? [];
+  const conns: ConexaoCRM[] = dados?.conexoes ?? [];
+  const nenhumAdapter = provs.length > 0 && provs.every((p) => !p.tem_adapter);
+
+  return (
+    <Moldura titulo="Plataformas vinculadas" voltar={() => nav('/config')}
+             sub="O CRM deste cliente. A credencial é dele, não do produto: cada licença tem a sua, guardada no Vault, e o banco recusa gravá-la em qualquer outro lugar.">
+      {erro && <Aviso tipo="erro">{erro}</Aviso>}
+
+      {/* O aviso vem ANTES da lista, não no pé: quem abre esta tela vem
+          vincular, e descobrir depois de colar a credencial que nada escreve
+          no CRM é a ordem errada. */}
+      {nenhumAdapter && (
+        <Aviso tipo="neutro">
+          <b>Vincular guarda a credencial e nada mais, por enquanto.</b> Nenhuma
+          destas plataformas tem adapter de escrita escrito ainda, então o que o
+          motor descobre (saiu da lista, respondeu, endereço inválido, campanha
+          concluída) fica enfileirado na <b>fila de writeback</b> e não chega ao
+          CRM. Guardar a credencial agora é o que torna o primeiro adapter uma
+          mudança de código só — sem voltar a pedir chave a ninguém.
+          <br /><br />
+          Isto é <b>“ainda não”</b>, não “não dá”: quando o adapter existir, esta
+          mesma tela passa a escrever, sem você reconfigurar nada.
+        </Aviso>
+      )}
+
+      <Secao titulo="Vinculadas" nota={administra ? 'uma por conexão' : 'só quem administra vê'} />
+      <section className="indice" style={{ marginBottom: 14 }}>
+        {conns.length ? conns.map((c) => {
+          const p = provs.find((x) => x.slug === c.provedor);
+          return (
+            <div key={c.id} className="item" style={{ cursor: 'default' }}>
+              <span className="txt">
+                <b>{c.nome}</b>
+                <p>{p?.nome ?? c.provedor}</p>
+                <span className="chips" style={{ marginTop: 6 }}>
+                  <span className="chip">
+                    {c.credencial_secret_id ? 'credencial no Vault' : 'sem credencial'}
+                  </span>
+                  {Object.keys(c.config).map((k) => <span key={k} className="chip">{k}</span>)}
+                  {/* Dizer que não escreve por CONEXÃO, e não só no aviso de
+                      cima: a lista é o que sobra na tela depois de salvar. */}
+                  {!p?.tem_adapter && <span className="chip">não escreve ainda</span>}
+                </span>
+              </span>
+              {administra && (
+                <button className="btn" style={{ marginRight: 10 }}
+                        onClick={async () => {
+                          await alternarConexaoCRM(c.id, !c.ativo);
+                          await recarregar();
+                        }}>
+                  {c.ativo ? 'Desligar' : 'Ligar'}
+                </button>
+              )}
+              <span className={`delta ${c.ativo && c.credencial_secret_id ? '' : 'neutra'}`}>
+                {c.ativo ? (c.credencial_secret_id ? 'vinculada' : 'falta credencial') : 'desligada'}
+              </span>
+            </div>
+          );
+        }) : (
+          <div className="item" style={{ cursor: 'default' }}><span className="txt">
+            <b>{administra ? 'Nenhuma plataforma vinculada' : 'Visível para quem administra'}</b>
+            <p>
+              {administra
+                ? 'O motor continua tocando a cadência e registrando tudo no banco — só não devolve nada ao CRM.'
+                : 'Credencial de CRM é como chip e chave de modelo: só o dono e o admin do cliente veem e configuram.'}
+            </p>
+          </span></div>
+        )}
+      </section>
+
+      {administra && tenant
+        ? <FormularioCRM provedores={provs} conexoes={conns} tenant={tenant.tenant_id} aoSalvar={recarregar} />
+        : <Aviso tipo="neutro">Só quem administra o cliente vincula plataforma.</Aviso>}
+    </Moldura>
+  );
+}
+
+/** O formulário não conhece CRM nenhum: desenha o que o catálogo declara.
+ *
+ * E não decide o que é segredo. Manda tudo o que foi preenchido para
+ * `salvar_credencial_crm`, e é o banco, lendo o catálogo, que separa Vault de
+ * `config` (D28). É por não conhecer nenhum que esta tela sobrevive a um CRM
+ * novo — que é uma linha de catálogo e zero mudança aqui.
+ */
+function FormularioCRM(props: {
+  provedores: ProvedorCRM[]; conexoes: ConexaoCRM[]; tenant: string;
+  aoSalvar(): Promise<void>;
+}) {
+  const [slug, setSlug] = useState('');
+  const [nome, setNome] = useState('');
+  const [valores, setValores] = useState<Record<string, string>>({});
+  const [estado, setEstado] = useState<'parado' | 'salvando'>('parado');
+  const [msg, setMsg] = useState<{ tipo: 'erro' | 'ok'; texto: string } | null>(null);
+
+  const escolhido = props.provedores.find((x) => x.slug === slug) ?? props.provedores[0];
+  if (!escolhido) return null;
+  // A anotação não é decorativa: sem ela o narrowing do guard acima não chega
+  // dentro de `salvar`, que é uma closure. Mesmo motivo do FormularioIA.
+  const provedor: ProvedorCRM = escolhido;
+
+  // Reenviar o mesmo nome EDITA, e dizer isso antes de salvar evita a descoberta
+  // pelo caminho ruim: duas conexões quase iguais e nenhuma pista de qual vale.
+  const existente = props.conexoes.find((c) => c.nome === nome.trim());
+
+  function trocarProvedor(novo: string) {
+    setSlug(novo);
+    // Campo do provedor anterior não sobrevive à troca: o banco recusaria a
+    // chave que o provedor novo não declara, e o erro sairia sem explicação.
+    setValores({});
+    setMsg(null);
+  }
+
+  // Obrigatório em branco: o banco recusa, mas com uma diferença que a tela
+  // precisa repetir para o botão não parecer quebrado — segredo em branco passa
+  // NA EDIÇÃO, porque a tela não consegue devolver o que não pode ler.
+  const faltando = provedor.campos.filter((c) => {
+    if (!c.obrigatorio) return false;
+    if ((valores[c.chave] ?? '').trim()) return false;
+    return !(c.segredo && existente?.credencial_secret_id);
+  });
+
+  async function salvar(e: React.FormEvent) {
+    e.preventDefault();
+    setMsg(null); setEstado('salvando');
+    try {
+      await salvarCredencialCRM({
+        tenant: props.tenant, nome: nome.trim(), provedor: provedor.slug, campos: valores,
+      });
+      setMsg({
+        tipo: 'ok',
+        texto: existente
+          ? 'Conexão atualizada.'
+          : provedor.tem_adapter
+            ? 'Plataforma vinculada. A credencial foi para o Vault.'
+            : 'Plataforma vinculada e credencial guardada no Vault. Nada é escrito no CRM ainda — o adapter desta plataforma não existe.',
+      });
+      // Só o segredo é limpo: o resto continua à vista para uma segunda edição.
+      setValores(Object.fromEntries(
+        Object.entries(valores).filter(([k]) => !provedor.campos.find((c) => c.chave === k)?.segredo),
+      ));
+      await props.aoSalvar();
+    } catch (e2) { setMsg({ tipo: 'erro', texto: mensagemDeErro(e2) }); }
+    finally { setEstado('parado'); }
+  }
+
+  return (
+    <form className="painel" onSubmit={salvar}>
+      <div className="opts" style={{ marginBottom: 16 }}>
+        {props.provedores.map((x) => (
+          <button key={x.slug} type="button" className="opt" aria-pressed={x.slug === provedor.slug}
+                  onClick={() => trocarProvedor(x.slug)}>
+            <b>{x.nome}</b><p>{x.descricao}</p>
+          </button>
+        ))}
+      </div>
+
+      {provedor.docs_url
+        ? <p style={{ marginTop: 0 }}>
+            <a href={provedor.docs_url} target="_blank" rel="noopener">
+              documentação do {provedor.nome}
+            </a>
+          </p>
+        : <p style={{ marginTop: 0, color: 'var(--ink-3)', fontSize: 13 }}>
+            Sem página pública: é CRM da casa, e o contrato se confirma com quem
+            o mantém.
+          </p>}
+
+      <Campo id="crm-nome" rotulo="Nome da conexão" valor={nome} aoMudar={setNome}
+             placeholder="Pipefy da matriz"
+             ajuda={existente
+               ? `Já existe: salvar edita a conexão ${existente.provedor} em vez de criar outra.`
+               : 'Reenviar o mesmo nome edita em vez de duplicar.'} />
+
+      {provedor.campos.map((c) => (
+        <Campo key={c.chave} id={`crm-${c.chave}`} rotulo={c.rotulo} tipo={c.tipo}
+               valor={valores[c.chave] ?? ''} obrigatorio={c.obrigatorio}
+               aoMudar={(v) => setValores({ ...valores, [c.chave]: v })} ajuda={c.ajuda}
+               vault={c.segredo
+                 ? 'Vai para o Vault. Em branco na edição, a credencial guardada fica como está.'
+                 : undefined} />
+      ))}
+
+      {msg && <Aviso tipo={msg.tipo}>{msg.texto}</Aviso>}
+      <button className="btn prim"
+              disabled={estado === 'salvando' || !nome.trim() || faltando.length > 0}>
+        {estado === 'salvando'
+          ? 'Salvando…'
+          : existente ? 'Atualizar conexão' : 'Vincular plataforma'}
+      </button>
+      {faltando.length > 0 && nome.trim() && (
+        <span className="ajuda">
+          Falta preencher: {faltando.map((c) => c.rotulo).join(', ')}.
+        </span>
+      )}
+    </form>
   );
 }

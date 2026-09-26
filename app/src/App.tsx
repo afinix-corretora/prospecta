@@ -14,7 +14,8 @@ import { Respostas } from './telas/Respostas';
 import { Supressao } from './telas/Supressao';
 import { Writeback } from './telas/Writeback';
 import {
-  Canais, Config, ConfigAgentes, ConfigIA, ConfigModelos, ConfigPlataformas, Hub,
+  Canais, Config, ConfigAgentes, ConfigIA, ConfigModelos, ConfigPlataformas,
+  ConfigVinculadas, Hub,
 } from './telas/Telas';
 import { lerProvedoresCanal, criarTenant } from './dados';
 import type { ProvedorCanal } from './dados';
@@ -115,6 +116,7 @@ function Casca() {
           <Route path="/config/agentes" element={<ConfigAgentes />} />
           <Route path="/config/modelos" element={<ConfigModelos />} />
           <Route path="/config/plataformas" element={<ConfigPlataformas />} />
+          <Route path="/config/vinculadas" element={<ConfigVinculadas />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </main>

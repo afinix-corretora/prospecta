@@ -348,6 +348,27 @@ e elas têm teste automatizado obrigatório.**
   "tenho interesse" como resposta que para em `respondeu`; com o classificador, ela vai para
   `oportunidade` — o teste estava certo ontem e errado hoje, e o conserto é o texto do cenário,
   não a asserção (D58).
+- **Nunca** deixar uma credencial ser do produto quando ela é do cliente. Cada licença é um tenant e
+  cada tenant traz o CRM que já usa: um `client_id` de Pipefy fixo no código seria o produto inteiro
+  escrevendo no CRM de um cliente só. O padrão já existia duas vezes (chip, chave de modelo) e o CRM
+  era o vão (D59).
+- **Nunca** supor que tabela nova herda a grade estreitada das vizinhas. `privado.estreitar_escrita_do_cliente`
+  é nominal, tabela por tabela: `crm_connections` nasceu com INSERT, UPDATE e DELETE de tabela
+  inteira para `authenticated`, e o RLS segurava a linha enquanto o privilégio soltava a coluna —
+  o D54 outra vez, achado por CONFERIR a grade no projeto depois de aplicar (D59).
+- **Nunca** deixar o cliente escrever à mão um ponteiro de Vault. `credencial_secret_id`,
+  `chave_secret_id` e `admin_secret_id` não devolvem segredo a ninguém — fazem o worker chamar o
+  provedor com a credencial de outra conexão, que é a pior forma de errar, porque parece funcionar.
+  O ponteiro nasce de `guardar_segredo` ou não nasce (D59).
+- **Nunca** escrever um `CREATE OR REPLACE FUNCTION` a partir de uma cópia antiga do corpo. Ele troca
+  o corpo INTEIRO e não faz merge: partir do D54 para acrescentar duas linhas apagou as revogações
+  de `deals` do D57 e o `SET search_path` da corretiva do D54. Quem pegou foi `tests/funil.sql`, com
+  uma asserção sobre um assunto que a migration não mencionava — e a lição é que o teste vermelho de
+  um arquivo que você não tocou é informação, não ruído (D59).
+- **Nunca** deixar uma tela guardar credencial sem dizer que ela ainda não é usada. Vincular
+  plataforma grava no Vault e nada mais: `tem_adapter` é falso nas oito, a `outbox` segue
+  enfileirando para lugar nenhum, e o aviso vem ANTES da lista, porque quem abre a tela vem vincular
+  e descobrir depois de colar a credencial é a ordem errada — é o D55 por escolha (D59).
 
 ---
 
@@ -403,6 +424,29 @@ e elas têm teste automatizado obrigatório.**
 > A **tela da campanha** (D36) fecha o laço: o que o motor fez, contado no banco
 > (`resumo_da_campanha`) e lido de `message_events` (`eventos_da_campanha`). É ela que torna o
 > shadow mode legível — sem ela, "rodou tudo e não enviou nada" é igual a "está quebrado".
+>
+> As **plataformas vinculadas** existem desde o **D59**, e são o princípio de licença virando
+> schema: cada tenant traz o CRM dele, com a credencial dele. `crm_provider_catalog` e
+> `crm_connections` são o TERCEIRO uso do padrão que já valia para chip (`salvar_credencial_remetente`)
+> e chave de modelo (`salvar_credencial_ia`) — catálogo declara os campos, a função separa Vault de
+> `config`, e a tela não conhece CRM nenhum (D28). Oito plataformas, com o esquema de autenticação de
+> cada uma lido da documentação e a página registrada em `docs_url`: Softcare, Pipefy, HubSpot,
+> Pipedrive, RD Station CRM, Ploomes, Salesforce e Zoho CRM. **Os campos do Softcare são uma
+> suposição** (`base_url` + `token`) — não há documentação dele no repositório nem na base da casa, e
+> a linha precisa de confirmação antes de valer como contrato.
+>
+> **Vincular guarda a credencial e nada mais.** `tem_adapter` é falso nas oito, porque nenhum adapter
+> de CRM existe: a `outbox` continua enfileirando para lugar nenhum, e a tela diz isso antes da
+> lista. É o D55 de propósito. Sem Vault no Postgres de teste, `tests/plataformas.sql` vai até a
+> borda e para lá — `feature_not_supported` é a prova de que o destino do segredo é o Vault e não uma
+> coluna, e o arquivo diz em voz alta o que não cobre.
+>
+> A segunda migration do D59 é a que o D54 exigia: aplicar e **conferir a grade no projeto** mostrou
+> que tabela nova nasce larga e não herda a estreitada de ontem. `ai_credentials`, `crm_connections`,
+> `provider_servers` e os três catálogos deixaram de aceitar INSERT e DELETE de `authenticated`, e o
+> UPDATE das duas de credencial é só de `ativo`. A primeira tentativa dessa migration reescreveu
+> `estreitar_escrita_do_cliente` a partir do corpo do D54 e apagou o `deals` do D57 — quem pegou foi
+> `tests/funil.sql`.
 >
 > A resposta é **classificada** desde o **D58**: a pergunta é "é recusa?", nunca "é positiva?", e o
 > que não for recusa vira `oportunidade` no funil, marcado como decisão de classificador (`ia`).
@@ -466,11 +510,16 @@ e elas têm teste automatizado obrigatório.**
 > **derivados do schema** cobram `tenant_id`, RLS e FK composta de toda tabela nova — lista escrita
 > à mão envelhece sem avisar, e essa já tinha perdido a `provider_servers` (D31).
 >
-> O schema está **aplicado no projeto `hucuwjvihqgftdjpnych`** (50 migrations no repositório, 55
+> O schema está **aplicado no projeto `hucuwjvihqgftdjpnych`** (51 migrations no repositório, 57
 > registros no projeto — duas corretivas de texto, uma separação, duas do D46 (superfície e
 > tenant explícito), o bootstrap do tenant de teste e a corretiva de `search_path` do D54, ver
-> D32, D39, D46, D53 e D54; a 50ª, o D59, **ainda não foi aplicada**), conferido por
-> digest estrutural contra o banco de teste — colunas, constraints, índices, políticas, corpos de
+> D32, D39, D46, D53 e D54; as duas do D59 entraram em 26/09, e o `get_advisors` entre uma e
+> outra não achou nada novo — `salvar_credencial_crm` entra na mesma família WARN das outras três
+> funções de credencial, que é a porta da tela checando `pode_administrar` em código, e
+> `segredo_da_conexao_crm` NÃO aparece, que é o que prova que `authenticated` não a alcança.
+> Quem achou o furo foi CONFERIR a grade no projeto depois de aplicar: tabela nova nasce com a
+> grade larga do Supabase e **não herda a estreitada de ontem**, porque a estreitada é nominal
+> por tabela), conferido por digest estrutural contra o banco de teste — colunas, constraints, índices, políticas, corpos de
 > função e a grade de privilégios batem byte a byte.
 >
 > Esse "30" tinha ficado em "21" por nove migrations, aqui no arquivo que instrui toda sessão nova.

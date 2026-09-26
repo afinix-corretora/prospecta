@@ -117,6 +117,39 @@ export interface ProvedorIA {
   ordem: number;
 }
 
+/** Plataforma de CRM que o produto sabe receber credencial (D59).
+ *
+ *  `campos` é o MESMO formato dos outros dois catálogos, e de propósito: a tela
+ *  que desenha remetente, credencial de IA e conexão de CRM é a mesma ideia,
+ *  e nenhuma das três conhece provedor nenhum (D28).
+ */
+export interface ProvedorCRM {
+  slug: string;
+  nome: string;
+  descricao: string;
+  campos: CampoProvedor[];
+  /** Falso nas oito linhas hoje. Não é "não dá", é "ainda não": nenhum adapter
+   *  de CRM existe, então vincular guarda a credencial e nada mais. A tela DIZ
+   *  isso, porque o jeito de descobrir sozinho seria um lead que ninguém viu
+   *  (D55). Fundir este "ainda não" com um "não dá" é o que o D54 proíbe. */
+  tem_adapter: boolean;
+  docs_url: string | null;
+  ordem: number;
+}
+
+export interface ConexaoCRM {
+  id: string;
+  nome: string;
+  provedor: string;
+  /** Só o ponteiro para o Vault. A credencial não volta — nem para a tela, nem
+   *  para quem a colou: `segredo_da_conexao_crm` não é concedida a
+   *  `authenticated` (D44). */
+  credencial_secret_id: string | null;
+  config: Record<string, string>;
+  ativo: boolean;
+  atualizado_em: string;
+}
+
 async function tabela<T>(nome: string, colunas: string, ordem?: string): Promise<T[]> {
   let q = sb.from(nome).select(colunas);
   if (ordem) q = q.order(ordem);
@@ -135,6 +168,16 @@ export const lerProvedoresIA = () =>
 
 export const lerCredenciaisIA = () =>
   tabela<CredencialIA>('ai_credentials', 'id, nome, provedor, modelo, chave_secret_id, config, ativo', 'nome');
+
+export const lerProvedoresCRM = () =>
+  tabela<ProvedorCRM>('crm_provider_catalog',
+    'slug, nome, descricao, campos, tem_adapter, docs_url, ordem', 'ordem');
+
+/** A RLS de `crm_connections` é só de quem administra, inclusive no SELECT —
+ *  credencial de CRM é tão sensível quanto chip. Operador não vê a lista. */
+export const lerConexoesCRM = () =>
+  tabela<ConexaoCRM>('crm_connections',
+    'id, nome, provedor, credencial_secret_id, config, ativo, atualizado_em', 'nome');
 
 export const lerRemetentes = () =>
   tabela<Remetente>('sender_accounts',
@@ -265,6 +308,37 @@ export async function salvarCredencialIA(dados: {
 /** Desligar não apaga: a credencial some do pool e o histórico continua. */
 export async function alternarCredencialIA(id: string, ativo: boolean) {
   const { error } = await sb.from('ai_credentials').update({ ativo }).eq('id', id);
+  if (error) throw error;
+}
+
+/** Vincular plataforma de CRM. Terceiro uso do padrão do D26/D28, e a mesma
+ *  regra: a tela manda tudo o que foi preenchido num objeto só, e quem separa
+ *  Vault de `config` é a função, lendo o catálogo. Não há `if` de provedor aqui,
+ *  nem deve haver — CRM novo é uma linha de catálogo e zero mudança de UI.
+ *
+ *  Devolve o id da conexão. Chamar com o mesmo `nome` EDITA a que existe, e
+ *  segredo em branco preserva a credencial guardada: a tela não consegue
+ *  devolver o que não pode ler.
+ */
+export async function salvarCredencialCRM(dados: {
+  tenant: string; nome: string; provedor: string;
+  campos: Record<string, string>;
+}): Promise<string> {
+  const { data, error } = await sb.rpc('salvar_credencial_crm', {
+    p_tenant: dados.tenant,
+    p_nome: dados.nome,
+    p_provedor: dados.provedor,
+    p_campos: dados.campos,
+  });
+  if (error) throw error;
+  return data as string;
+}
+
+/** Desligar não apaga, igual à credencial de IA: a conexão sai de uso e a
+ *  credencial continua no Vault. Apagar seria perder a credencial do cliente
+ *  por um clique. */
+export async function alternarConexaoCRM(id: string, ativo: boolean) {
+  const { error } = await sb.from('crm_connections').update({ ativo }).eq('id', id);
   if (error) throw error;
 }
 

@@ -1960,3 +1960,93 @@ mesma isenção. É a divisão do D19 funcionando exatamente como projetada.
 **O primeiro conserto foi o errado.** Quando o meta-teste apontou `recusa_termos`, minha primeira
 reação foi isentá-la no teste. Isentar é o que se faz com uma regra que não se aplica; aqui a regra
 se aplicava e a tabela é que estava errada. O advisor não deixou passar.
+
+---
+
+### D59 — A credencial é do cliente, não do produto
+
+**26/09.** O pedido foi um submenu de configuração — "plataformas vinculadas", com os maiores CRMs do
+mercado e o nosso. O que o pedido carrega é maior do que a tela: **cada licença é um tenant, e cada
+tenant traz o CRM que já usa.** Um destino fixo no código seria o produto inteiro apontando para o
+CRM de um cliente só.
+
+#### O padrão já existia duas vezes, e o CRM era o vão
+
+Chip do cliente entra por `salvar_credencial_remetente` (D26). Chave de modelo entra por
+`salvar_credencial_ia`. As duas são por tenant, com o segredo no Vault e a separação decidida pelo
+**catálogo**, dentro da função — a tela manda o que foi preenchido e não conhece provedor nenhum
+(D28). CRM não tinha nada disso: existia UM destino, o Pipefy, e ele nem era configurável. Pior: o
+`_shared/pipefy.ts` que o D3 declara como única fonte de verdade daquele OAuth **nunca foi escrito**,
+então o writeback tinha fila (`outbox`) e não tinha para onde ir.
+
+`crm_provider_catalog` + `crm_connections` são o terceiro uso do mesmo padrão. CRM novo é uma linha de
+catálogo e zero mudança de UI.
+
+Oito plataformas, com o esquema de autenticação de cada uma **lido da documentação do provedor**, não
+escrito de memória, e a página registrada em `docs_url`: token Bearer de private app no HubSpot,
+`x-api-token` mais domínio da empresa no Pipedrive, token na query string na v1 do RD Station CRM,
+`User-Key` no Ploomes, `client_credentials` com My Domain no Salesforce, `refresh_token` mais data
+center no Zoho. Esquema de auth troca de versão, e campo errado no catálogo vira credencial guardada
+com um nome que nenhum adapter vai procurar.
+
+**O Softcare é uma suposição.** `base_url` + `token`, e está escrito como suposição no arquivo: zero
+ocorrências no repositório e zero na base de conhecimento da casa. Precisa de confirmação antes de
+valer como contrato.
+
+#### Vincular guarda a credencial e nada mais
+
+`tem_adapter` é `false` nas oito linhas, e é verdade, não pendência esquecida. Nenhum adapter de CRM
+existe; a `outbox` continua drenando para lugar nenhum. A tela **diz isso, e diz antes da lista** —
+quem abre a tela vem vincular, e descobrir depois de colar a credencial que nada chega ao CRM é a
+ordem errada.
+
+É o D55 (`campaign_agents`) de novo, por escolha e não por descuido. E é o D54 na outra metade:
+`sem_adapter` não se resolve por tela nenhuma, então dizer "ainda não" é diferente de dizer "não dá",
+e a tela diz qual dos dois.
+
+#### O teste sem Vault, e o que ele NÃO cobre
+
+O Postgres de teste não tem `supabase_vault`, então nenhuma asserção vê um segredo ser gravado e lido
+de volta. O padrão é o do `tests/agentes.sql`: com segredo novo, a função corre inteira e para na
+borda com `feature_not_supported` — e **essa parada é a prova de que o destino do segredo é o Vault e
+não uma coluna**. Todo o resto (separação de `config`, edição, recusas, permissão, gatilho) roda de
+verdade, sobre conexões pré-semeadas com um `credencial_secret_id` falso.
+
+Zoho e Salesforce são os cenários de propósito: são os dois de campos **mistos**. Com um provedor de
+campo único, uma função que jogasse `p_campos` inteiro em `config` passaria verde — seria a asserção
+que o cenário não consegue violar (D36). E o arquivo declara em voz alta o que não cobre, porque
+teste que parece cobrir e não cobre é pior que teste ausente.
+
+#### Os dois achados, e os dois vieram de conferir depois de aplicar
+
+**1. Tabela nova nasce larga.** `get_advisors` não achou nada novo, mas conferir a grade de
+privilégio no projeto mostrou que `crm_connections` e `crm_provider_catalog` nasceram com INSERT,
+UPDATE e DELETE de tabela inteira para `authenticated`. O D19 tirou o *default privilege* nominal, e
+o Supabase continua concedendo em `CREATE TABLE`; **e a estreitada do D54 é nominal, tabela por
+tabela**, então tabela criada hoje não herda a de ontem.
+
+O RLS segurava a linha, e é por isso que não houve vazamento entre clientes. Mas é o D54 literal:
+política decide quais LINHAS, `GRANT UPDATE` de tabela inteira decide quais COLUNAS. Com a grade
+larga, um admin do próprio tenant escrevia `credencial_secret_id` por uma chamada de PostgREST. Isso
+não lê segredo nenhum (`segredo_da_conexao_crm` não é de `authenticated`, D44) — faz o worker chamar
+o CRM com a credencial de outra conexão, que é a pior forma de errar, porque parece funcionar.
+
+E as vizinhas, que é o que o D54 manda olhar: `ai_credentials` é a irmã exata — ponteiro de Vault,
+tela de uma coluna, escrita por função DEFINER — e estava larga desde o D17. Junto foram
+`provider_servers` e os três catálogos.
+
+**2. `CREATE OR REPLACE` não faz merge.** A primeira versão dessa segunda migration foi escrita a
+partir da cópia do corpo que está no D54, e apagou em silêncio as revogações de `deals` e
+`deal_activities` (o "porta única" do D57) e o `SET search_path` da corretiva do D54. Quem pegou foi
+`tests/funil.sql`, com uma asserção sobre um assunto que a migration não mencionava.
+
+A lição vale além desta vez: **teste vermelho num arquivo que você não tocou é informação, não
+ruído.** E o corpo de uma função se escreve a partir do corpo ATUAL, nunca da migration em que ele
+apareceu pela primeira vez.
+
+#### O que isto não resolve
+
+O writeback continua sem destino. `tem_adapter` é falso nas oito, e o primeiro adapter de CRM é uma
+decisão em aberto — Pipefy, porque o contrato do D3 e o mapa de fases já existem, ou Softcare, se é
+nele que o beta vai rodar. A credencial guardada agora é o que torna esse dia uma mudança de código
+só, sem voltar a pedir chave a ninguém.

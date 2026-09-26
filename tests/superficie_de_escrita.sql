@@ -294,6 +294,58 @@ BEGIN;
   -- sai a leitura do texto composto (D42) e a linha do tempo (D36).
   SELECT se.confere('mas a tela continua lendo as mensagens da campanha',
     (SELECT count(*) FROM messages) > 0);
+
+  -- As tabelas de credencial (D59). A tela liga e desliga; o resto é da função
+  -- DEFINER. O RLS já segura a linha — o que estas linhas cobram é a COLUNA,
+  -- que é a metade do D54 que a política não cobre.
+  --
+  -- Escrever `credencial_secret_id` à mão não lê segredo nenhum
+  -- (`segredo_da_conexao_crm` não é de `authenticated`): faz o worker chamar o
+  -- CRM com a credencial de outra conexão, que é errar parecendo funcionar.
+  SELECT se.recusa('apontar credencial_secret_id à mão é recusado', '42501',
+    'UPDATE crm_connections SET credencial_secret_id = gen_random_uuid()');
+  SELECT se.recusa('mexer no config de uma conexão de CRM é recusado', '42501',
+    'UPDATE crm_connections SET config = ''{}''::jsonb');
+  -- Com INSERT aberto, a linha nascia com o ponteiro escolhido pelo cliente em
+  -- vez de por `guardar_segredo`.
+  SELECT se.recusa('criar conexão de CRM por fora da função é recusado', '42501',
+    'INSERT INTO crm_connections (tenant_id, nome, provedor) VALUES ('
+    || '''5e000000-0000-0000-0000-0000000000a0'', ''na mão'', ''hubspot'')');
+  SELECT se.recusa('apagar conexão de CRM é recusado', '42501',
+    'DELETE FROM crm_connections');
+
+  -- A irmã exata, que estava larga desde o D17: fechar a porta nova e deixar a
+  -- dela aberta é trocar de porta, não fechar.
+  SELECT se.recusa('apontar chave_secret_id de IA à mão é recusado', '42501',
+    'UPDATE ai_credentials SET chave_secret_id = gen_random_uuid()');
+  SELECT se.recusa('criar credencial de IA por fora da função é recusado', '42501',
+    'INSERT INTO ai_credentials (tenant_id, nome, provedor, modelo) VALUES ('
+    || '''5e000000-0000-0000-0000-0000000000a0'', ''na mão'', ''anthropic'', ''m'')');
+
+  -- Servidor de provedor: nenhuma tela escreve, e `admin_secret_id` é ponteiro
+  -- de Vault pelo mesmo motivo.
+  SELECT se.recusa('apontar admin_secret_id à mão é recusado', '42501',
+    'UPDATE provider_servers SET admin_secret_id = gen_random_uuid()');
+
+  -- Catálogo é do produto. `tem_adapter` mentindo é o roteador prometendo um
+  -- envio que o despachante não tem como fazer (D31) — por isso a recusa é de
+  -- privilégio e não de política: "não tem política de DML" e "não tem
+  -- privilégio" não são a mesma garantia.
+  SELECT se.recusa('ligar tem_adapter de um CRM é recusado', '42501',
+    'UPDATE crm_provider_catalog SET tem_adapter = true');
+  SELECT se.recusa('ligar tem_adapter de um canal é recusado', '42501',
+    'UPDATE channel_provider_catalog SET tem_adapter = true');
+  SELECT se.recusa('inventar plataforma no catálogo é recusado', '42501',
+    'INSERT INTO crm_provider_catalog (slug, nome, descricao, campos) VALUES ('
+    || '''inventado'', ''X'', ''Y'', ''[{"chave":"t","rotulo":"T","tipo":"senha",'
+    || '"obrigatorio":true,"segredo":true,"ajuda":null}]''::jsonb)');
+
+  -- E o que a tela PRECISA continua de pé, senão a grade estreita virou tela
+  -- quebrada. `se.aceita` roda de verdade: asserção que só confere privilégio
+  -- passaria com a política recusando a linha.
+  SELECT se.confere('a tela continua lendo o catálogo de CRM',
+    (SELECT count(*) FROM crm_provider_catalog) = 8,
+    (SELECT count(*)::text FROM crm_provider_catalog));
 COMMIT;
 
 -- E o que o motor escreve continua sendo escrito pelo motor: a grade estreita
