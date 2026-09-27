@@ -510,11 +510,12 @@ e elas têm teste automatizado obrigatório.**
 > **derivados do schema** cobram `tenant_id`, RLS e FK composta de toda tabela nova — lista escrita
 > à mão envelhece sem avisar, e essa já tinha perdido a `provider_servers` (D31).
 >
-> O schema está **aplicado no projeto `hucuwjvihqgftdjpnych`** (51 migrations no repositório, 57
+> O schema está **aplicado no projeto `hucuwjvihqgftdjpnych`** (51 migrations no repositório, 58
 > registros no projeto — duas corretivas de texto, uma separação, duas do D46 (superfície e
-> tenant explícito), o bootstrap do tenant de teste e a corretiva de `search_path` do D54, ver
-> D32, D39, D46, D53 e D54; as duas do D59 entraram em 26/09, e o `get_advisors` entre uma e
-> outra não achou nada novo — `salvar_credencial_crm` entra na mesma família WARN das outras três
+> tenant explícito), o bootstrap do tenant de teste, a corretiva de `search_path` do D54 e a do
+> corpo da função no D59, ver D32, D39, D46, D53, D54 e D59; as duas do D59 entraram em 26/09 (mais
+> a corretiva, que é o terceiro registro e não existe como arquivo — o repositório já traz o corpo
+> certo na 51ª), e o `get_advisors` entre uma e outra não achou nada novo — `salvar_credencial_crm` entra na mesma família WARN das outras três
 > funções de credencial, que é a porta da tela checando `pode_administrar` em código, e
 > `segredo_da_conexao_crm` NÃO aparece, que é o que prova que `authenticated` não a alcança.
 > Quem achou o furo foi CONFERIR a grade no projeto depois de aplicar: tabela nova nasce com a
