@@ -169,6 +169,11 @@ node --experimental-strip-types --test "$RAIZ/tests/retorno.test.ts" \
   | grep -E "^# (tests|pass|fail)|^not ok"
 
 echo ""
+echo "→ entrar com e-mail e senha, e o retorno do link de definir senha (TypeScript)"
+node --experimental-strip-types --test "$RAIZ/tests/acesso.test.ts" \
+  | grep -E "^# (tests|pass|fail)|^not ok"
+
+echo ""
 echo "→ o que o produto consegue entregar hoje (TypeScript)"
 node --experimental-strip-types --test "$RAIZ/tests/entregaveis.test.ts" \
   | grep -E "^# (tests|pass|fail)|^not ok"

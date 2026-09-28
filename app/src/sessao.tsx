@@ -1,7 +1,7 @@
 import { createContext, useContext, useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
 import type { Session } from '@supabase/supabase-js';
-import { sb } from './supabase';
+import { sb, chegouDoLinkDeSenha } from './supabase';
 
 export type Papel = 'dono' | 'admin' | 'operador' | 'leitor';
 
@@ -21,6 +21,8 @@ interface Contexto {
   administra: boolean;
   opera: boolean;
   recarregarTenants(): Promise<void>;
+  definindoSenha: boolean;
+  senhaDefinida(): void;
 }
 
 const Ctx = createContext<Contexto | null>(null);
@@ -38,12 +40,21 @@ export function ProvedorSessao({ children }: { children: ReactNode }) {
     () => localStorage.getItem(CHAVE_TENANT),
   );
 
+  // Veio do e-mail de "definir senha": a sessão existe, mas o painel espera
+  // até a senha nova ser gravada. Começa pelo que a URL disse, porque o aviso
+  // do Supabase pode chegar antes de haver quem o escute (D60).
+  const [definindoSenha, setDefinindoSenha] = useState(chegouDoLinkDeSenha);
+
   useEffect(() => {
     sb.auth.getSession().then(({ data }) => {
       setSessao(data.session);
       setCarregando(false);
     });
-    const { data: sub } = sb.auth.onAuthStateChange((_e, s) => setSessao(s));
+    const { data: sub } = sb.auth.onAuthStateChange((evento, s) => {
+      setSessao(s);
+      if (evento === 'PASSWORD_RECOVERY') setDefinindoSenha(true);
+      if (evento === 'SIGNED_OUT') setDefinindoSenha(false);
+    });
     return () => sub.subscription.unsubscribe();
   }, []);
 
@@ -87,6 +98,8 @@ export function ProvedorSessao({ children }: { children: ReactNode }) {
     administra: tenant?.papel === 'dono' || tenant?.papel === 'admin',
     opera: tenant ? tenant.papel !== 'leitor' : false,
     recarregarTenants: carregarTenants,
+    definindoSenha,
+    senhaDefinida() { setDefinindoSenha(false); },
   };
 
   return <Ctx.Provider value={valor}>{children}</Ctx.Provider>;

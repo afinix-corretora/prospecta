@@ -3,7 +3,7 @@ import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { ProvedorSessao, useSessao } from './sessao';
 import { Rail } from './componentes/Rail';
 import { Aviso, Campo } from './componentes/base';
-import { Entrar } from './telas/Entrar';
+import { DefinirSenha, Entrar } from './telas/Entrar';
 import { Canal } from './telas/Canal';
 import { Importar } from './telas/Importar';
 import { Contatos } from './telas/Contatos';
@@ -77,10 +77,13 @@ function SemConfiguracao() {
 }
 
 function Portao() {
-  const { sessao, carregando, tenant, tenants } = useSessao();
+  const { sessao, carregando, tenant, tenants, definindoSenha } = useSessao();
 
   if (carregando) return <div className="entrar"><p className="vazio">Carregando…</p></div>;
   if (!sessao) return <Entrar />;
+  // Chegou pelo e-mail de "definir senha": a sessão existe, mas o painel
+  // espera a senha nova — senão o link vira acesso sem troca de senha (D60).
+  if (definindoSenha) return <DefinirSenha />;
   // Logado e sem cliente nenhum: é o primeiro acesso, e criar o próprio é a
   // única coisa que dá para fazer. `criar_tenant` põe quem chamou como dono.
   if (!tenants.length) return <PrimeiroCliente />;

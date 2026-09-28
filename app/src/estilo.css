@@ -258,6 +258,13 @@ button.item:hover { border-color: var(--line-strong); transform: translateX(2px)
   border: 1px solid var(--line); border-radius: var(--r-sm);
 }
 .entrar .nota-retorno code { word-break: break-all }
+.entrar .btn.prim { width: 100% }
+/* "Esqueci a senha" e "voltar": ação secundária, com cara de link. */
+.entrar .troca-modo { margin: 14px 0 0; text-align: center; font-size: 12.5px }
+.entrar button.link {
+  background: none; border: 0; padding: 0; color: var(--accent);
+  font: inherit; cursor: pointer; text-decoration: underline; text-underline-offset: 2px;
+}
 
 .qr { display: grid; gap: 10px; justify-items: center; padding: 14px; background: var(--surface-2); border-radius: var(--r-sm) }
 .qr img { width: 220px; height: 220px; image-rendering: pixelated; border-radius: 8px; background: #fff }

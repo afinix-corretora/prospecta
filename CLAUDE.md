@@ -369,6 +369,10 @@ e elas têm teste automatizado obrigatório.**
   plataforma grava no Vault e nada mais: `tem_adapter` é falso nas oito, a `outbox` segue
   enfileirando para lugar nenhum, e o aviso vem ANTES da lista, porque quem abre a tela vem vincular
   e descobrir depois de colar a credencial é a ordem errada — é o D55 por escolha (D59).
+- **Nunca** deixar o link de "definir senha" virar acesso sem troca de senha. O Supabase avisa
+  `PASSWORD_RECOVERY` num `setTimeout`, depois de gravar a sessão: quem depende só do aviso pode
+  montar tarde e mandar a pessoa direto ao painel. O fragmento da URL é lido **antes** de criar o
+  cliente, e o portão segura o painel até a senha nova ser gravada (D60).
 
 ---
 

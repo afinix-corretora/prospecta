@@ -64,8 +64,10 @@ export function Kpi({ rotulo, valor, sub }: { rotulo: string; valor: ReactNode; 
 
 export function Campo(props: {
   id: string; rotulo: string; valor: string; aoMudar(v: string): void;
-  tipo?: 'texto' | 'senha'; obrigatorio?: boolean; ajuda?: string | null;
+  tipo?: 'texto' | 'senha' | 'email'; obrigatorio?: boolean; ajuda?: string | null;
   vault?: string; placeholder?: string; mono?: boolean;
+  /** `autocomplete` do input — sem ele o gerenciador de senhas não preenche o login. */
+  autocompletar?: string;
 }) {
   return (
     <div className="campo">
@@ -76,7 +78,8 @@ export function Campo(props: {
       <input
         id={props.id}
         className={props.mono ? 'mono' : undefined}
-        type={props.tipo === 'senha' ? 'password' : 'text'}
+        type={props.tipo === 'senha' ? 'password' : props.tipo === 'email' ? 'email' : 'text'}
+        autoComplete={props.autocompletar}
         value={props.valor}
         placeholder={props.placeholder ?? (props.tipo === 'senha' ? '••••••••••••' : '')}
         onChange={(e) => props.aoMudar(e.target.value)}

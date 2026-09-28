@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
+import { chegouParaDefinirSenha, erroDoLink } from './acesso';
 
 // As duas são públicas por desenho: a chave publishable vai para o navegador e
 // quem protege o dado é o RLS, não ela. Se o RLS estiver certo, vazar esta
@@ -19,9 +20,25 @@ export const faltando = [
   !chave && 'VITE_SUPABASE_ANON_KEY',
 ].filter(Boolean) as string[];
 
+// Lidos ANTES de criar o cliente: ao nascer, ele consome o fragmento da URL.
+// Ver `chegouParaDefinirSenha` para o porquê (D60).
+const fragmento = typeof window === 'undefined' ? '' : window.location.hash;
+export const chegouDoLinkDeSenha = chegouParaDefinirSenha(fragmento);
+export const erroNoLink = erroDoLink(fragmento);
+if (erroNoLink) {
+  // O erro já foi lido; deixá-lo no endereço faria o recarregar mostrá-lo de novo.
+  window.history.replaceState(null, '', window.location.pathname + window.location.search);
+}
+
 // Cliente com valores de fachada quando não há configuração: nada é chamado
 // nesse caso, porque o App para antes — mas o import não pode explodir.
-export const sb = createClient(url || 'https://exemplo.supabase.co', chave || 'sem-chave');
+//
+// As opções de `auth` são as de fábrica, escritas por extenso de propósito:
+// "logado continua logado ao reabrir o link" depende das três, e uma delas
+// desligada por engano pareceria defeito de login, não de configuração.
+export const sb = createClient(url || 'https://exemplo.supabase.co', chave || 'sem-chave', {
+  auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true },
+});
 
 export const BASE_FUNCOES = String(url ?? '').replace('.supabase.co', '.functions.supabase.co');
 

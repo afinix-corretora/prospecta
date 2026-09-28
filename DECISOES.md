@@ -2050,3 +2050,50 @@ O writeback continua sem destino. `tem_adapter` é falso nas oito, e o primeiro 
 decisão em aberto — Pipefy, porque o contrato do D3 e o mapa de fases já existem, ou Softcare, se é
 nele que o beta vai rodar. A credencial guardada agora é o que torna esse dia uma mudança de código
 só, sem voltar a pedir chave a ninguém.
+
+---
+
+### D60 — Entrar com e-mail e senha, e o link só para definir a senha
+
+**O sintoma.** Mesmo tendo entrado, abrir o endereço do app de novo mostrava "receber link de
+acesso". A conferência no projeto explicou sem precisar de hipótese: a última sessão do único
+usuário tinha sido renovada em 25/09 às 20:57, e nada depois — o navegador de hoje não carregava
+sessão nenhuma para aquele endereço.
+
+A sessão do Supabase mora no `localStorage`, e `localStorage` é **por endereço**. Cada deploy da
+Vercel tem um endereço próprio, o preview do PR tem outro, a produção tem outro. Com link por
+e-mail, cada endereço novo custava um e-mail novo e uma espera — e parecia defeito de login, porque
+"eu já tinha entrado".
+
+**A decisão.** A tela de entrada passa a ser e-mail e senha (`signInWithPassword`). O e-mail fica
+para o que ele faz bem: **definir a senha** na primeira vez e trocá-la quando esquecida
+(`resetPasswordForEmail` → a pessoa volta pelo link → `updateUser({ password })`).
+
+Isso inverte o que a tela antiga dizia de si ("sem senha para vazar"). A troca é consciente: o
+custo do link apareceu no uso, todo dia, e o ganho dele — não existir senha — é pequeno num produto
+de operação interna com poucos usuários por cliente.
+
+**Duas armadilhas que o código trata.**
+
+1. **O link de "definir senha" não pode virar acesso sem troca de senha.** Ao voltar do e-mail, o
+   Supabase grava a sessão e só então avisa `PASSWORD_RECOVERY` — num `setTimeout`. Se a tela
+   dependesse só do aviso, bastaria o React montar depois dele para a pessoa cair no painel,
+   logada, sem nunca ver o campo de senha nova. Por isso `app/src/supabase.ts` lê o fragmento da
+   URL **antes** de criar o cliente, e o portão segura o painel até a senha ser gravada. O aviso
+   continua escutado; ele só deixou de ser a única fonte.
+2. **Link expirado não pode voltar em silêncio.** O Supabase devolve o erro no fragmento
+   (`error_code=otp_expired`), e a tela antiga mostrava o formulário como se nada tivesse
+   acontecido. Agora a tela abre em "definir a senha", com o motivo escrito, e o fragmento sai do
+   endereço para o recarregar não repeti-lo.
+
+A regra sem rede está em `app/src/acesso.ts`, com teste em `tests/acesso.test.ts` (11 casos, na
+bateria). O caminho "sessão salva → painel direto" foi conferido no navegador com Playwright:
+nenhuma chamada a `/auth` e nenhum formulário de senha na tela.
+
+**O que continua valendo do D50.** O link de definir senha usa o mesmo `redirectTo` do link antigo
+e a mesma lista de Redirect URLs do painel do Supabase — a tela continua dizendo em voz alta para
+onde pediu que o link volte.
+
+**O que isto não resolve.** A sessão continua sendo por endereço: abrir um preview novo pede login
+de novo. A diferença é que agora "de novo" é digitar a senha, não esperar e-mail. Usar sempre o
+mesmo endereço — o de produção — é o que faz o "já estou logado" valer entre uma visita e outra.
