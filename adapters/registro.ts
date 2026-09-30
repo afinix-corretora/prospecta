@@ -11,9 +11,11 @@ import { WhatsAppEvolutionAdapter } from './whatsapp-evolution.ts';
 import { WhatsAppMetaAdapter } from './whatsapp-meta.ts';
 import { SmsComteleAdapter } from './sms-comtele.ts';
 import { EmailResendAdapter } from './email-resend.ts';
+import { EmailLocawebAdapter } from './email-locaweb.ts';
 
 export type Provedor =
-  | 'gupshup' | 'meta_cloud' | 'uazapi' | 'evolution' | 'comtele' | 'resend';
+  | 'gupshup' | 'meta_cloud' | 'uazapi' | 'evolution' | 'comtele' | 'resend'
+  | 'locaweb';
 
 export function criarAdapter(provedor: string, buscar: Buscador = fetch): ChannelAdapter {
   switch (provedor) {
@@ -23,6 +25,7 @@ export function criarAdapter(provedor: string, buscar: Buscador = fetch): Channe
     case 'meta_cloud': return new WhatsAppMetaAdapter(buscar);
     case 'comtele':    return new SmsComteleAdapter(buscar);
     case 'resend':     return new EmailResendAdapter(buscar);
+    case 'locaweb':    return new EmailLocawebAdapter(buscar);
     default:
       throw new Error(`provedor sem adapter: ${provedor}`);
   }
@@ -34,12 +37,13 @@ export function criarAdapter(provedor: string, buscar: Buscador = fetch): Channe
  * do que a chamada falhar em produção com "provedor sem adapter".
  *
  * `smtp` está no catálogo e não está aqui: é provedor sem adapter de propósito
- * (D30), porque socket não cabe num diretório que só usa `fetch`.
+ * (D30), porque socket não cabe num diretório que só usa `fetch`. O `locaweb`
+ * é o SMTP Locaweb pela API HTTP do produto, não pelo protocolo (D61).
  */
 export const PROVEDORES_POR_CANAL: Record<Canal, Provedor[]> = {
   whatsapp: ['gupshup', 'meta_cloud', 'uazapi', 'evolution'],
   sms: ['comtele'],
-  email: ['resend'],
+  email: ['resend', 'locaweb'],
   instagram: [],
 };
 

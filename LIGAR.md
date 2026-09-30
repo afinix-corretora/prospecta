@@ -202,6 +202,24 @@ gravá-la em `config` mesmo que alguém tente (D28).
 Na edição: **segredo em branco mantém o que já está no Vault**; campo
 não-secreto em branco limpa.
 
+### 3.1 E-mail pelo SMTP Locaweb (D61)
+
+Além do que a tela pede, três coisas ficam no painel da Locaweb:
+
+1. **O remetente precisa estar confirmado lá.** Sem isso a API responde 403,
+   o motor culpa a conta (não o contato) e ela sai do pool.
+2. **O webhook da conta aponta para a URL desta conta no motor** — a que a
+   tela mostra depois de cadastrar (Configurações ▸ Webhook, no painel da
+   Locaweb). É por ela que bounce e abertura voltam.
+3. **"Responder para" é um inbound que o motor lê.** A Locaweb não recebe
+   e-mail; hoje o inbound que o motor lê é o da Resend, cadastrado neste mesmo
+   cliente. Sem isso a resposta não encerra a cadência — por isso o banco
+   recusa salvar a conta com o campo em branco.
+
+**Antes de liberar:** a migration `20260930000000_email_locaweb` e as três
+edge functions entram no projeto juntas (ver seção 4). Uma sem a outra é o
+catálogo oferecendo a Locaweb para um worker que não sabe enviar por ela.
+
 ---
 
 ## 4. As edge functions

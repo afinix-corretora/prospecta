@@ -2097,3 +2097,58 @@ onde pediu que o link volte.
 **O que isto não resolve.** A sessão continua sendo por endereço: abrir um preview novo pede login
 de novo. A diferença é que agora "de novo" é digitar a senha, não esperar e-mail. Usar sempre o
 mesmo endereço — o de produção — é o que faz o "já estou logado" valer entre uma visita e outra.
+
+### D61 — SMTP Locaweb como segundo e-mail, pela API e não pelo protocolo
+
+**O pedido.** Usar o SMTP da Locaweb como canal alternativo de envio de e-mail, ao lado do Resend.
+
+**A leitura do D30.** O protocolo SMTP continua sem adapter: precisa de socket, e `adapters/` só
+fala `fetch` — é o que faz o mesmo arquivo rodar no Deno e no Node do teste. Mas o "SMTP Locaweb" é
+um produto, e o produto tem API REST (`api.smtplw.com.br/v1/messages`, token no cabeçalho
+`x-auth-token`, conferida no OpenAPI publicado). É ela que o adapter usa. A linha `smtp` do catálogo
+continua lá, sem adapter, e agora diz onde está a alternativa.
+
+**Três diferenças para o Resend, e cada uma virou escolha escrita.**
+
+1. **O assunto vai como está.** A API pede ASCII ou *encoded-word* (RFC 2047), e quase todo
+   assunto em português tem acento. `codificarAssunto` (em `adapters/email.ts`, porque é dialeto
+   de e-mail e não do provedor) faz `=?UTF-8?B?...?=` em pedaços de até 75 caracteres sem partir
+   caractere, e troca quebra de linha por espaço — quebra de linha em cabeçalho é injeção.
+2. **O webhook não devolve o id do envio.** O POST responde com um id numérico, mas o webhook
+   (formulário, não JSON) traz só destinatário, assunto, código do bounce e o valor do cabeçalho
+   `X-Smtplw` da mensagem. Então o `message_id` do motor vai no `X-Smtplw` e é **ele** o
+   `providerMessageId`: o evento casa pelo que nós mandamos, dentro do tenant do chip (D38). O id
+   da Locaweb não é guardado, porque nada o leria de volta. Evento sem um uuid no `X-Smtplw` é de
+   outro sistema que usa a mesma conta, e é descartado.
+3. **A Locaweb não recebe e-mail.** A resposta vai para o `Reply-To`. Sem ele apontando para um
+   inbound que o motor lê, a pessoa responde para uma caixa que ninguém processa e a cadência segue
+   mandando toque — a invariante 4 furada sem erro nenhum. Por isso `responder_para` é
+   **obrigatório** na Locaweb (e não no Resend, onde o próprio domínio de envio pode receber). Hoje
+   o único inbound que o motor lê é o da Resend; `registrar_resposta_por_numero` casa pelo endereço
+   dentro do tenant e do canal, sem filtrar pelo chip, então a resposta a um e-mail que saiu pela
+   Locaweb é reconhecida mesmo chegando pelo webhook de uma conta Resend.
+
+**Devolução.** A Locaweb manda o código SMTP estendido (RFC 3463), não "hard"/"soft". Só `5.1.x`
+(status de endereço: caixa ou domínio inexistente) conta como permanente. `5.7.x` também é
+permanente, mas é política do servidor de destino — reputação, conteúdo — e suprimir o endereço
+por isso seria culpar o contato pela conta. O resto é temporário (D49).
+
+**O que se perde.** A API não aceita chave de idempotência. A invariante 1 continua garantida no
+banco pela chave `(enrollment_id, step_id)`; o que some é a proteção do Resend para quando o lease
+expira com o POST em voo. Pelo mesmo motivo, `201` sem id no corpo conta como envio: marcar um
+e-mail enfileirado como falha convidaria o reenvio. E não há evento de entrega, clique ou denúncia
+— a Locaweb só avisa bounce e abertura; nada é inventado para preencher.
+
+**O que mudou fora do adapter.** `canal-webhook` lia todo corpo com `req.json()`, e formulário
+virava `{}` sem erro: todo bounce da Locaweb responderia 200 e não viraria evento nenhum. Agora
+`lerCorpoWebhook` (em `motor/webhooks.ts`, testada) decide pelo `Content-Type`.
+
+**Estado.** Migration `20260930000000_email_locaweb` e as três edge functions estão no repositório,
+com a bateria verde, mas **não aplicadas nem publicadas no projeto**: `PUBLICADO.json` as marca
+`pendente`. As duas coisas vão juntas — catálogo com `tem_adapter = true` e worker sem o adapter é o
+roteador prometendo um envio que o despachante não faz (D31). Nada depende disso até existir uma
+conta Locaweb com token para cadastrar.
+
+**Não conferido contra a conta real.** O formato do `POST` e o do webhook vêm da documentação
+pública e de um cliente .NET de terceiros; a primeira conta cadastrada precisa de um envio em
+shadow mode desligado para um endereço de teste antes de entrar numa campanha.

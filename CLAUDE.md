@@ -373,6 +373,13 @@ e elas têm teste automatizado obrigatório.**
   `PASSWORD_RECOVERY` num `setTimeout`, depois de gravar a sessão: quem depende só do aviso pode
   montar tarde e mandar a pessoa direto ao painel. O fragmento da URL é lido **antes** de criar o
   cliente, e o portão segura o painel até a senha nova ser gravada (D60).
+- **Nunca** confundir o nome do produto com o protocolo. "SMTP Locaweb" tem API HTTP, e é por ela
+  que o adapter fala; o protocolo SMTP continua fora de `adapters/` pelo D30 (D61).
+- **Nunca** aceitar conta de e-mail que não recebe resposta sem um `Reply-To` para um inbound que o
+  motor lê. A pessoa responde, ninguém processa, e a cadência segue — a invariante 4 furada sem
+  erro. Na Locaweb o campo é obrigatório no catálogo (D61).
+- **Nunca** ler corpo de webhook só como JSON. Formulário virava `{}` sem erro, e o bounce respondia
+  200 sem virar evento. Quem decide é o `Content-Type` (D61).
 
 ---
 
@@ -397,7 +404,8 @@ e elas têm teste automatizado obrigatório.**
 > (`processar_vencidos`), decidem e reivindicam sem enviar — o que torna a Fase 3 possível sem
 > nenhum adapter. O mapa de status do backfill está fechado em `backfill/mapa_status.sql`.
 >
-> A Fase 1 tem seis adapters em `adapters/` (Gupshup, Meta Cloud, UAZAPI, Evolution, Comtele, Resend) com a
+> A Fase 1 tem sete adapters em `adapters/` (Gupshup, Meta Cloud, UAZAPI, Evolution, Comtele, Resend e
+> SMTP Locaweb — este pela API HTTP do produto, não pelo protocolo, D61) com a
 > superfície de despacho em SQL (`reivindicar_pendentes`, `registrar_resultado_envio`,
 > `registrar_evento_provedor`). O Instagram ainda não tem adapter, e o registro declara isso; `smtp`
 > segue no catálogo sem adapter de propósito, porque socket não cabe num diretório que só usa
@@ -514,7 +522,7 @@ e elas têm teste automatizado obrigatório.**
 > **derivados do schema** cobram `tenant_id`, RLS e FK composta de toda tabela nova — lista escrita
 > à mão envelhece sem avisar, e essa já tinha perdido a `provider_servers` (D31).
 >
-> O schema está **aplicado no projeto `hucuwjvihqgftdjpnych`** (51 migrations no repositório, 58
+> O schema está **aplicado no projeto `hucuwjvihqgftdjpnych`** (52 migrations no repositório, 58
 > registros no projeto — duas corretivas de texto, uma separação, duas do D46 (superfície e
 > tenant explícito), o bootstrap do tenant de teste, a corretiva de `search_path` do D54 e a do
 > corpo da função no D59, ver D32, D39, D46, D53, D54 e D59; as duas do D59 entraram em 26/09 (mais

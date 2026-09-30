@@ -17,9 +17,12 @@ import { WhatsAppEvolutionAdapter } from '../adapters/whatsapp-evolution.ts';
 import { WhatsAppMetaAdapter } from '../adapters/whatsapp-meta.ts';
 import { SmsComteleAdapter } from '../adapters/sms-comtele.ts';
 import { EmailResendAdapter } from '../adapters/email-resend.ts';
+import { EmailLocawebAdapter } from '../adapters/email-locaweb.ts';
 import { criarAdapter, canalTemAdapter, PROVEDORES_POR_CANAL } from '../adapters/registro.ts';
 import { normalizarTelefone, telefoneValido } from '../adapters/telefone.ts';
-import { emailValido, montarRemetente, normalizarEmail, separarAssunto } from '../adapters/email.ts';
+import {
+  codificarAssunto, emailValido, montarRemetente, normalizarEmail, separarAssunto,
+} from '../adapters/email.ts';
 import { emCaminho, primeiroTexto } from '../adapters/texto.ts';
 
 /** fetch falso que grava a chamada e devolve o que o teste mandar. */
@@ -968,6 +971,237 @@ test('resend: chave recusada é saúde ruim', async () => {
 });
 
 // ---------------------------------------------------------------------------
+// Assunto em cabeçalho (RFC 2047)
+// ---------------------------------------------------------------------------
+
+/** Desfaz `=?UTF-8?B?...?=` para conferir que nada se perdeu no caminho. */
+function decodificarAssunto(cabecalho: string): string {
+  const palavras = cabecalho.match(/=\?UTF-8\?B\?[^?]*\?=/g);
+  if (!palavras) return cabecalho;
+  return palavras.map((p) => {
+    const bin = atob(p.slice(10, -2));
+    return new TextDecoder().decode(Uint8Array.from(bin, (c) => c.charCodeAt(0)));
+  }).join('');
+}
+
+test('assunto só com ASCII vai como está', () => {
+  assert.equal(codificarAssunto('Comparativo do plano'), 'Comparativo do plano');
+});
+
+test('assunto com acento vira encoded-word e volta igual', () => {
+  const c = codificarAssunto('Plano de saúde da sua empresa');
+  assert.match(c, /^=\?UTF-8\?B\?/);
+  assert.equal(/^[\x20-\x7e]*$/.test(c), true, 'cabeçalho tem de ser ASCII');
+  assert.equal(decodificarAssunto(c), 'Plano de saúde da sua empresa');
+});
+
+test('assunto longo parte em palavras de até 75, sem partir caractere', () => {
+  const original = 'Ação, atenção e condição: '.repeat(6).trim();
+  const c = codificarAssunto(original);
+  const palavras = c.split(' ');
+  assert.ok(palavras.length > 1);
+  for (const p of palavras) assert.ok(p.length <= 75, `${p.length}: ${p}`);
+  assert.equal(decodificarAssunto(c), original);
+});
+
+test('quebra de linha no assunto não vira cabeçalho novo', () => {
+  assert.equal(codificarAssunto('Oi\r\nBcc: todo@mundo.com'), 'Oi Bcc: todo@mundo.com');
+});
+
+// ---------------------------------------------------------------------------
+// SMTP Locaweb (API HTTP, D61)
+// ---------------------------------------------------------------------------
+
+const CRED_LOCAWEB = {
+  api_token: 'lw-123',
+  assunto_padrao: 'Plano de saúde da sua empresa',
+  responder_para: 'respostas@inbound.afinix.com.br',
+};
+
+const PEDIDO_LOCAWEB: PedidoEnvio = { ...PEDIDO_EMAIL, credenciais: CRED_LOCAWEB };
+
+test('locaweb: envia no formato da API, com o id do motor no X-Smtplw', async () => {
+  const { buscar, chamadas } = fetchFalso(201, { data: { id: 987 } });
+  const r = await new EmailLocawebAdapter(buscar).send(PEDIDO_LOCAWEB);
+
+  assert.equal(r.ok, true);
+  // É o nosso id, e não o 987: o webhook da Locaweb não devolve o id dela,
+  // devolve o valor do X-Smtplw. Casar pelo 987 seria gravar evento que nunca
+  // acha a mensagem.
+  assert.equal(r.providerMessageId, PEDIDO_EMAIL.messageId);
+  assert.equal(chamadas[0].url, 'https://api.smtplw.com.br/v1/messages');
+
+  const cab = chamadas[0].init!.headers as Record<string, string>;
+  assert.equal(cab['x-auth-token'], 'lw-123');
+
+  assert.deepEqual(JSON.parse(String(chamadas[0].init!.body)), {
+    subject: 'Comparativo',
+    body: 'Ana, segue o comparativo.',
+    to: 'ana@exemplo.com.br',
+    from: 'comercial@frio.afinix.com.br',
+    headers: {
+      'Content-Type': 'text/plain; charset=UTF-8',
+      'Reply-To': 'respostas@inbound.afinix.com.br',
+      'X-Smtplw': PEDIDO_EMAIL.messageId,
+    },
+  });
+});
+
+test('locaweb: assunto padrão com acento sai codificado, não cru', async () => {
+  const { buscar, chamadas } = fetchFalso(201, { data: { id: 1 } });
+  await new EmailLocawebAdapter(buscar).send({ ...PEDIDO_LOCAWEB, conteudo: 'Ana, tudo bem?' });
+
+  const corpo = JSON.parse(String(chamadas[0].init!.body));
+  assert.match(corpo.subject, /^=\?UTF-8\?B\?/);
+  assert.equal(decodificarAssunto(corpo.subject), 'Plano de saúde da sua empresa');
+});
+
+test('locaweb: sem "responder para" é culpa da conta e nem chama a rede', async () => {
+  // Sem Reply-To, a resposta cai numa caixa que o motor não lê e a cadência
+  // continua: a invariante 4 furada em silêncio.
+  const { buscar, chamadas } = fetchFalso(201, { data: { id: 1 } });
+  const { responder_para: _, ...semResposta } = CRED_LOCAWEB;
+  const r = await new EmailLocawebAdapter(buscar).send({
+    ...PEDIDO_LOCAWEB, credenciais: semResposta,
+  });
+
+  assert.equal(r.ok, false);
+  assert.equal(r.culpa, 'remetente');
+  assert.equal(chamadas.length, 0);
+});
+
+test('locaweb: sem token ou sem assunto padrão, a culpa é da conta', async () => {
+  for (const falta of ['api_token', 'assunto_padrao'] as const) {
+    const { buscar, chamadas } = fetchFalso(201, { data: { id: 1 } });
+    const creds: Record<string, string> = { ...CRED_LOCAWEB };
+    delete creds[falta];
+    const r = await new EmailLocawebAdapter(buscar).send({ ...PEDIDO_LOCAWEB, credenciais: creds });
+    assert.equal(r.culpa, 'remetente', falta);
+    assert.equal(chamadas.length, 0, falta);
+  }
+});
+
+test('locaweb: endereço inválido é culpa do destino e nem chega a sair', async () => {
+  const { buscar, chamadas } = fetchFalso(201, { data: { id: 1 } });
+  const r = await new EmailLocawebAdapter(buscar).send({ ...PEDIDO_LOCAWEB, destino: 'ana@' });
+
+  assert.equal(r.culpa, 'destino');
+  assert.equal(chamadas.length, 0);
+});
+
+test('locaweb: token recusado e remetente não confirmado derrubam a conta, não o contato', async () => {
+  for (const status of [400, 401, 403, 413, 415]) {
+    const { buscar } = fetchFalso(status, { errors: [{ detail: 'sender not confirmed' }] });
+    const r = await new EmailLocawebAdapter(buscar).send(PEDIDO_LOCAWEB);
+    assert.equal(r.ok, false, String(status));
+    assert.equal(r.culpa, 'remetente', String(status));
+  }
+});
+
+test('locaweb: o motivo da recusa vem do provedor, não só o número', async () => {
+  const { buscar } = fetchFalso(403, { errors: [{ detail: 'sender not confirmed' }] });
+  const r = await new EmailLocawebAdapter(buscar).send(PEDIDO_LOCAWEB);
+  assert.equal(r.erro, 'sender not confirmed');
+});
+
+test('locaweb: 429 e 5xx são transitórios', async () => {
+  for (const status of [429, 500, 503]) {
+    const { buscar } = fetchFalso(status, {});
+    const r = await new EmailLocawebAdapter(buscar).send(PEDIDO_LOCAWEB);
+    assert.equal(r.culpa, 'transitorio', String(status));
+  }
+});
+
+test('locaweb: 201 sem id no corpo ainda é envio, porque o id dela não casa nada', async () => {
+  // Ao contrário do Resend. Marcar como falha um e-mail enfileirado convida o
+  // reenvio, e a API não aceita chave de idempotência.
+  const { buscar } = fetchFalso(201, {});
+  const r = await new EmailLocawebAdapter(buscar).send(PEDIDO_LOCAWEB);
+  assert.equal(r.ok, true);
+  assert.equal(r.providerMessageId, PEDIDO_EMAIL.messageId);
+});
+
+test('locaweb: rede caída é transitória', async () => {
+  const r = await new EmailLocawebAdapter(fetchQueExplode('ECONNRESET')).send(PEDIDO_LOCAWEB);
+  assert.equal(r.culpa, 'transitorio');
+});
+
+const ID_MOTOR = 'aa000000-0000-0000-0000-000000000001';
+
+test('locaweb: bounce de endereço (5.1.x) é devolução permanente, casada pelo X-Smtplw', () => {
+  const [e] = new EmailLocawebAdapter().normalizeWebhook({
+    bounce_description: 'O endereço de e-mail especificado não existe',
+    bounce_code: '5.1.1',
+    sender: 'comercial@frio.afinix.com.br',
+    to: 'ana@exemplo.com.br',
+    subject: 'Comparativo',
+    'x-smtplw': ID_MOTOR,
+  });
+
+  assert.equal(e.tipo, 'devolvido');
+  assert.equal(e.providerMessageId, ID_MOTOR);
+  assert.equal(e.payload.permanente, true);
+  assert.equal(e.payload.codigo, '5.1.1');
+});
+
+test('locaweb: bounce que não é de endereço não suprime ninguém (D49)', () => {
+  // 5.7.x é permanente, mas é política do servidor de destino — reputação da
+  // conta, conteúdo. Caixa cheia e código ausente são o desconhecido.
+  for (const codigo of ['5.7.1', '4.2.2', '5.2.2', '']) {
+    const [e] = new EmailLocawebAdapter().normalizeWebhook({
+      bounce_description: 'recusado', bounce_code: codigo, 'x-smtplw': ID_MOTOR,
+    });
+    assert.equal(e.tipo, 'devolvido', codigo);
+    assert.equal(e.payload.permanente, false, codigo);
+  }
+});
+
+test('locaweb: abertura vira lido, na hora que o provedor disse', () => {
+  const [e] = new EmailLocawebAdapter().normalizeWebhook({
+    sender: 'comercial@frio.afinix.com.br',
+    to: 'ana@exemplo.com.br',
+    opened_at: '2026-09-30T10:04:51-03:00',
+    'x-smtplw': ID_MOTOR,
+  });
+
+  assert.equal(e.tipo, 'lido');
+  assert.equal(e.providerMessageId, ID_MOTOR);
+  assert.equal(e.ocorridoEm, '2026-09-30T13:04:51.000Z');
+});
+
+test('locaweb: evento sem o nosso X-Smtplw é de outro sistema e é descartado', () => {
+  const a = new EmailLocawebAdapter();
+  assert.deepEqual(a.normalizeWebhook({ bounce_code: '5.1.1', to: 'ana@exemplo.com.br' }), []);
+  assert.deepEqual(a.normalizeWebhook({ bounce_code: '5.1.1', 'x-smtplw': 'pedido-42' }), []);
+});
+
+test('locaweb: o formulário cru também é entendido', () => {
+  const [e] = new EmailLocawebAdapter().normalizeWebhook(
+    `bounce_description=Desconhecido&bounce_code=5.1.1&to=ana%40exemplo.com.br&x-smtplw=${ID_MOTOR}`,
+  );
+  assert.equal(e.tipo, 'devolvido');
+  assert.equal(e.providerMessageId, ID_MOTOR);
+});
+
+test('locaweb: sem bounce nem abertura, nenhum evento é inventado', () => {
+  assert.deepEqual(new EmailLocawebAdapter().normalizeWebhook({ 'x-smtplw': ID_MOTOR }), []);
+});
+
+test('locaweb: saúde é o token respondendo na API', async () => {
+  const { buscar, chamadas } = fetchFalso(200, { data: [] });
+  const s = await new EmailLocawebAdapter(buscar).checkHealth({ api_token: 'lw-123' });
+
+  assert.equal(s.ok, true);
+  assert.equal(chamadas[0].url, 'https://api.smtplw.com.br/v1/settings/domains');
+  assert.equal((chamadas[0].init!.headers as Record<string, string>)['x-auth-token'], 'lw-123');
+});
+
+test('locaweb: token recusado é saúde ruim', async () => {
+  const { buscar } = fetchFalso(401, {});
+  assert.equal((await new EmailLocawebAdapter(buscar).checkHealth({ api_token: 'x' })).ok, false);
+});
+
+// ---------------------------------------------------------------------------
 // Registro
 // ---------------------------------------------------------------------------
 
@@ -976,6 +1210,7 @@ test('registro devolve o adapter de cada provedor', () => {
   assert.equal(criarAdapter('meta_cloud').canal, 'whatsapp');
   assert.equal(criarAdapter('comtele').canal, 'sms');
   assert.equal(criarAdapter('resend').canal, 'email');
+  assert.equal(criarAdapter('locaweb').canal, 'email');
 });
 
 test('provedor sem adapter falha alto, não silencioso', () => {

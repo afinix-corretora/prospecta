@@ -14,7 +14,7 @@
 // reenvia, e um id desconhecido não melhora na segunda tentativa.
 
 import { bancoSupabase, clienteAdmin, resolverWebhook } from '../_shared/banco-supabase.ts';
-import { receberWebhook } from '../../../motor/webhooks.ts';
+import { lerCorpoWebhook, receberWebhook } from '../../../motor/webhooks.ts';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -32,7 +32,8 @@ Deno.serve(async (req) => {
       return Response.json({ ok: false, erro: 'token desconhecido' }, { status: 404 });
     }
 
-    const corpo = await req.json().catch(() => ({}));
+    // JSON para quase todos; formulário para o SMTP Locaweb (D61).
+    const corpo = lerCorpoWebhook(req.headers.get('content-type'), await req.text());
     const resumo = await receberWebhook(bancoSupabase(sb), chip.provedor, corpo, {
       senderId: chip.sender_id,
     });

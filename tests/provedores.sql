@@ -20,8 +20,10 @@ BEGIN INSERT INTO pv.resultado (nome, ok, detalhe)
 -- O catálogo semeado
 -- ---------------------------------------------------------------------------
 
-SELECT pv.confere('o catálogo traz os oito provedores',
-  (SELECT count(*) = 8 FROM channel_provider_catalog),
+-- Nove desde o D61 (SMTP Locaweb). Contagem escrita à mão envelhece; o que
+-- ela protege é "nenhum provedor sumiu ou apareceu sem migration".
+SELECT pv.confere('o catálogo traz os nove provedores',
+  (SELECT count(*) = 9 FROM channel_provider_catalog),
   (SELECT count(*)::text FROM channel_provider_catalog));
 
 SELECT pv.confere('WhatsApp tem oficial e não oficial separados',
@@ -62,9 +64,24 @@ SELECT pv.confere('quem não tem adapter está declarado, não escondido',
 
 -- D30: e-mail passa a ter adapter, e ele é HTTP. SMTP continua listado sem
 -- adapter de propósito — sumir com a opção esconderia a decisão.
-SELECT pv.confere('e-mail tem provedor com adapter',
-  (SELECT count(*) FILTER (WHERE tem_adapter) = 1
+-- D61: o SMTP Locaweb entra pela API HTTP do produto, não pelo protocolo.
+SELECT pv.confere('e-mail tem os provedores por API, e só eles têm adapter',
+  (SELECT array_agg(slug ORDER BY slug) FILTER (WHERE tem_adapter) = ARRAY['locaweb','resend']
+     FROM channel_provider_catalog WHERE canal = 'email'),
+  (SELECT string_agg(slug, ', ' ORDER BY slug) FILTER (WHERE tem_adapter)
      FROM channel_provider_catalog WHERE canal = 'email'));
+
+-- A Locaweb não recebe e-mail: sem Reply-To para um inbound, a resposta não
+-- encerra a cadência. Por isso lá o campo é obrigatório, e no Resend não.
+SELECT pv.confere('Locaweb exige para onde a resposta volta',
+  (SELECT count(*) = 1 FROM channel_provider_catalog p, jsonb_array_elements(p.campos) c
+    WHERE p.slug = 'locaweb' AND c ->> 'chave' = 'responder_para'
+      AND (c ->> 'obrigatorio')::boolean));
+
+SELECT pv.confere('o token da Locaweb é segredo, e o catálogo diz isso',
+  (SELECT count(*) = 1 FROM channel_provider_catalog p, jsonb_array_elements(p.campos) c
+    WHERE p.slug = 'locaweb' AND c ->> 'chave' = 'api_token'
+      AND (c ->> 'segredo')::boolean AND (c ->> 'obrigatorio')::boolean));
 
 SELECT pv.confere('SMTP segue no catálogo, declarado sem adapter',
   (SELECT NOT tem_adapter AND ativo FROM channel_provider_catalog WHERE slug = 'smtp'));

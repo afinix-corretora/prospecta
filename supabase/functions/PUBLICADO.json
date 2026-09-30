@@ -2,16 +2,19 @@
   "canal-webhook": {
     "digest": "369a6df74567f75c",
     "em": "2026-09-24 (v3; cada arquivo do bundle lido de volta do projeto e comparado byte a byte)",
-    "versao": 3
+    "versao": 3,
+    "pendente": "adapter do SMTP Locaweb (D61) e leitura de webhook em formulário. Publicar junto com a migration 20260930000000_email_locaweb: catálogo com tem_adapter=true e worker sem o adapter é o roteador prometendo um envio que o despachante não faz (D31)."
   },
   "motor-worker": {
     "digest": "dec6b3eee3ba9223",
     "em": "2026-09-24 (v3; cada arquivo do bundle lido de volta do projeto e comparado byte a byte)",
-    "versao": 3
+    "versao": 3,
+    "pendente": "adapter do SMTP Locaweb (D61) e leitura de webhook em formulário. Publicar junto com a migration 20260930000000_email_locaweb: catálogo com tem_adapter=true e worker sem o adapter é o roteador prometendo um envio que o despachante não faz (D31)."
   },
   "provisionar-instancia": {
     "digest": "04e0e2a2a81eee09",
     "em": "2026-09-24 (v3; cada arquivo do bundle lido de volta do projeto e comparado byte a byte)",
-    "versao": 3
+    "versao": 3,
+    "pendente": "adapter do SMTP Locaweb (D61) e leitura de webhook em formulário. Publicar junto com a migration 20260930000000_email_locaweb: catálogo com tem_adapter=true e worker sem o adapter é o roteador prometendo um envio que o despachante não faz (D31)."
   }
 }

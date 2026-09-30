@@ -9,7 +9,7 @@ import assert from 'node:assert/strict';
 import type { Banco, Culpa, MensagemParaEnviar } from '../motor/porta.ts';
 import type { ChannelAdapter, EventoNormalizado, ResultadoEnvio } from '../adapters/tipos.ts';
 import { despachar, umaPassada } from '../motor/despachante.ts';
-import { receberWebhook } from '../motor/webhooks.ts';
+import { lerCorpoWebhook, receberWebhook } from '../motor/webhooks.ts';
 
 interface Registro {
   messageId: string; ok: boolean; providerMessageId?: string; erro?: string; culpa?: Culpa;
@@ -273,6 +273,27 @@ test('webhook sem evento reconhecível não grava nada', async () => {
   const r = await receberWebhook(banco, 'falso', { lixo: true }, { senderId: 'chip-1', criar: criar as never });
   assert.deepEqual(r, { normalizados: 0, gravados: 0, descartados: 0 });
   assert.equal(eventos.length, 0);
+});
+
+// D61: o SMTP Locaweb manda formulário. Lido como JSON, virava `{}` sem erro,
+// e todo bounce respondia 200 sem virar evento nenhum.
+test('corpo de webhook em formulário vira campos, não objeto vazio', () => {
+  const corpo = lerCorpoWebhook(
+    'application/x-www-form-urlencoded; charset=UTF-8',
+    'bounce_code=5.1.1&to=ana%40exemplo.com.br&x-smtplw=abc',
+  );
+  assert.deepEqual(corpo, { bounce_code: '5.1.1', to: 'ana@exemplo.com.br', 'x-smtplw': 'abc' });
+});
+
+test('corpo de webhook em JSON continua JSON', () => {
+  assert.deepEqual(lerCorpoWebhook('application/json', '{"type":"email.sent"}'), { type: 'email.sent' });
+  // Provedor que manda JSON sem dizer o tipo é o caso comum; não pode quebrar.
+  assert.deepEqual(lerCorpoWebhook(null, '{"a":1}'), { a: 1 });
+});
+
+test('corpo ilegível vira objeto vazio, como antes', () => {
+  assert.deepEqual(lerCorpoWebhook('application/json', 'isto não é json'), {});
+  assert.deepEqual(lerCorpoWebhook(null, ''), {});
 });
 
 test('webhook de provedor desconhecido falha alto', async () => {

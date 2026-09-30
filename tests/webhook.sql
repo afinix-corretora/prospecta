@@ -453,6 +453,30 @@ WHEN others THEN
 END;
 $$;
 
+-- D61: a Locaweb não recebe e-mail. Conta dela sem "Responder para" é conta
+-- cuja resposta cai numa caixa que o motor não lê — a invariante 4 furada sem
+-- erro. Quem recusa é o catálogo, pela função, não a tela. Sem a checagem, a
+-- chamada seguiria até o Vault, que o Postgres de teste não tem, e cairia no
+-- `others` abaixo: o cenário consegue falhar.
+INSERT INTO sender_accounts
+  (id, canal, identificador, apelido, provedor, tipo_permitido, quota_diaria)
+VALUES ('ee000000-0000-0000-0000-0000000000e1','email','comercial@frio.afinix.com.br',
+        'Locaweb frio','locaweb','fria',100);
+
+DO $$
+BEGIN
+  PERFORM set_config('request.jwt.claims','{"sub":"11111111-aaaa-0000-0000-00000000000a"}', true);
+  PERFORM salvar_credencial_remetente('ee000000-0000-0000-0000-0000000000e1',
+    '{"api_token":"lw-123","assunto_padrao":"Plano de saúde"}'::jsonb);
+  PERFORM wh.confere('Locaweb sem destino de resposta é recusada', false, 'aceitou');
+EXCEPTION WHEN invalid_parameter_value THEN
+  PERFORM wh.confere('Locaweb sem destino de resposta é recusada',
+                     SQLERRM LIKE '%Responder para%', SQLERRM);
+WHEN others THEN
+  PERFORM wh.confere('Locaweb sem destino de resposta é recusada', false, SQLSTATE || ': ' || SQLERRM);
+END;
+$$;
+
 SELECT set_config('request.jwt.claims','', true);
 
 SELECT wh.confere('as duas funções de configuração são API de usuário logado',

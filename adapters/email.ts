@@ -27,6 +27,50 @@ export function montarRemetente(endereco: string, nome?: string): string {
   return n ? `${n} <${e}>` : e;
 }
 
+/**
+ * Assunto pronto para ir num cabeçalho de e-mail (RFC 2047).
+ *
+ * Cabeçalho de e-mail é ASCII. Provedor que monta a mensagem por nós (Resend)
+ * codifica sozinho; provedor que repassa o assunto como está (SMTP Locaweb)
+ * recusa ou estraga "Plano de saúde" — e quase todo assunto em português tem
+ * acento. Aqui ele vira `=?UTF-8?B?...?=`, em pedaços de no máximo 75
+ * caracteres, sem partir um caractere no meio.
+ *
+ * Quebra de linha vira espaço: um `\n` dentro de cabeçalho é como se injeta
+ * cabeçalho novo, e assunto vem de template escrito por gente.
+ */
+export function codificarAssunto(assunto: string): string {
+  const limpo = (assunto ?? '').replace(/[\r\n]+/g, ' ').trim();
+  if (/^[\x20-\x7e]*$/.test(limpo) && !limpo.includes('=?')) return limpo;
+
+  const utf8 = new TextEncoder();
+  const palavras: string[] = [];
+  let pedaco = '';
+  let bytes = 0;
+
+  // 45 bytes viram 60 caracteres em base64; com `=?UTF-8?B?` e `?=` são 72,
+  // abaixo dos 75 que a RFC permite por palavra.
+  for (const caractere of limpo) {
+    const n = utf8.encode(caractere).length;
+    if (bytes + n > 45) {
+      palavras.push(palavraCodificada(pedaco));
+      pedaco = '';
+      bytes = 0;
+    }
+    pedaco += caractere;
+    bytes += n;
+  }
+  if (pedaco) palavras.push(palavraCodificada(pedaco));
+
+  return palavras.join(' ');
+}
+
+function palavraCodificada(texto: string): string {
+  let binario = '';
+  for (const b of new TextEncoder().encode(texto)) binario += String.fromCharCode(b);
+  return `=?UTF-8?B?${btoa(binario)}?=`;
+}
+
 export interface AssuntoECorpo {
   readonly assunto: string;
   readonly corpo: string;

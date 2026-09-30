@@ -65,3 +65,25 @@ export async function receberWebhook(
     descartados: eventos.length - gravados,
   };
 }
+
+/**
+ * O corpo do webhook como o adapter espera recebê-lo.
+ *
+ * Quase todo provedor manda JSON. O SMTP Locaweb manda formulário
+ * (`x-www-form-urlencoded`), e `req.json()` sobre formulário devolvia `{}` sem
+ * erro nenhum: todo bounce chegava, respondia 200 e não virava nada — o D49
+ * furado na porta de entrada (D61). Por isso quem decide é o `Content-Type`,
+ * e o que não se consegue ler vira `{}` como antes, porque provedor que recebe
+ * erro reenvia, e um corpo ilegível não melhora na segunda tentativa.
+ */
+export function lerCorpoWebhook(tipo: string | null, texto: string): unknown {
+  const t = (tipo ?? '').toLowerCase();
+  if (t.includes('application/x-www-form-urlencoded')) {
+    return Object.fromEntries(new URLSearchParams(texto));
+  }
+  try {
+    return JSON.parse(texto);
+  } catch {
+    return {};
+  }
+}
