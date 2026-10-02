@@ -25,9 +25,9 @@
 -- verdade. Ler o segredo de volta é conferido no projeto, pelo `get_advisors` e
 -- pela tela, não aqui.
 --
--- E não testa que vincular escreve no CRM. Não escreve: nenhum adapter existe,
--- `tem_adapter` é falso nas oito linhas, e asserção sobre efeito que não existe
--- é decoração (D31).
+-- E não testa que vincular escreve no CRM. Vincular continua não escrevendo:
+-- quem escreve é o dreno, desde o D64, e só para o Pipefy — o efeito é
+-- cobrado em `tests/crm_pipefy.sql` e `tests/crm.test.ts`, não aqui.
 
 \set ON_ERROR_STOP on
 SET client_min_messages = warning;
@@ -76,10 +76,13 @@ SELECT pl.confere('catálogo de CRM tem as oito plataformas',
   (SELECT count(*)::text || ': ' || string_agg(slug, ', ' ORDER BY ordem)
      FROM crm_provider_catalog));
 
--- A afirmação do comentário da migration, cobrada. Vai ficar vermelha no dia em
--- que alguém marcar `tem_adapter` sem escrever o adapter — que é o ponto.
-SELECT pl.confere('nenhuma plataforma de CRM declara adapter (nenhum existe)',
-  NOT EXISTS (SELECT 1 FROM crm_provider_catalog WHERE tem_adapter),
+-- Até o D64 esta asserção era "nenhuma declara adapter", e estava certa: o
+-- teste codificava o mundo de antes. O D64 escreveu o do Pipefy, e quem cobra
+-- a concordância de verdade passou a ser `tests/registro_para_sql.ts`, que
+-- compara o catálogo com `PLATAFORMAS_COM_ADAPTER`. Aqui fica a fotografia,
+-- para a próxima plataforma não entrar sem alguém reler este arquivo.
+SELECT pl.confere('só o Pipefy declara adapter de CRM (é o único escrito)',
+  (SELECT array_agg(slug) FROM crm_provider_catalog WHERE tem_adapter) = ARRAY['pipefy'],
   (SELECT string_agg(slug, ', ') FROM crm_provider_catalog WHERE tem_adapter));
 
 -- Campo sem `segredo` declarado seria tratado como não-secreto pelo

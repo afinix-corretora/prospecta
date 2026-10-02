@@ -24,6 +24,13 @@ INSERT INTO contacts (id, nome, origem) VALUES
   ('d0000000-0000-0000-0000-000000000001','Ana Dreno','planilha'),
   ('d0000000-0000-0000-0000-000000000002','Bruno Dreno','planilha');
 
+-- Desde o D64 o dreno só pega fato de quem tem para onde mandá-lo: uma
+-- plataforma ativa cujo provedor tem adapter. Este arquivo é sobre o dreno,
+-- não sobre o destino — então o destino é dado de saída, e quem cobra o
+-- filtro é `tests/crm_pipefy.sql`.
+INSERT INTO crm_connections (nome, provedor, config)
+VALUES ('Pipefy do dreno', 'pipefy', '{"client_id":"dreno"}');
+
 -- ===========================================================================
 -- 1. Reivindicar, e o que reivindicar NÃO pode soltar
 -- ===========================================================================

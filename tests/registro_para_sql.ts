@@ -24,6 +24,7 @@
 // Escreve SQL em stdout; quem roda é `tests/run.sh`, que o joga no psql.
 
 import { PROVEDORES_POR_CANAL } from '../adapters/registro.ts';
+import { PLATAFORMAS_COM_ADAPTER } from '../adapters/crm.ts';
 
 const linhas: string[] = [];
 const p = (s: string) => linhas.push(s);
@@ -110,6 +111,22 @@ p(`SELECT rg.confere('canal sem adapter nenhum no registro também não tem no c
               FROM channel_provider_catalog c
              WHERE c.tem_adapter
                AND c.canal NOT IN (SELECT canal FROM rg.registro)), ''));`);
+
+// O mesmo par para o CRM (D64). `crm_provider_catalog.tem_adapter` é o que
+// `reivindicar_writebacks` e `fontes_crm_vencidas` leem antes de entregar
+// trabalho ao worker; `PLATAFORMAS_COM_ADAPTER` é o que o worker sabe fazer.
+// Catálogo sem adapter: o fato é reivindicado e queima as oito tentativas em
+// "plataforma sem adapter". Adapter sem catálogo: o fato espera para sempre,
+// e a tela do dreno diz "nunca saiu" com toda a razão do mundo.
+p(`CREATE TABLE rg.crm (provedor text NOT NULL);`);
+p(`INSERT INTO rg.crm (provedor) VALUES ${PLATAFORMAS_COM_ADAPTER.map((x) => `('${x}')`).join(', ')};`);
+p(`SELECT rg.confere('CRM: o catálogo e o registro dizem as mesmas plataformas',
+  NOT EXISTS (SELECT slug FROM crm_provider_catalog WHERE tem_adapter
+              EXCEPT SELECT provedor FROM rg.crm)
+  AND NOT EXISTS (SELECT provedor FROM rg.crm
+                  EXCEPT SELECT slug FROM crm_provider_catalog WHERE tem_adapter),
+  coalesce((SELECT string_agg(slug, ', ') FROM crm_provider_catalog WHERE tem_adapter), '(nenhuma no catálogo)')
+  || ' x ' || (SELECT string_agg(provedor, ', ') FROM rg.crm));`);
 
 p("\\echo ''");
 p("\\echo '============= CATÁLOGO x REGISTRO DE ADAPTERS ============='");

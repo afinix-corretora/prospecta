@@ -2277,3 +2277,78 @@ tenant que existe, grade conferida (UPDATE só em `termo, exige_uma_de, acao, no
 anon), e "Não tenho interesse, obrigado" classificado como `suprimir`. O `get_advisors` só
 acrescentou `testar_blacklist` à família WARN de DEFINER chamáveis pela tela. **Pendente:** a segunda
 migration, que precisa da confirmação de alguém na hora de aplicar.
+
+### D64 — O CRM recebe o fato, e entrega contatos
+
+**O pedido.** Pipefy primeiro: os quatro fatos do contrato (respondeu, pediu para sair, endereço
+inválido, cadência concluída) chegam ao CRM, o token renova sozinho, e ao vincular a plataforma os
+campos são lidos automaticamente para a pessoa escolher o que usar.
+
+**O que faltava não era o dreno, era o meio.** A `outbox` existia desde o D45 e o dreno desde o
+D46; o D59 deu a cada cliente a credencial dele. Faltava dizer o que um fato SIGNIFICA neste CRM:
+"respondeu", num cliente, é mover o card para "Em conversa"; noutro, é preencher "Status SDR". Isso
+é configuração do cliente, e mora em quatro tabelas:
+
+- `crm_estruturas` — o que a plataforma tem (pipes, fases, campos), lido pela edge function
+  `crm-descobrir`, que tem o segredo. A tela oferece escolhas daqui, nunca id digitado à mão. A
+  descoberta que falha grava o erro e mantém a estrutura de antes.
+- `crm_acoes` — o que cada fato faz, por pipe: **mover de fase** e **preencher campo**, só. Comentar
+  e criar card ficaram de fora porque o dreno repete a tentativa inteira quando a anterior falhou no
+  meio, e as duas não aguentam repetição. Mover confere a fase antes (já estava? não chama a
+  mutação); preencher sobrescreve. Uma fase de destino por fato e pipe, por índice único.
+- `crm_vinculos` — qual card é esta pessoa. **Sem vínculo, não há onde escrever**, e o motor não
+  procura card pelo telefone: escreveria no card de outra pessoa com o mesmo número. O fato sai da
+  fila com o motivo escrito.
+- `crm_fontes` — de onde vêm contatos: pipe, fases e qual campo é qual papel. A leitura do card é a
+  MESMA da planilha (`adapters/leitura.ts`, extraído de `planilha.ts`): o mesmo celular não pode
+  virar WhatsApp por uma porta e sumir pela outra (D32). Opcionalmente a fonte inscreve numa
+  campanha, e inscreve **pela prévia** (D35): quem não tem canal da cadência entra como contato, não
+  é inscrito, e o resumo da fonte conta quantos. A fonte tem intervalo próprio (mínimo 5 min),
+  porque o worker bate a cada minuto e o CRM limita requisição.
+
+**Duas mudanças no dreno.** `reivindicar_writebacks` só pega fato de quem tem plataforma ativa que
+sabe escrevê-lo (`tem_adapter`): antes, sem destino, o fato queimaria as oito tentativas e morreria
+em `falha` só porque o cliente ainda não vinculou o CRM. E `outbox.resultado` diz o que o dreno FEZ
+("card 900 movido para…", "contato sem card vinculado nesta plataforma"). A tela do writeback dizia
+"Entregues — o CRM já sabe", que ficou falso no dia: virou "Saíram da fila", com a lista do que cada
+um fez.
+
+**O token.** A anti-regra dizia `_shared/pipefy.ts`, que nunca foi escrito. O OAuth mora em
+`adapters/pipefy.ts`, porque ali só entra `fetch` e a conversa inteira com o Pipefy é testável sem
+rede (D30). Continua um lugar só, e o token continua nunca gravado: nasce por `client_credentials` na
+primeira chamada de cada execução, vive na instância, e não serve para outra credencial.
+
+**Ordem de publicação (D31).** Primeiro a migration das tabelas, com `tem_adapter` ainda falso;
+depois `motor-worker` v5 e `crm-descobrir` v1, lidos de volta; só então a migration que liga o
+adapter. A porta do CRM ganhou arquivos próprios (`motor/porta-crm.ts`, `_shared/banco-crm.ts`) para
+as três functions que não falam com CRM não mudarem de bundle.
+
+**Ler de volta sem transcrever.** O bundle do worker tem 25 arquivos e quatro BOMs invisíveis
+dentro de uma regex de `csv.ts` — exatamente o tipo de byte que uma transcrição à mão perde (D32).
+O payload foi gerado com todo não-ASCII escapado, e a leitura de volta veio de um caminho melhor
+que o de antes: a resposta da MCP, grande demais para a conversa, foi salva pelo harness em
+arquivo, e `conferir-contra-projeto.py` rodou direto sobre ela. 23/23 idênticos sem que nenhum byte
+passasse por cópia.
+
+**Um defeito do próprio suite.** `tests/run.sh` marcava `FALHOU=1` quando `conferir-publicado.py`
+falhava e nunca lia a marca: o suite dizia "Tudo verde" logo abaixo de "FALHA motor-worker". Desde
+o D51 essa verificação não podia reprovar nada. Agora reprova.
+
+**Testes.** `tests/crm_pipefy.sql` (50 asserções) e `tests/crm.test.ts` (19). Três sabotagens: sem
+o filtro de destino no dreno acendem 4; sem a prioridade de mover antes de preencher, 2; inscrevendo
+sem a prévia, 4. `tests/plataformas.sql` dizia "nenhuma plataforma declara adapter" — estava certo
+ontem; o cenário passou a fotografar "só o Pipefy", e a concordância de verdade é cobrada por
+`tests/registro_para_sql.ts` contra `PLATAFORMAS_COM_ADAPTER`.
+
+**Estado.** As duas migrations estão no projeto (62º e 63º registros), com a grade conferida lá
+(tela escreve ação e fonte por coluna, nunca vínculo, estrutura nem `ultimo_resultado`; anon nada;
+as sete funções novas só de `service_role`) e os corpos com o mesmo md5 do banco de teste. O
+`get_advisors` não acrescentou nada. **Falta do lado de quem usa:** vincular o Pipefy pela tela
+(client_id e client_secret, que vão para o Vault), ler pipes e campos, configurar as ações e a
+fonte. Até lá a fila espera, e a tela diz isso.
+
+**Não resolvido aqui.** Contato que veio de planilha não tem card, e o fato dele sai sem escrever.
+Criar card no CRM para quem não tem é possível, mas não é idempotente sem uma chave — fica para
+quando houver onde guardá-la. Mudança feita no card depois da primeira leitura não volta ao contato:
+a fonte pula cards já vinculados. E o ProfitCare espera a confirmação de que é a linha "Softcare" e
+a documentação da API.

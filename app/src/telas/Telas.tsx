@@ -779,11 +779,11 @@ export function ConfigPlataformas() {
  * destino fixo no código seria o produto inteiro apontando para o CRM de um
  * cliente só.
  *
- * **A tela diz, em voz alta, que vincular ainda não escreve no CRM.** Nenhum
- * adapter existe: `tem_adapter` é falso nas oito linhas do catálogo, e a
- * `outbox` continua enfileirando para lugar nenhum. É o D55 de propósito —
- * prometer efeito que ninguém consome se descobre por um lead que o vendedor
- * nunca viu, e é tarde.
+ * **A tela diz, por plataforma, se vincular escreve no CRM.** Desde o D64 o
+ * Pipefy escreve, e a conexão dele abre a configuração de fatos e fontes; as
+ * outras sete guardam a credencial e nada mais. Prometer efeito que ninguém
+ * consome se descobre por um lead que o vendedor nunca viu (D55), e "o
+ * Pipefy escreve" não pode virar "todas escrevem" por estar na mesma lista.
  */
 export function ConfigVinculadas() {
   const nav = useNavigate();
@@ -812,17 +812,18 @@ export function ConfigVinculadas() {
       {/* O aviso vem ANTES da lista, não no pé: quem abre esta tela vem
           vincular, e descobrir depois de colar a credencial que nada escreve
           no CRM é a ordem errada. */}
-      {nenhumAdapter && (
+      {nenhumAdapter ? (
         <Aviso tipo="neutro">
           <b>Vincular guarda a credencial e nada mais, por enquanto.</b> Nenhuma
           destas plataformas tem adapter de escrita escrito ainda, então o que o
-          motor descobre (saiu da lista, respondeu, endereço inválido, campanha
-          concluída) fica enfileirado na <b>fila de writeback</b> e não chega ao
-          CRM. Guardar a credencial agora é o que torna o primeiro adapter uma
-          mudança de código só — sem voltar a pedir chave a ninguém.
-          <br /><br />
-          Isto é <b>“ainda não”</b>, não “não dá”: quando o adapter existir, esta
-          mesma tela passa a escrever, sem você reconfigurar nada.
+          motor descobre fica enfileirado na <b>fila de writeback</b> e não chega ao CRM.
+        </Aviso>
+      ) : (
+        <Aviso tipo="neutro">
+          <b>Só {provs.filter((p) => p.tem_adapter).map((p) => p.nome).join(', ')} escreve no CRM hoje.</b>{' '}
+          Vincular uma das outras guarda a credencial e nada mais: o que o motor
+          descobre espera na <b>fila de writeback</b> até o adapter dela existir — e
+          aí esta mesma tela passa a escrever, sem pedir a chave de novo.
         </Aviso>
       )}
 
@@ -845,6 +846,12 @@ export function ConfigVinculadas() {
                   {!p?.tem_adapter && <span className="chip">não escreve ainda</span>}
                 </span>
               </span>
+              {administra && p?.tem_adapter && (
+                <button className="btn" style={{ marginRight: 10 }}
+                        onClick={() => nav(`/config/vinculadas/${c.id}`)}>
+                  Fatos e fontes
+                </button>
+              )}
               {administra && (
                 <button className="btn" style={{ marginRight: 10 }}
                         onClick={async () => {
@@ -864,7 +871,7 @@ export function ConfigVinculadas() {
             <b>{administra ? 'Nenhuma plataforma vinculada' : 'Visível para quem administra'}</b>
             <p>
               {administra
-                ? 'O motor continua tocando a cadência e registrando tudo no banco — só não devolve nada ao CRM.'
+                ? 'O motor continua tocando a cadência e registrando tudo no banco — só não devolve nada ao CRM: os fatos esperam na fila.'
                 : 'Credencial de CRM é como chip e chave de modelo: só o dono e o admin do cliente veem e configuram.'}
             </p>
           </span></div>

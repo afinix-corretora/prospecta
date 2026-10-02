@@ -9,20 +9,12 @@
 // `Fone 1`, `TELEFONE_2`, e obrigar a pessoa a renomear antes de importar é o
 // tipo de atrito que faz a importação voltar a ser INSERT à mão.
 
-import type { Canal } from './tipos.ts';
 import type {
-  ContactSource, Colheita, ContatoLido, IdentidadeLida, LinhaRecusada, ValorIgnorado,
+  ContactSource, Colheita, ContatoLido, LinhaRecusada, ValorIgnorado,
 } from './fonte.ts';
 import { chaveDeColuna, lerCsv, separadorDe, vazia } from './csv.ts';
-import { celularBrasileiro, normalizarTelefone, telefoneValido } from './telefone.ts';
-import { emailValido, normalizarEmail } from './email.ts';
-import { handleValido, normalizarHandle } from './instagram.ts';
-
-/**
- * O que uma coluna significa. `telefone` não é canal: é um número sem canal
- * declarado, e decidir o que fazer com ele é a regra abaixo.
- */
-type Papel = 'nome' | 'origem_ref' | 'whatsapp' | 'sms' | 'telefone' | 'email' | 'instagram';
+import { lerRegistro, PAPEIS_DE_IDENTIDADE } from './leitura.ts';
+import type { Papel } from './leitura.ts';
 
 /** Cabeçalhos vistos em planilha de verdade, já em forma de chave. */
 const PAPEIS: Record<string, Papel> = {
@@ -53,8 +45,6 @@ function papelDe(cabecalho: string): Papel | undefined {
   const chave = chaveDeColuna(cabecalho);
   return PAPEIS[chave] ?? PAPEIS[chave.replace(/_[0-9]+$/, '')];
 }
-
-const PAPEIS_DE_IDENTIDADE: Papel[] = ['whatsapp', 'sms', 'telefone', 'email', 'instagram'];
 
 export interface OpcoesPlanilha {
   /** Vai para `contacts.origem`. */
@@ -107,98 +97,21 @@ export class PlanilhaSource implements ContactSource {
     for (let i = 1; i < linhas.length; i += 1) {
       // Numeração como a planilha mostra: o cabeçalho é a linha 1.
       const linha = i + 1;
-      const celulas = linhas[i] ?? [];
-      if (vazia(celulas)) continue;
+      const valoresDaLinha = linhas[i] ?? [];
+      if (vazia(valoresDaLinha)) continue;
 
-      const valores: Record<string, string> = {};
-      cabecalho.forEach((c, j) => { valores[c] = (celulas[j] ?? '').trim(); });
+      // A leitura da linha é a mesma do CRM (D64): aqui só se diz o papel de
+      // cada coluna, pelo cabeçalho.
+      const lido = lerRegistro(linha, cabecalho.map((coluna, j) => ({
+        coluna,
+        papel: papeis[j],
+        chave: chaveDeColuna(coluna) || `coluna_${j + 1}`,
+        valor: valoresDaLinha[j] ?? '',
+      })));
 
-      const identidades: IdentidadeLida[] = [];
-      const vistas = new Set<string>();
-      const metadados: Record<string, string> = {};
-      let nome: string | undefined;
-      let origemRef: string | undefined;
-      let ignoradasNaLinha = 0;
-
-      const guardar = (canal: Canal, valor: string, valorNorm: string) => {
-        // Duas colunas com o mesmo número é o caso normal (`Telefone` e
-        // `WhatsApp` preenchidos iguais), e o índice único recusaria a segunda.
-        const chave = `${canal}|${valorNorm}`;
-        if (vistas.has(chave)) return;
-        vistas.add(chave);
-        identidades.push({ canal, valor, valorNorm });
-      };
-
-      const ignorar = (coluna: string, valor: string, motivo: string) => {
-        ignoradasNaLinha += 1;
-        ignorados.push({ linha, coluna, valor, motivo });
-      };
-
-      cabecalho.forEach((coluna, j) => {
-        const bruto = (celulas[j] ?? '').trim();
-        const papel = papeis[j];
-
-        if (!papel) {
-          // Coluna que o motor não entende ainda é informação da operação:
-          // "plano atual", "corretor". Vira metadado em vez de sumir.
-          if (bruto) metadados[chaveDeColuna(coluna) || `coluna_${j + 1}`] = bruto;
-          return;
-        }
-
-        if (!bruto) return;
-
-        switch (papel) {
-          case 'nome':
-            nome = nome ?? bruto;
-            return;
-          case 'origem_ref':
-            origemRef = origemRef ?? bruto;
-            return;
-          case 'email':
-            if (emailValido(bruto)) guardar('email', bruto, normalizarEmail(bruto));
-            else ignorar(coluna, bruto, 'não é um endereço de e-mail');
-            return;
-          case 'instagram':
-            if (handleValido(bruto)) guardar('instagram', bruto, normalizarHandle(bruto));
-            else ignorar(coluna, bruto, 'não é um @ de Instagram');
-            return;
-          case 'whatsapp':
-          case 'sms':
-            // Coluna que diz o canal decide sozinha: quem escreveu "WhatsApp"
-            // no cabeçalho está afirmando que o número tem WhatsApp.
-            if (telefoneValido(bruto)) guardar(papel, bruto, normalizarTelefone(bruto));
-            else ignorar(coluna, bruto, 'não é um telefone discável');
-            return;
-          case 'telefone':
-            // Coluna genérica não declara canal. Celular entra nos dois, que é
-            // o que "telefone" significa na prática; fixo não entra em nenhum,
-            // porque o motor não tem como falar com ele — e prometer WhatsApp
-            // num fixo seria o roteador escolhendo um destino que não existe.
-            if (!telefoneValido(bruto)) {
-              ignorar(coluna, bruto, 'não é um telefone discável');
-            } else if (!celularBrasileiro(bruto)) {
-              ignorar(coluna, bruto, 'telefone fixo não recebe WhatsApp nem SMS');
-            } else {
-              const norm = normalizarTelefone(bruto);
-              guardar('whatsapp', bruto, norm);
-              guardar('sms', bruto, norm);
-            }
-            return;
-        }
-      });
-
-      if (identidades.length === 0) {
-        recusadas.push({
-          linha,
-          motivo: ignoradasNaLinha > 0
-            ? 'nenhum contato utilizável: o que havia não passou na conferência'
-            : 'linha sem telefone, e-mail ou @ preenchido',
-          valores,
-        });
-        continue;
-      }
-
-      contatos.push({ nome, origemRef, identidades, metadados, linha });
+      ignorados.push(...lido.ignorados);
+      if (lido.tipo === 'recusa') recusadas.push(lido.recusa);
+      else contatos.push(lido.contato);
     }
 
     return { origem: this.origem, contatos, recusadas, ignorados };

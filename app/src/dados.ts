@@ -1200,3 +1200,139 @@ export async function lerMensagensDaCampanha(
   if (error) throw error;
   return (data ?? []) as MensagemComposta[];
 }
+
+// ---------------------------------------------------------------------------
+// CRM: o que cada fato faz e de onde vêm contatos (D64)
+// ---------------------------------------------------------------------------
+
+export interface CampoCRM { id: string; rotulo: string; tipo: string; opcoes: string[] }
+export interface FaseCRM { id: string; nome: string; campos: CampoCRM[] }
+export interface PipeCRM { id: string; nome: string; fases: FaseCRM[]; camposIniciais: CampoCRM[] }
+
+/** O que a plataforma tem, lido pela edge function e guardado no banco. A
+ *  tela oferece escolhas daqui em vez de pedir id digitado à mão. */
+export interface EstruturaCRM {
+  conexao_id: string;
+  estrutura: { pipes: PipeCRM[] } | null;
+  descoberto_em: string;
+  erro: string | null;
+}
+
+export type FatoCRM = 'respondido' | 'opt_out' | 'identidade_invalida' | 'campanha_concluida';
+
+export interface AcaoCRM {
+  id: string;
+  conexao_id: string;
+  pipe_id: string;
+  fato: FatoCRM;
+  tipo: 'mover_fase' | 'preencher_campo';
+  alvo_id: string;
+  alvo_rotulo: string | null;
+  valor: string | null;
+  ordem: number;
+  ativo: boolean;
+}
+
+export interface FonteCRM {
+  id: string;
+  conexao_id: string;
+  nome: string;
+  pipe_id: string;
+  pipe_rotulo: string | null;
+  fases: string[];
+  mapa: Record<string, string>;
+  campaign_id: string | null;
+  intervalo_minutos: number;
+  ativa: boolean;
+  ultima_execucao: string | null;
+  ultimo_resultado: Record<string, unknown> | null;
+}
+
+export async function lerEstruturaCRM(conexao: string): Promise<EstruturaCRM | null> {
+  const { data, error } = await sb.from('crm_estruturas')
+    .select('conexao_id, estrutura, descoberto_em, erro').eq('conexao_id', conexao).maybeSingle();
+  if (error) throw error;
+  return (data ?? null) as EstruturaCRM | null;
+}
+
+export async function lerAcoesCRM(conexao: string): Promise<AcaoCRM[]> {
+  const { data, error } = await sb.from('crm_acoes')
+    .select('id, conexao_id, pipe_id, fato, tipo, alvo_id, alvo_rotulo, valor, ordem, ativo')
+    .eq('conexao_id', conexao).order('ordem');
+  if (error) throw error;
+  return (data ?? []) as AcaoCRM[];
+}
+
+export async function lerFontesCRM(conexao: string): Promise<FonteCRM[]> {
+  const { data, error } = await sb.from('crm_fontes')
+    .select('id, conexao_id, nome, pipe_id, pipe_rotulo, fases, mapa, campaign_id, intervalo_minutos, ativa, ultima_execucao, ultimo_resultado')
+    .eq('conexao_id', conexao).order('nome');
+  if (error) throw error;
+  return (data ?? []) as FonteCRM[];
+}
+
+/** Lê pipes, fases e campos na plataforma. Quem tem o segredo é a edge
+ *  function; a tela só pede e mostra (D62). */
+export async function descobrirCRM(conexao: string): Promise<{ ok: boolean; erro?: string }> {
+  const { data, error } = await sb.functions.invoke('crm-descobrir', { body: { conexao_id: conexao } });
+  if (error) {
+    const corpo = await (error as { context?: Response }).context?.json?.().catch(() => null);
+    return { ok: false, erro: corpo?.erro ?? error.message };
+  }
+  return data as { ok: boolean; erro?: string };
+}
+
+/** Escreve direto: o RLS (quem administra) e a grade por coluna já dizem quem
+ *  pode — repetir em função seria o D41. */
+export async function criarAcaoCRM(dados: Omit<AcaoCRM, 'id' | 'ativo'> & { tenant: string }) {
+  const { tenant, ...resto } = dados;
+  const { error } = await sb.from('crm_acoes').insert({ tenant_id: tenant, ...resto });
+  if (error) throw error;
+}
+
+export async function alternarAcaoCRM(id: string, ativo: boolean) {
+  const { error } = await sb.from('crm_acoes').update({ ativo }).eq('id', id);
+  if (error) throw error;
+}
+
+export async function apagarAcaoCRM(id: string) {
+  const { error } = await sb.from('crm_acoes').delete().eq('id', id);
+  if (error) throw error;
+}
+
+export async function criarFonteCRM(dados: {
+  tenant: string; conexao_id: string; nome: string; pipe_id: string; pipe_rotulo: string;
+  fases: string[]; mapa: Record<string, string>; campaign_id: string | null; intervalo_minutos: number;
+}) {
+  const { tenant, ...resto } = dados;
+  const { error } = await sb.from('crm_fontes').insert({ tenant_id: tenant, ...resto });
+  if (error) throw error;
+}
+
+export async function alternarFonteCRM(id: string, ativa: boolean) {
+  const { error } = await sb.from('crm_fontes').update({ ativa }).eq('id', id);
+  if (error) throw error;
+}
+
+export async function apagarFonteCRM(id: string) {
+  const { error } = await sb.from('crm_fontes').delete().eq('id', id);
+  if (error) throw error;
+}
+
+/** Os últimos fatos que saíram da fila, com o que o dreno FEZ (D64). "Saiu"
+ *  não quer dizer "escreveu": sem card ligado, o fato sai dizendo isso. */
+export interface WritebackSaido {
+  id: string;
+  fato: WritebackFalhado['fato'];
+  resultado: string | null;
+  criado_em: string;
+}
+
+export async function lerWritebacksSaidos(limite = 20): Promise<WritebackSaido[]> {
+  const { data, error } = await sb.from('outbox')
+    .select('id, fato, resultado, criado_em')
+    .eq('status', 'enviado').not('resultado', 'is', null)
+    .order('criado_em', { ascending: false }).limit(limite);
+  if (error) throw error;
+  return (data ?? []) as WritebackSaido[];
+}

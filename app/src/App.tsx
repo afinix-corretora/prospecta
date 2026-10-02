@@ -7,6 +7,7 @@ import { DefinirSenha, Entrar } from './telas/Entrar';
 import { Canal } from './telas/Canal';
 import { ConfigEmail } from './telas/ConfigEmail';
 import { ConfigBlacklist } from './telas/ConfigBlacklist';
+import { ConfigCRM } from './telas/ConfigCRM';
 import { Importar } from './telas/Importar';
 import { Contatos } from './telas/Contatos';
 import { Campanha } from './telas/Campanha';
@@ -127,6 +128,7 @@ function Casca() {
           <Route path="/config/modelos" element={<ConfigModelos />} />
           <Route path="/config/plataformas" element={<ConfigPlataformas />} />
           <Route path="/config/vinculadas" element={<ConfigVinculadas />} />
+          <Route path="/config/vinculadas/:id" element={<ConfigCRM />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </main>

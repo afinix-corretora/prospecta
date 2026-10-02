@@ -126,6 +126,7 @@ rodar qualifica  "$RAIZ/tests/qualificacao.sql"
 rodar plataformas "$RAIZ/tests/plataformas.sql"
 rodar email_campanha "$RAIZ/tests/email_por_campanha.sql"
 rodar blacklist      "$RAIZ/tests/blacklist.sql"
+rodar crm_pipefy     "$RAIZ/tests/crm_pipefy.sql"
 
 # ---------------------------------------------------------------------------
 # Adapters de canal — TypeScript, sem rede (fetch injetado).
@@ -178,6 +179,11 @@ node --experimental-strip-types --test "$RAIZ/tests/acesso.test.ts" \
 echo ""
 echo "→ o que o produto consegue entregar hoje (TypeScript)"
 node --experimental-strip-types --test "$RAIZ/tests/entregaveis.test.ts" \
+  | grep -E "^# (tests|pass|fail)|^not ok"
+
+echo ""
+echo "→ CRM: o adapter do Pipefy, o dreno e as fontes (TypeScript)"
+node --experimental-strip-types --test "$RAIZ/tests/crm.test.ts" \
   | grep -E "^# (tests|pass|fail)|^not ok"
 
 echo ""
@@ -332,6 +338,16 @@ else
   echo "FALHA CLAUDE.md diz $QTD_DOC migrations; o repositório tem $QTD_ARQ"
   echo "      Atualize a linha em CLAUDE.md, e confira o contador do projeto"
   echo "      com list_migrations antes de dar por fechado."
+  exit 1
+fi
+
+# O verificador de publicação marca FALHOU e deixa o resto rodar — e até o
+# D64 ninguém lia a marca: o suite dizia "Tudo verde" logo abaixo de um
+# "FALHA motor-worker". Uma verificação cujo resultado ninguém lê é o
+# `tem_adapter` do D31 dentro do próprio suite.
+if [ "${FALHOU:-0}" != 0 ]; then
+  echo ""
+  echo "FALHA edge functions: o que está no repositório não é o que foi registrado como publicado (ver acima)"
   exit 1
 fi
 

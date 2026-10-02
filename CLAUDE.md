@@ -74,8 +74,10 @@ e elas têm teste automatizado obrigatório.**
 ## Anti-regras
 
 - **Nunca** recriar tabela que já existe. Consultar o schema antes de propor migration.
-- **Nunca** gravar token do Pipefy. Sempre gerar via `client_credentials` no `_shared/pipefy.ts`,
-  que é a única fonte de verdade desse OAuth.
+- **Nunca** gravar token do Pipefy. Sempre gerar via `client_credentials` no `adapters/pipefy.ts`,
+  que é a única fonte de verdade desse OAuth — o token vive na instância de uma execução e morre com
+  ela. Era `_shared/pipefy.ts` até o D64, que nunca foi escrito; mudou para `adapters/` porque ali só
+  entra `fetch` e a conversa inteira com o Pipefy é testável sem rede (D30).
 - **Nunca** colocar secret fora do Vault. Nem em env de edge function, nem em constante, nem em teste.
 - **Nunca** implementar envio que não passe pelo roteador (e portanto pelo gate de supressão).
 - **Nunca** escrever no CRM de forma síncrona dentro do caminho de envio. Writeback vai por `outbox`.
@@ -390,6 +392,25 @@ e elas têm teste automatizado obrigatório.**
 - **Nunca** ler corpo de webhook só como JSON. Formulário virava `{}` sem erro, e o bounce respondia
   200 sem virar evento. Quem decide é o `Content-Type` (D61).
 
+- **Nunca** reivindicar um fato que não tem para onde ir. Sem plataforma ativa que saiba escrevê-lo,
+  o dreno queimaria as oito tentativas e mandaria para `falha` um fato que só esperava o cliente
+  vincular o CRM: `reivindicar_writebacks` pergunta pelo destino antes de pegar (D64).
+- **Nunca** procurar o card de alguém pelo telefone. Sem vínculo (`crm_vinculos`) não há onde
+  escrever, e "achar" o card pelo número escreve no card de outra pessoa com o mesmo número. O fato
+  sai da fila com o motivo escrito em `outbox.resultado` (D64).
+- **Nunca** deixar "saiu da fila" passar por "o CRM sabe". Desde o D64 um fato pode sair sem
+  escrever nada; "Entregues — o CRM já sabe" ficou falso no dia, e a tela passou a mostrar o que cada
+  um fez (D64).
+- **Nunca** dar ao CRM uma ação que não aguenta ser repetida. O dreno repete tudo quando a tentativa
+  anterior falhou no meio: mover confere a fase antes, preencher sobrescreve, e comentar ou criar
+  card ficam de fora até terem chave de idempotência (D64).
+- **Nunca** inscrever pela fonte sem a prévia. A fonte roda sozinha, a cada intervalo, sem ninguém
+  olhando: o card sem canal da cadência entra como contato, NÃO é inscrito, e o resumo da fonte conta
+  quantos — é o D35 com o operador fora da sala (D64).
+- **Nunca** ler card com uma regra que a planilha não usa. `adapters/leitura.ts` saiu de dentro de
+  `planilha.ts` quando a segunda fonte chegou: o mesmo celular entrando como WhatsApp por uma porta e
+  sumindo pela outra seria a segunda normalização do D32 (D64).
+
 - **Nunca** deixar a escolha da pessoa valer só para o que ainda vai nascer. A campanha que escolhe
   o provedor de e-mail é respeitada pelo agendador E pelo despachante, e o despachante confere a
   mensagem que já está na fila — escolher num e rebalancear no outro é o D40 (D62).
@@ -472,9 +493,15 @@ e elas têm teste automatizado obrigatório.**
 > suposição** (`base_url` + `token`) — não há documentação dele no repositório nem na base da casa, e
 > a linha precisa de confirmação antes de valer como contrato.
 >
-> **Vincular guarda a credencial e nada mais.** `tem_adapter` é falso nas oito, porque nenhum adapter
-> de CRM existe: a `outbox` continua enfileirando para lugar nenhum, e a tela diz isso antes da
-> lista. É o D55 de propósito. Sem Vault no Postgres de teste, `tests/plataformas.sql` vai até a
+> **Desde o D64 o Pipefy escreve; as outras sete guardam a credencial e nada mais**, e a tela diz
+> qual é qual antes da lista (D55). O meio entre o fato e o CRM é configuração do cliente, em
+> Plataformas vinculadas ▸ Fatos e fontes: `crm_estruturas` guarda o que a plataforma tem (lido pela
+> edge function `crm-descobrir`, que tem o segredo), `crm_acoes` diz o que cada fato faz por pipe
+> (mover de fase, preencher campo — só ações que aguentam repetição), `crm_vinculos` liga pessoa a
+> card, e `crm_fontes` traz cards como contatos pela MESMA leitura da planilha
+> (`adapters/leitura.ts`), inscrevendo pela prévia do D35. O dreno só pega fato de quem tem destino;
+> sem card, o fato sai com o motivo em `outbox.resultado`. ProfitCare vem depois, e a linha do
+> Softcare continua suposição. Sem Vault no Postgres de teste, `tests/plataformas.sql` vai até a
 > borda e para lá — `feature_not_supported` é a prova de que o destino do segredo é o Vault e não uma
 > coluna, e o arquivo diz em voz alta o que não cobre.
 >
@@ -553,7 +580,7 @@ e elas têm teste automatizado obrigatório.**
 > **derivados do schema** cobram `tenant_id`, RLS e FK composta de toda tabela nova — lista escrita
 > à mão envelhece sem avisar, e essa já tinha perdido a `provider_servers` (D31).
 >
-> O schema está **aplicado no projeto `hucuwjvihqgftdjpnych`** (55 migrations no repositório, 61
+> O schema está **aplicado no projeto `hucuwjvihqgftdjpnych`** (57 migrations no repositório, 63
 > registros no projeto — a 55ª, que só apaga os dois classificadores sem chamador do D63, espera
 > confirmação de uma pessoa para ser aplicada (D63) — duas corretivas de texto, uma separação, duas do D46 (superfície e
 > tenant explícito), o bootstrap do tenant de teste, a corretiva de `search_path` do D54 e a do
@@ -573,12 +600,16 @@ e elas têm teste automatizado obrigatório.**
 > linha discordar. O do projeto não dá para conferir do suite (precisa de rede), então quem mexer
 > no schema confere pelo `list_migrations` junto com o `get_advisors` que já é obrigatório.
 >
-> As edge functions são quatro desde o D62. `canal-webhook` e `motor-worker` estão na **versão 4**
-> desde 02/10, com o código do D61 no ar (SMTP Locaweb e webhook em formulário), e a migration do
-> D61 só entrou depois delas, para o catálogo nunca prometer um adapter que o worker não tinha
-> (D31). `provisionar-instancia` está na **versão 5** e `verificar-remetente` na **versão 1**, as
-> duas do D62 — as que a TELA chama, com CORS e com o alvo lido pelo JWT de quem pediu. Cada
-> arquivo de cada bundle foi lido de volta do projeto e comparado byte a byte (15, 15, 15 e 16). Quem responde pela pergunta daqui para frente são os dois
+> As edge functions são cinco desde o D64. `motor-worker` está na **versão 5** desde 02/10, com o
+> dreno da outbox e a leitura das fontes de CRM (D64), e a migration que liga o `tem_adapter` do
+> Pipefy só entrou depois dela, para o catálogo nunca prometer um adapter que o worker não tinha
+> (D31). `crm-descobrir` está na **versão 1**, chamada pela TELA como `verificar-remetente`, com o
+> alvo lido pelo JWT de quem pediu. `canal-webhook` segue na **versão 4** (D61), e
+> `provisionar-instancia` (**versão 5**) e `verificar-remetente` (**versão 1**) seguem do D62 —
+> a porta do CRM mora em arquivos próprios (`motor/porta-crm.ts`, `_shared/banco-crm.ts`)
+> justamente para as três não mudarem de bundle. O `motor-worker` v5 foi lido de volta pela
+> resposta que a MCP salvou em arquivo, e comparado SEM transcrição (23/23); o `crm-descobrir`,
+> 6/6. Quem responde pela pergunta daqui para frente são os dois
 > verificadores — `conferir-publicado.py`, no suite, pelo digest do que cada function empacota, e
 > `conferir-contra-projeto.py`, fora do suite porque precisa de rede, pela comparação com o que o
 > projeto tem. `LIGAR.md` é o procedimento de ligar o motor, com a conferência do D44 entre guardar
