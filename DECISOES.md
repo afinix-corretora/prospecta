@@ -2143,11 +2143,7 @@ e-mail enfileirado como falha convidaria o reenvio. E não há evento de entrega
 virava `{}` sem erro: todo bounce da Locaweb responderia 200 e não viraria evento nenhum. Agora
 `lerCorpoWebhook` (em `motor/webhooks.ts`, testada) decide pelo `Content-Type`.
 
-**Estado.** Migration `20260930000000_email_locaweb` e as três edge functions estão no repositório,
-com a bateria verde, mas **não aplicadas nem publicadas no projeto**: `PUBLICADO.json` as marca
-`pendente`. As duas coisas vão juntas — catálogo com `tem_adapter = true` e worker sem o adapter é o
-roteador prometendo um envio que o despachante não faz (D31). Nada depende disso até existir uma
-conta Locaweb com token para cadastrar.
+**Estado.** Aplicado e publicado em 02/10, nesta ordem: primeiro as três edge functions (v4), cada arquivo do bundle lido de volta do projeto e comparado byte a byte (15, 15 e 14 arquivos), e só então a migration — assim não houve instante em que o catálogo dissesse `tem_adapter = true` para a Locaweb com um worker que não a conhece (D31). O catálogo do projeto foi comparado, linha a linha por digest, com o de um banco montado só com as migrations do repositório: idênticos. O `get_advisors` não acusou nada novo — a migration só insere dados.
 
 **Não conferido contra a conta real.** O formato do `POST` e o do webhook vêm da documentação
 pública e de um cliente .NET de terceiros; a primeira conta cadastrada precisa de um envio em

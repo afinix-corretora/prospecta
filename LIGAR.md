@@ -216,16 +216,15 @@ Além do que a tela pede, três coisas ficam no painel da Locaweb:
    cliente. Sem isso a resposta não encerra a cadência — por isso o banco
    recusa salvar a conta com o campo em branco.
 
-**Antes de liberar:** a migration `20260930000000_email_locaweb` e as três
-edge functions entram no projeto juntas (ver seção 4). Uma sem a outra é o
-catálogo oferecendo a Locaweb para um worker que não sabe enviar por ela.
+A migration `20260930000000_email_locaweb` e as três edge functions entraram
+no projeto juntas em 02/10 — primeiro as functions, depois o catálogo (D61).
 
 ---
 
 ## 4. As edge functions
 
-**Estão publicadas e conferidas** — as três na versão 3, em 24/09, com cada arquivo do bundle lido
-de volta do projeto e comparado byte a byte com o repositório (D52). Nada a fazer aqui hoje.
+**Estão publicadas e conferidas** — as três na versão 4, em 02/10, com cada arquivo do bundle lido
+de volta do projeto e comparado byte a byte com o repositório (D52, D61). Nada a fazer aqui hoje.
 
 Mas esta seção já disse "já feito" antes e ficou falsa sem avisar, no dia em que `adapters/` mudou.
 Então a frase acima não vale como garantia: quem responde é

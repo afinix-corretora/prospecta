@@ -522,7 +522,7 @@ e elas têm teste automatizado obrigatório.**
 > **derivados do schema** cobram `tenant_id`, RLS e FK composta de toda tabela nova — lista escrita
 > à mão envelhece sem avisar, e essa já tinha perdido a `provider_servers` (D31).
 >
-> O schema está **aplicado no projeto `hucuwjvihqgftdjpnych`** (52 migrations no repositório, 58
+> O schema está **aplicado no projeto `hucuwjvihqgftdjpnych`** (52 migrations no repositório, 59
 > registros no projeto — duas corretivas de texto, uma separação, duas do D46 (superfície e
 > tenant explícito), o bootstrap do tenant de teste, a corretiva de `search_path` do D54 e a do
 > corpo da função no D59, ver D32, D39, D46, D53, D54 e D59; as duas do D59 entraram em 26/09 (mais
@@ -541,9 +541,10 @@ e elas têm teste automatizado obrigatório.**
 > linha discordar. O do projeto não dá para conferir do suite (precisa de rede), então quem mexer
 > no schema confere pelo `list_migrations` junto com o `get_advisors` que já é obrigatório.
 >
-> As três edge functions estão na **versão 3** no projeto desde o D52, com o código do D48 e do
-> D49 no ar: cada arquivo do bundle foi lido de volta do projeto e comparado byte a byte com o
-> repositório (14, 14 e 13 arquivos). Quem responde pela pergunta daqui para frente são os dois
+> As três edge functions estão na **versão 4** no projeto desde 02/10, com o código do D61 no ar
+> (SMTP Locaweb e webhook em formulário): cada arquivo do bundle foi lido de volta do projeto e
+> comparado byte a byte com o repositório (15, 15 e 14 arquivos), e a migration do D61 só entrou
+> depois das três, para o catálogo nunca prometer um adapter que o worker não tinha (D31). Quem responde pela pergunta daqui para frente são os dois
 > verificadores — `conferir-publicado.py`, no suite, pelo digest do que cada function empacota, e
 > `conferir-contra-projeto.py`, fora do suite porque precisa de rede, pela comparação com o que o
 > projeto tem. `LIGAR.md` é o procedimento de ligar o motor, com a conferência do D44 entre guardar
