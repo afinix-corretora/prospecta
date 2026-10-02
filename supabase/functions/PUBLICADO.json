@@ -1,0 +1,27 @@
+{
+  "canal-webhook": {
+    "digest": "4dd1efb33ca3f860",
+    "em": "2026-10-02 (v4, D61; cada arquivo do bundle lido de volta do projeto e comparado byte a byte, 15/15)",
+    "versao": 4
+  },
+  "crm-descobrir": {
+    "digest": "47b86c10c8fdffaa",
+    "em": "2026-10-02 (v1, D64; cada arquivo do bundle lido de volta do projeto e comparado byte a byte, 6/6)",
+    "versao": 1
+  },
+  "motor-worker": {
+    "digest": "a0d456c48e0f154c",
+    "em": "2026-10-02 (v6, D66; o bundle lido de volta do projeto pela própria resposta salva da MCP, sem transcrição, e comparado byte a byte, 26/26)",
+    "versao": 6
+  },
+  "provisionar-instancia": {
+    "digest": "1da47ca63de1a86a",
+    "em": "2026-10-02 (v5, D62; cada arquivo do bundle lido de volta do projeto e comparado byte a byte, 15/15)",
+    "versao": 5
+  },
+  "verificar-remetente": {
+    "digest": "0c207fd937abbcef",
+    "em": "2026-10-02 (v1, D62; cada arquivo do bundle lido de volta do projeto e comparado byte a byte, 16/16)",
+    "versao": 1
+  }
+}

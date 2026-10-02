@@ -1,0 +1,34 @@
+{
+  // O motor e os adapters nunca foram checados por tipo.
+  //
+  // `node --experimental-strip-types` **apaga** os tipos, não os confere — e a
+  // app tem tsconfig próprio que olhava só `app/src`. Então tudo em `adapters/`
+  // e `motor/` rodava com as anotações valendo de comentário. Quando a tela de
+  // importação passou a importar `adapters/`, oito erros reais apareceram de
+  // uma vez: acesso a índice que podia ser `undefined` e um `flatMap` cujos
+  // ramos o compilador não conseguia unificar. Nenhum quebrava hoje; todos
+  // eram do tipo que quebra num payload diferente do do teste.
+  //
+  // `tests/*.test.ts` fica de fora de propósito: importa `node:test`, que
+  // exigiria `@types/node` só para isto. O que eles exercitam é comportamento,
+  // e disso o próprio suite cuida.
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true,
+    // A mesma trava que achou os oito. Sem ela, `linhas[0]` mente.
+    "noUncheckedIndexedAccess": true,
+    "isolatedModules": true,
+    "verbatimModuleSyntax": true,
+    "allowImportingTsExtensions": true,
+    "skipLibCheck": true,
+    "noEmit": true,
+    "types": []
+  },
+  "include": ["adapters", "motor"]
+}
