@@ -2506,3 +2506,47 @@ importação).
 **Testes.** São 20 em `tests/assistente.test.ts`. Cada regra foi sabotada e derrubou pelo menos uma
 asserção: pool ignorado, famílias misturadas, opção indisponível aceita, resposta órfã chegando ao
 plano, permissão desligada e aviso de capacidade desligado.
+
+### D68 — Toda chave em Configurações; a campanha escolhe a conta
+
+**O pedido.** Chave de API se configura num lugar só: Configurações ▸ Provedores de IA, com quantas
+contas de cada provedor o cliente quiser (várias da OpenAI, várias da Anthropic). Na campanha e no
+assistente, a pessoa só escolhe: primeiro qual IA, depois qual das contas já conectadas. E o mesmo
+vale para toda chave de API.
+
+**Várias contas por provedor já existiam.** `ai_credentials` é única por `(tenant, nome)`, não por
+provedor. Faltava a tela mostrar isso: agora ela agrupa as contas por provedor, diz "conectar outra
+conta" e liga e desliga cada uma (`ativo`, que já tinha UPDATE por coluna desde o D59).
+
+**A conta mora na campanha, não no agente.** O agente é uma persona que várias campanhas dividem: a
+cópia do cliente nasce uma vez por nome em `atribuir_agente`. Escolher a conta no agente a partir de
+uma campanha trocaria a conta de todas as outras que usam a mesma persona. Por isso existe
+`campaigns.ai_credential_id`, com chave estrangeira composta `(tenant_id, id)` e `ON DELETE SET NULL`
+só da coluna. `respostas_para_rascunhar` usa `coalesce(conta da campanha, conta do agente)`. Sem
+escolha, vale a do agente, que é o comportamento de antes. O worker não mudou: a função continua
+devolvendo `credencial_id`, só escolhido de outro jeito.
+
+**O assistente não pede chave nenhuma.** Os cartões de conectar conta, guardar chave de IA e conectar
+CRM saíram. Para IA, a conversa pergunta o provedor e, se houver conta, qual delas; sem conta, o plano
+leva a Configurações ▸ Provedores de IA, e a pergunta "qual conta?" surge quando a conta aparece no
+banco. Para canal, sem conta o cartão leva à tela do canal; com conta, a escolha é usar. Conectar
+mais uma também é na tela do canal, que é onde a chave é digitada. Para CRM, o cartão leva às
+Plataformas vinculadas e fica "pronto" quando a conexão existe, lido do banco. "Pôr um agente em cada
+canal" atribui os agentes e aponta a conta na CAMPANHA, sem escrever no agente.
+
+**Testes.** `tests/rascunhos.sql` ganhou cinco asserções, e 26 passam. A conta da campanha vale sobre
+a do agente, a campanha não aponta conta de outro cliente (23503), apagar a conta solta a campanha,
+sem escolha volta a do agente, e o operador escolhe pela tela. Duas sabotagens: sem o `coalesce`
+cai uma, e sem a coluna na grade cai outra. `tests/assistente.test.ts` tem 22 testes. Cinco
+sabotagens derrubam cada uma pelo menos um: "conectar mais" oferecido com conta existente, conta
+desligada escolhível, sem a pergunta de conta, "pronto no banco" não cumprindo a dependência, e o
+agente sem esperar a conta. Dois testes antigos ainda citavam o tipo de cartão removido e passavam
+de graça; foram reescritos para afirmar o que o plano novo faz.
+
+**Aplicado no projeto.** Os corpos no projeto foram conferidos por md5 antes (iguais aos do D66).
+Depois de aplicar, os hashes das duas funções e a grade de `campaigns` batem com o banco de teste.
+São 65 registros, e o `get_advisors` não achou nada novo.
+
+**Fica por dizer.** O motivo `sem_credencial` do motor ainda diz "a credencial do agente está
+desligada" quando a conta desligada é a da campanha. O texto mora em `motor/agente.ts`, e corrigir
+exige republicar o worker. Fica para a próxima vez que ele for publicado por outro motivo.

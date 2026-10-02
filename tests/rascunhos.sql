@@ -135,6 +135,25 @@ SELECT rs.confere('credencial desligada: provedor_compoe falso, e o motivo vai s
   (SELECT NOT provedor_compoe FROM respostas_para_rascunhar(50) WHERE contact_id = 'ad000000-0000-0000-0000-000000000101'));
 UPDATE ai_credentials SET ativo = true WHERE id = 'ad000000-0000-0000-0000-0000000000d1';
 
+-- A campanha escolhe a conta de IA (D68): uma das contas conectadas em
+-- Configurações, e ela vale sobre a do agente, que várias campanhas dividem.
+INSERT INTO ai_credentials (id, tenant_id, nome, provedor, modelo)
+VALUES ('ad000000-0000-0000-0000-0000000000d2', :tenant, 'OpenAI comercial', 'openai', 'gpt-5'),
+       ('ad000000-0000-0000-0000-0000000000d3', :outro, 'Alheia', 'anthropic', 'claude-sonnet-5');
+UPDATE campaigns SET ai_credential_id = 'ad000000-0000-0000-0000-0000000000d2' WHERE id = :camp;
+SELECT rs.confere('a conta escolhida na campanha vale sobre a do agente',
+  (SELECT credencial_id = 'ad000000-0000-0000-0000-0000000000d2' AND provedor = 'openai' AND provedor_compoe
+     FROM respostas_para_rascunhar(50) WHERE contact_id = 'ad000000-0000-0000-0000-000000000101'));
+SELECT rs.confere('a campanha não aponta a conta de outro cliente',
+  rs.sqlstate_de($q$UPDATE campaigns SET ai_credential_id = 'ad000000-0000-0000-0000-0000000000d3'
+     WHERE id = 'ad000000-0000-0000-0000-0000000000c1'$q$) = '23503');
+DELETE FROM ai_credentials WHERE id = 'ad000000-0000-0000-0000-0000000000d2';
+SELECT rs.confere('apagar a conta solta a campanha, que continua existindo',
+  (SELECT ai_credential_id IS NULL FROM campaigns WHERE id = :camp));
+SELECT rs.confere('e sem escolha na campanha, volta a valer a conta do agente',
+  (SELECT credencial_id = 'ad000000-0000-0000-0000-0000000000d1'
+     FROM respostas_para_rascunhar(50) WHERE contact_id = 'ad000000-0000-0000-0000-000000000101'));
+
 -- Uma resposta, um rascunho.
 DO $$
 DECLARE v_ev uuid;
@@ -181,6 +200,9 @@ BEGIN;
     rs.sqlstate_de($q$UPDATE agents SET pronto = true WHERE id = 'ad000000-0000-0000-0000-0000000000a9'$q$) = '42501');
   SELECT rs.confere('tamanho fora da faixa é recusado',
     rs.sqlstate_de($q$UPDATE agents SET tamanho_maximo = 10 WHERE id = 'ad000000-0000-0000-0000-0000000000a9'$q$) = '23514');
+  SELECT rs.confere('o operador escolhe a conta de IA da campanha pela tela (D68)',
+    rs.sqlstate_de($q$UPDATE campaigns SET ai_credential_id = 'ad000000-0000-0000-0000-0000000000d1'
+       WHERE id = 'ad000000-0000-0000-0000-0000000000c1'$q$) = 'sem erro');
   SELECT rs.confere('a tela não escreve rascunho',
     rs.sqlstate_de($q$INSERT INTO rascunhos (tenant_id, message_event_id, contact_id, resposta_em, situacao, texto)
        SELECT tenant_id, id, 'ad000000-0000-0000-0000-000000000104', now(), 'pronto', 'x'

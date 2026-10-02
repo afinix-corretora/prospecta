@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useSessao } from '../sessao';
 import { mensagemDeErro } from '../supabase';
 import {
-  alternarConexaoCRM, criarCampanha, criarCampanhaDeModelo, lerAgentes, lerCampanhas,
+  alternarConexaoCRM, alternarCredencialIA, criarCampanha, criarCampanhaDeModelo, lerAgentes, lerCampanhas,
   lerCanaisEntregaveis, lerConexoesCRM, lerCredenciaisIA, lerModelos, lerProvedoresCRM,
   lerProvedoresCanal, lerProvedoresIA, lerRemetentes, lerVersoesDeFlow, salvarAgente, salvarCredencialCRM,
   salvarCredencialIA,
@@ -463,7 +463,7 @@ export function Config() {
      'Os termos que tiram a pessoa da lista quando ela responde, o que cada um faz, e domínios de e-mail que nunca recebem.',
      'termos e domínios'],
     ['/config/ia', 'ia', 'Provedores de IA',
-     'Anthropic, OpenAI, Gemini, Perplexity, DeepSeek e compatíveis. A chave mora no Vault.',
+     'As contas de IA deste cliente — várias por provedor, se quiser. Toda chave entra aqui e mora no Vault; campanha e assistente só escolhem.',
      `${dados?.ia.length ?? 0} provedores`],
     ['/config/agentes', 'agente', 'Agentes',
      'A persona de cada canal: quando a pessoa responde, ela escreve o rascunho que alguém manda.',
@@ -514,35 +514,58 @@ export function ConfigIA() {
              sub="Escolha o provedor e os campos certos aparecem. A chave vai para o Vault — o banco recusa gravá-la em qualquer outro lugar.">
       {erro && <Aviso tipo="erro">{erro}</Aviso>}
 
-      <Secao titulo="Credenciais" nota="é com elas que os agentes compõem o rascunho" />
-      <section className="indice" style={{ marginBottom: 14 }}>
-        {creds.length ? creds.map((c) => (
-          <div key={c.id} className="item" style={{ cursor: 'default' }}>
-            <span className="txt">
-              <b>{c.nome}</b>
-              <p>
-                {provs.find((x) => x.slug === c.provedor)?.nome ?? c.provedor}
-                {' · '}<span className="mono">{c.modelo}</span>
-              </p>
-              <span className="chips" style={{ marginTop: 6 }}>
-                <span className="chip">{c.chave_secret_id ? 'chave no Vault' : 'sem chave'}</span>
-                {Object.keys(c.config).map((k) => <span key={k} className="chip">{k}</span>)}
-                {/* Dito por credencial: o Gemini guarda a chave e não compõe (D66). */}
-                {!provs.find((x) => x.slug === c.provedor)?.tem_adapter && <span className="chip">não compõe ainda</span>}
-              </span>
-            </span>
-            <span className={`delta ${c.ativo && c.chave_secret_id ? '' : 'neutra'}`}>
-              {c.ativo ? (c.chave_secret_id ? 'pronta' : 'falta chave') : 'desligada'}
-            </span>
-          </div>
-        )) : (
-          <div className="item" style={{ cursor: 'default' }}><span className="txt">
-            <b>Nenhuma credencial cadastrada</b>
-            <p>Sem credencial, agente nenhum escreve rascunho. O motor segue tocando a cadência — só não compõe.</p>
-          </span></div>
-        )}
-      </section>
+      <Aviso tipo="neutro">
+        <b>Toda chave de IA mora aqui.</b> Conecte quantas contas quiser de cada provedor — duas
+        da OpenAI, três da Anthropic. A campanha e o assistente do Início só <b>escolhem</b> uma
+        delas; chave nenhuma é digitada lá.
+      </Aviso>
 
+      {provs.filter((p) => creds.some((c) => c.provedor === p.slug)).map((p) => {
+        const contas = creds.filter((c) => c.provedor === p.slug);
+        return (
+          <div key={p.slug}>
+            <Secao titulo={p.nome}
+                   nota={`${contas.length} conta${contas.length === 1 ? '' : 's'}`
+                         + (p.tem_adapter ? '' : ' · o motor ainda não compõe com este provedor')} />
+            <section className="indice">
+              {contas.map((c) => (
+                <div key={c.id} className="item" style={{ cursor: 'default' }}>
+                  <span className="txt">
+                    <b>{c.nome}</b>
+                    <p><span className="mono">{c.modelo}</span></p>
+                    <span className="chips" style={{ marginTop: 6 }}>
+                      <span className="chip">{c.chave_secret_id ? 'chave no Vault' : 'sem chave'}</span>
+                      {Object.keys(c.config).map((k) => <span key={k} className="chip">{k}</span>)}
+                    </span>
+                  </span>
+                  <span className={`delta ${c.ativo && c.chave_secret_id ? '' : 'neutra'}`}>
+                    {c.ativo ? (c.chave_secret_id ? 'pronta' : 'falta chave') : 'desligada'}
+                  </span>
+                  {/* Desligar não apaga: a chave fica no Vault e a conta sai das
+                      escolhas. Apagar seria perder a chave do cliente num clique. */}
+                  {administra && (
+                    <button className="btn" onClick={async () => {
+                      try { await alternarCredencialIA(c.id, !c.ativo); await recarregar(); }
+                      catch (e) { alert(mensagemDeErro(e)); }
+                    }}>{c.ativo ? 'Desligar' : 'Ligar'}</button>
+                  )}
+                </div>
+              ))}
+            </section>
+          </div>
+        );
+      })}
+      {!creds.length && (
+        <section className="indice">
+          <div className="item" style={{ cursor: 'default' }}><span className="txt">
+            <b>Nenhuma conta conectada</b>
+            <p>Sem conta, agente nenhum escreve rascunho. O motor segue tocando a cadência — só não compõe.</p>
+          </span></div>
+        </section>
+      )}
+
+      <Secao titulo={creds.length ? 'Conectar outra conta' : 'Conectar uma conta'}
+             nota="do mesmo provedor ou de outro — cada conta tem o seu nome" />
       {administra && tenant
         ? <FormularioIA provedores={provs} credenciais={creds} tenant={tenant.tenant_id} aoSalvar={recarregar} />
         : <Aviso tipo="neutro">Só quem administra o cliente configura provedor de IA.</Aviso>}

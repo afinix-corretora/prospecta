@@ -78,6 +78,9 @@ export interface Campanha {
   /** A conta de e-mail que esta campanha usa (D62). NULL = rodízio entre as
    *  contas de e-mail do pool, que é o comportamento de antes. */
   remetente_email_id: string | null;
+  /** A conta de IA desta campanha (D68), escolhida entre as conectadas em
+   *  Configurações. NULL = a conta de cada agente, que é o de antes. */
+  ai_credential_id: string | null;
 }
 
 export interface Modelo {
@@ -214,7 +217,8 @@ export const lerServidores = () =>
 
 export const lerCampanhas = () =>
   tabela<Campanha>('campaigns',
-    'id, nome, tipo, objetivo, ativa, canais_habilitados, template_slug, flow_version_id, remetente_email_id');
+    'id, nome, tipo, objetivo, ativa, canais_habilitados, template_slug, flow_version_id, remetente_email_id, ' +
+    'ai_credential_id');
 
 export const lerModelos = () =>
   tabela<Modelo>('campaign_templates', 'slug, nome, descricao, objetivo, tipo, canais, passos, ordem', 'ordem');
@@ -652,6 +656,14 @@ export async function definirFlowDaCampanha(campanha: string, versao: string | n
     p_campaign_id: campanha,
     p_flow_version_id: versao,
   });
+  if (error) throw error;
+}
+
+/** Com qual das contas de IA conectadas esta campanha compõe (D68). `null`
+ *  volta à conta de cada agente. A chave não passa por aqui: a conta já está
+ *  no Vault, e a campanha só aponta para ela. */
+export async function definirIADaCampanha(campanha: string, credencial: string | null) {
+  const { error } = await sb.from('campaigns').update({ ai_credential_id: credencial }).eq('id', campanha);
   if (error) throw error;
 }
 

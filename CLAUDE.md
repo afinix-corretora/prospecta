@@ -423,9 +423,12 @@ e elas têm teste automatizado obrigatório.**
 - **Nunca** deixar o assistente executar o que a pessoa não autorizou. Cada passo é um cartão que
   diz o que vai acontecer ANTES do botão, e a escrita sai com o JWT de quem clicou — o RLS decide,
   o assistente só avisa antes (D67).
-- **Nunca** deixar uma chave passar pelo assistente. O valor vive no estado do cartão, vai para a
-  mesma função da tela do canal e some; o que o navegador guarda são respostas, nunca valor de campo
-  (D67).
+- **Nunca** pedir chave de API fora de Configurações (ou da tela do canal). O assistente e a campanha
+  só ESCOLHEM entre as contas conectadas; sem conta, apontam a tela onde conectar e seguem quando ela
+  aparece no banco. Chave digitada em cada fluxo que precise dela é o segredo em N lugares (D68).
+- **Nunca** pôr na pessoa compartilhada o que é decisão de cada campanha. O agente é uma persona que
+  várias campanhas dividem; a conta de IA mora em `campaigns.ai_credential_id` e vale sobre a do
+  agente — trocar a dele numa campanha trocaria em todas (D68).
 - **Nunca** guardar o progresso do assistente numa tabela. "O que está pronto" é lido do banco a cada
   vez; uma coluna "configurado" mentiria no dia em que alguém configurasse pela tela (D67).
 - **Nunca** aceitar uma resposta que nenhuma pergunta seguinte lê. Foi o laço infinito que a
@@ -574,9 +577,15 @@ e elas têm teste automatizado obrigatório.**
 > O **Início** é o assistente de configuração desde o **D67**: pergunta canais, tipo de lista,
 > volume por dia, provedor, IA, CRM e primeira campanha, e devolve um plano de cartões que só roda
 > com "Autorizar". É um roteiro, não um modelo de linguagem — no primeiro acesso não há chave de IA, e
-> ela é do cliente (D59). A lógica é pura (`app/src/assistente.ts`, `tests/assistente.test.ts`), o
-> estado é o banco, e a chave vai pela mesma `conectarConta` da tela do canal. O Hub de campanhas
-> mudou para `/campanhas`.
+> ela é do cliente (D59). A lógica é pura (`app/src/assistente.ts`, `tests/assistente.test.ts`) e o
+> estado é o banco. Desde o **D68** ele **não pede chave nenhuma**: para IA, pergunta qual provedor e
+> depois qual das contas conectadas; para canal e CRM, o mesmo. Sem conta, o cartão leva à tela onde
+> conectar, e a conversa continua quando a conta aparece. O Hub de campanhas mudou para `/campanhas`.
+>
+> As **contas de IA** são várias por provedor desde sempre (`ai_credentials` é única por nome, não por
+> provedor), e desde o **D68** a tela de Provedores de IA as mostra agrupadas, com ligar e desligar. A
+> campanha escolhe uma em `campaigns.ai_credential_id`, que vale sobre a do agente em
+> `respostas_para_rascunhar` — o worker não mudou.
 >
 > As **cadências** ganharam tela no **D55**: até então, a única forma de existir um `flow_version`
 > era instanciar um dos sete modelos do catálogo — o schema inteiro sem porta, que é o D41 da
@@ -613,7 +622,7 @@ e elas têm teste automatizado obrigatório.**
 > **derivados do schema** cobram `tenant_id`, RLS e FK composta de toda tabela nova — lista escrita
 > à mão envelhece sem avisar, e essa já tinha perdido a `provider_servers` (D31).
 >
-> O schema está **aplicado no projeto `hucuwjvihqgftdjpnych`** (58 migrations no repositório, 64
+> O schema está **aplicado no projeto `hucuwjvihqgftdjpnych`** (59 migrations no repositório, 65
 > registros no projeto — a 55ª, que só apaga os dois classificadores sem chamador do D63, espera
 > confirmação de uma pessoa para ser aplicada (D63) — duas corretivas de texto, uma separação, duas do D46 (superfície e
 > tenant explícito), o bootstrap do tenant de teste, a corretiva de `search_path` do D54 e a do

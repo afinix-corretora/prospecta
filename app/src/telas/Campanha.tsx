@@ -9,17 +9,19 @@
  * milhares de enrollments não passam pelo PostgREST linha a linha.
  */
 import { useEffect, useState } from 'react';
-import { useParams } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import { useSessao } from '../sessao';
 import { Aviso, Kpi, NOME_CANAL, Secao, corCanal } from '../componentes/base';
 import {
-  alternarCampanha, atribuirAgente, definirEmailDaCampanha, definirFlowDaCampanha, lerAgentes,
+  alternarCampanha, atribuirAgente, definirEmailDaCampanha, definirFlowDaCampanha, definirIADaCampanha,
+  lerAgentes, lerCredenciaisIA, lerProvedoresIA,
   lerContasDeEmail,
   lerAgentesDaCampanha, lerCampanhas, lerEventosDaCampanha, lerMensagensDaCampanha,
   lerRespostas, lerResumoDaCampanha, lerVersoesDeFlow, pausarInscricoes,
 } from '../dados';
 import type {
-  Agente, AgenteDaCampanha, Campanha as Camp, ContaDeEmail, EventoDaCampanha, MensagemComposta,
+  Agente, AgenteDaCampanha, Campanha as Camp, ContaDeEmail, CredencialIA, EventoDaCampanha,
+  MensagemComposta, ProvedorIA,
   RespostaRecebida, ResumoDaCampanha, VersaoDeFlow,
 } from '../dados';
 import { ListaDeRespostas } from './Respostas';
@@ -62,6 +64,8 @@ export function Campanha() {
   const [daCampanha, setDaCampanha] = useState<AgenteDaCampanha[]>([]);
   const [respostas, setRespostas] = useState<RespostaRecebida[]>([]);
   const [emails, setEmails] = useState<ContaDeEmail[]>([]);
+  const [contasIA, setContasIA] = useState<CredencialIA[]>([]);
+  const [provedoresIA, setProvedoresIA] = useState<ProvedorIA[]>([]);
   const [erro, setErro] = useState('');
   const [carregando, setCarregando] = useState(true);
 
@@ -69,7 +73,7 @@ export function Campanha() {
     if (!tenant || !id) return;
     setErro('');
     try {
-      const [cs, r, ev, ms, vs, ags, ca, rs, em] = await Promise.all([
+      const [cs, r, ev, ms, vs, ags, ca, rs, em, cia, pia] = await Promise.all([
         lerCampanhas(),
         lerResumoDaCampanha(tenant.tenant_id, id),
         lerEventosDaCampanha(tenant.tenant_id, id),
@@ -79,6 +83,8 @@ export function Campanha() {
         lerAgentesDaCampanha(id),
         lerRespostas(tenant.tenant_id, id),
         lerContasDeEmail(tenant.tenant_id),
+        lerCredenciaisIA(),
+        lerProvedoresIA(),
       ]);
       setCampanha(cs.find((c) => c.id === id) ?? null);
       setResumo(r);
@@ -89,6 +95,8 @@ export function Campanha() {
       setDaCampanha(ca);
       setRespostas(rs);
       setEmails(em);
+      setContasIA(cia);
+      setProvedoresIA(pia);
     } catch (e) { setErro(mensagemDeErro(e)); }
     finally { setCarregando(false); }
   }
@@ -123,6 +131,7 @@ export function Campanha() {
       )}
 
       <Agentes campanha={campanha} agentes={agentes} atribuidos={daCampanha}
+               contasIA={contasIA} provedoresIA={provedoresIA}
                podeOperar={opera} aoMudar={recarregar} aoFalhar={setErro} />
 
       <div className="kpis cinco">
@@ -505,11 +514,29 @@ function EmailDaCampanha({ campanha, contas, podeOperar, aoMudar, aoFalhar }: {
  * pessoa supor que ela produz efeito é a decoração do D31 com cara de
  * funcionalidade — e o jeito de descobrir seria um lead sem resposta.
  */
-function Agentes({ campanha, agentes, atribuidos, podeOperar, aoMudar, aoFalhar }: {
-  campanha: Camp; agentes: Agente[]; atribuidos: AgenteDaCampanha[]; podeOperar: boolean;
+function Agentes({ campanha, agentes, atribuidos, contasIA, provedoresIA, podeOperar, aoMudar, aoFalhar }: {
+  campanha: Camp; agentes: Agente[]; atribuidos: AgenteDaCampanha[];
+  contasIA: CredencialIA[]; provedoresIA: ProvedorIA[]; podeOperar: boolean;
   aoMudar(): Promise<void>; aoFalhar(m: string): void;
 }) {
+  const nav = useNavigate();
   const [salvando, setSalvando] = useState('');
+
+  // Só o que compõe: conta ligada de provedor com adapter (D66). Uma conta do
+  // Gemini na lista seria uma escolha que não produz rascunho nenhum.
+  const compoe = (c: CredencialIA) => c.ativo && !!provedoresIA.find((p) => p.slug === c.provedor)?.tem_adapter;
+  const usaveis = contasIA.filter(compoe);
+  const porProvedor = provedoresIA
+    .map((p) => ({ p, contas: usaveis.filter((c) => c.provedor === p.slug) }))
+    .filter((x) => x.contas.length);
+  const escolhida = contasIA.find((c) => c.id === campanha.ai_credential_id) ?? null;
+
+  async function escolherIA(id: string) {
+    setSalvando('ia'); aoFalhar('');
+    try { await definirIADaCampanha(campanha.id, id || null); await aoMudar(); }
+    catch (e) { aoFalhar(mensagemDeErro(e)); }
+    finally { setSalvando(''); }
+  }
 
   async function atribuir(agente: string) {
     setSalvando(agente); aoFalhar('');
@@ -526,6 +553,42 @@ function Agentes({ campanha, agentes, atribuidos, podeOperar, aoMudar, aoFalhar 
       <Secao titulo="Quem responde"
              nota={`${atribuidos.length} de ${campanha.canais_habilitados.length} canais com agente`} />
       <div className="painel">
+        {/* A conta de IA é escolhida aqui, entre as que já estão conectadas.
+            Chave nenhuma passa por esta tela: ela mora em Configurações ▸
+            Provedores de IA, e a campanha só aponta para uma conta (D68). */}
+        <div className="campo">
+          <label htmlFor="ia-campanha">Conta de IA desta campanha</label>
+          {usaveis.length === 0 ? (
+            <p style={{ color: 'var(--ink-2)', fontSize: 13, margin: '2px 0 0' }}>
+              Nenhuma conta de IA conectada ainda.{' '}
+              <button className="link" onClick={() => nav('/config/ia')}>Conectar em Configurações ▸ Provedores de IA</button>
+            </p>
+          ) : podeOperar ? (
+            <select id="ia-campanha" value={campanha.ai_credential_id ?? ''} disabled={!!salvando}
+                    onChange={(e) => void escolherIA(e.target.value)}>
+              <option value="">a conta de cada agente</option>
+              {porProvedor.map(({ p, contas }) => (
+                <optgroup key={p.slug} label={p.nome}>
+                  {contas.map((c) => <option key={c.id} value={c.id}>{c.nome} · {c.modelo}</option>)}
+                </optgroup>
+              ))}
+              {/* A escolhida que deixou de compor continua visível, marcada —
+                  sumir com ela da lista esconderia por que não há rascunho. */}
+              {escolhida && !compoe(escolhida) && (
+                <option value={escolhida.id}>{escolhida.nome} · não compõe (desligada ou sem adapter)</option>
+              )}
+            </select>
+          ) : (
+            <p style={{ color: 'var(--ink-2)', fontSize: 13, margin: '2px 0 0' }}>
+              {escolhida ? `${escolhida.nome} · ${escolhida.modelo}` : 'a conta de cada agente'}
+            </p>
+          )}
+          <span className="ajuda">
+            Vale para todos os agentes desta campanha. Em branco, cada agente usa a conta que tiver no
+            cadastro dele.
+          </span>
+        </div>
+
         {campanha.canais_habilitados.map((canal) => {
           const atual = atribuidos.find((a) => a.canal === canal);
           // Só agentes DO canal: o agente carrega o seu, e a função o deriva.
@@ -563,8 +626,8 @@ function Agentes({ campanha, agentes, atribuidos, podeOperar, aoMudar, aoFalhar 
           <b>O agente escreve o rascunho; quem manda é uma pessoa.</b> Quando o contato
           responde, a cadência encerra (é a invariante 4) e o agente deste canal deixa um
           rascunho na tela de Respostas, para ser lido, ajustado e mandado pelo aplicativo do
-          canal. Nada sai sozinho. Sem credencial de IA escolhida no agente, ele diz que não
-          tem com que compor.
+          canal. Nada sai sozinho. Sem conta de IA — nem na campanha, nem no agente —, ele diz
+          que não tem com que compor.
           {semAgente.length > 0 && (
             <> Sem agente em {semAgente.map((c) => NOME_CANAL[c] ?? c).join(', ')}: ali não há rascunho.</>
           )}

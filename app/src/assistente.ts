@@ -18,10 +18,14 @@
  * - **Plano, não execução.** `montarPlano` devolve o que SERIA feito, com o
  *   efeito de cada passo dito em português. Quem executa é a tela, uma ação
  *   por clique de quem autorizou, com o JWT dessa pessoa — o RLS responde, não
- *   este arquivo. E nenhuma ação carrega segredo: os campos vêm do catálogo
- *   com a marca de segredo, os valores são digitados no cartão e vão direto
- *   para a função que separa Vault de `config` (D28). O assistente nunca vê
- *   uma chave.
+ *   este arquivo.
+ *
+ * - **Chave só em Configurações (D68).** O assistente não tem campo de chave
+ *   nenhum. Ele pergunta qual provedor, e então ESCOLHE entre as contas já
+ *   conectadas; quando não há conta, o plano aponta a tela onde conectar, e a
+ *   conversa segue sozinha quando a conta aparecer na `Foto`. Quem digita
+ *   chave é quem administra, na tela de Configurações ou do canal — num lugar
+ *   só, e não em cada fluxo que precise dela.
  *
  * Puro de propósito: nada de supabase aqui, para `tests/assistente.test.ts`
  * rodar no Node.
@@ -69,7 +73,7 @@ export interface Foto {
   readonly provedoresIA: readonly {
     slug: string; nome: string; tem_adapter: boolean; modelos_sugeridos: string[]; campos: CampoDeCatalogo[];
   }[];
-  readonly credenciaisIA: readonly { id: string; nome: string; provedor: string; ativo: boolean }[];
+  readonly credenciaisIA: readonly { id: string; nome: string; provedor: string; modelo: string; ativo: boolean }[];
   readonly provedoresCRM: readonly { slug: string; nome: string; tem_adapter: boolean; campos: CampoDeCatalogo[] }[];
   readonly conexoesCRM: readonly { id: string; nome: string; provedor: string; ativo: boolean }[];
   readonly modelos: readonly { slug: string; nome: string; descricao: string; tipo: Pool; canais: string[] }[];
@@ -256,51 +260,73 @@ function perguntaProvedor(f: Foto, r: Respostas, canal: CanalEnvio): Pergunta {
       detalhe: existentes.map((x) => x.apelido || x.identificador).join(', '),
     });
   }
-  for (const p of provs) {
-    opcoes.push({ valor: p.slug, rotulo: existentes.length ? `Conectar mais uma: ${p.nome}` : p.nome, detalhe: p.descricao });
+  // Com conta, a escolha é usar. Conectar mais uma é na tela do canal, onde
+  // a chave é digitada (D68) — oferecer aqui seria um botão que só navega.
+  if (!existentes.length) {
+    for (const p of provs) opcoes.push({ valor: p.slug, rotulo: p.nome, detalhe: p.descricao });
   }
   opcoes.push({ valor: NAO, rotulo: 'Configurar depois', detalhe: 'os passos deste canal ficam esperando até existir uma conta' });
 
   return {
     chave: `provedor:${canal}`, forma: 'unica', opcoes,
     texto: existentes.length
-      ? `Você já tem ${existentes.length === 1 ? 'uma conta' : `${existentes.length} contas`} de ${NOME[canal]} para ${pool === 'fria' ? 'lista fria' : 'base própria'}. Quer conectar outra?`
-      : `Qual provedor de ${NOME[canal]} você usa?`,
-    ajuda: existentes.length ? undefined
-      : 'Escolha o provedor onde a conta já existe. Os campos de acesso aparecem no plano, e a chave vai direto para o cofre (Vault) — o assistente não a vê.',
+      ? `Você já tem ${existentes.length === 1 ? 'uma conta' : `${existentes.length} contas`} de ${NOME[canal]} para ${pool === 'fria' ? 'lista fria' : 'base própria'}. Usar?`
+      : `Qual provedor de ${NOME[canal]} você vai usar?`,
+    ajuda: existentes.length
+      ? 'Para conectar mais contas, use a tela do canal: é lá que a chave é digitada.'
+      : 'Você conecta a conta e a chave na tela do canal — o plano leva até lá. Assim que a conta aparecer, o assistente continua daqui.',
   };
 }
 
+/** Conta de IA que compõe: ligada e de provedor com adapter (D66). */
+function contasIA(f: Foto, provedor: string) {
+  return f.credenciaisIA.filter((c) => c.ativo && c.provedor === provedor
+    && f.provedoresIA.some((p) => p.slug === provedor && p.tem_adapter));
+}
+
 function perguntaIA(f: Foto): Pergunta {
-  const usaveis = f.credenciaisIA.filter((c) => c.ativo
-    && f.provedoresIA.some((p) => p.slug === c.provedor && p.tem_adapter));
   return {
     chave: 'ia', forma: 'unica',
-    texto: 'Quer que um agente escreva rascunhos de resposta quando alguém responder?',
-    ajuda: 'O agente só escreve: quem manda é uma pessoa, na tela de Respostas. A chave do modelo é sua e fica no Vault.',
+    texto: 'Quer que um agente escreva rascunhos de resposta? Com qual IA?',
+    ajuda: 'O agente só escreve: quem manda é uma pessoa, na tela de Respostas. Aqui você escolhe a IA; a conta, logo depois, entre as que já estão conectadas.',
     opcoes: [
-      ...usaveis.map((c, i) => ({ valor: `${USAR}:${c.id}`, rotulo: `Usar ${c.nome}`, recomendada: i === 0 })),
-      ...f.provedoresIA.map((p) => ({
-        valor: p.slug, rotulo: p.nome,
-        ...(p.tem_adapter ? {} : { indisponivel: 'o motor ainda não sabe compor com este provedor' }),
-      })),
+      ...f.provedoresIA.map((p) => {
+        const n = contasIA(f, p.slug).length;
+        return {
+          valor: p.slug, rotulo: p.nome,           detalhe: n ? `${n} conta${n > 1 ? 's' : ''} conectada${n > 1 ? 's' : ''}` : 'nenhuma conta conectada ainda',
+          ...(p.tem_adapter ? {} : { indisponivel: 'o motor ainda não sabe compor com este provedor' }),
+        };
+      }),
       { valor: NAO, rotulo: 'Agora não' },
     ],
   };
 }
 
+function perguntaContaIA(f: Foto, provedor: string): Pergunta {
+  const nome = f.provedoresIA.find((p) => p.slug === provedor)?.nome ?? provedor;
+  return {
+    chave: 'ia:conta', forma: 'unica',
+    texto: `Qual conta de ${nome}?`,
+    ajuda: 'As contas e as chaves vivem em Configurações ▸ Provedores de IA. A campanha só aponta para uma delas.',
+    opcoes: contasIA(f, provedor).map((c, i) => ({
+      valor: c.id, rotulo: c.nome, detalhe: c.modelo ? `modelo ${c.modelo}` : undefined, recomendada: i === 0,
+    })),
+  };
+}
+
 function perguntaCRM(f: Foto): Pergunta {
-  const ativas = f.conexoesCRM.filter((c) => c.ativo);
   return {
     chave: 'crm', forma: 'unica',
     texto: 'Você usa CRM? O motor pode devolver para ele o que descobre.',
     ajuda: 'Quem pediu para sair, quem respondeu, telefone inválido e cadência concluída voltam para o card. Só o Pipefy escreve hoje; os outros guardam a credencial para quando o adapter existir.',
     opcoes: [
-      ...ativas.map((c, i) => ({ valor: `${USAR}:${c.id}`, rotulo: `Usar ${c.nome}`, recomendada: i === 0 })),
-      ...f.provedoresCRM.map((p) => ({
-        valor: p.slug, rotulo: p.nome,
-        detalhe: p.tem_adapter ? 'escreve no CRM' : 'só guarda a credencial por enquanto',
-      })),
+      ...f.provedoresCRM.map((p) => {
+        const con = f.conexoesCRM.some((c) => c.ativo && c.provedor === p.slug);
+        return {
+          valor: p.slug, rotulo: p.nome, recomendada: con,
+          detalhe: (con ? 'já conectado · ' : '') + (p.tem_adapter ? 'escreve no CRM' : 'só guarda a credencial por enquanto'),
+        };
+      }),
       { valor: NAO, rotulo: 'Não uso CRM' },
     ],
   };
@@ -342,7 +368,11 @@ function seguinte(f: Foto, r: Respostas): Pergunta | null {
     if (c === 'whatsapp' && familiasEntregaveis(f, c).length > 1 && !familiaDoWhatsapp(f, r)) return perguntaFamilia(r);
     if (!texto(r, `provedor:${c}`)) return perguntaProvedor(f, r, c);
   }
-  if (!texto(r, 'ia')) return perguntaIA(f);
+  const ia = texto(r, 'ia');
+  if (!ia) return perguntaIA(f);
+  // A conta só é perguntada quando existe alguma para escolher. Sem conta, o
+  // plano aponta Configurações — e quando ela aparecer, esta pergunta surge.
+  if (ia !== NAO && contasIA(f, ia).length && !texto(r, 'ia:conta')) return perguntaContaIA(f, ia);
   if (!texto(r, 'crm')) return perguntaCRM(f);
   if (!texto(r, 'campanha')) return perguntaCampanha(f, r);
   return null;
@@ -418,34 +448,39 @@ interface Base {
 }
 
 export type Acao =
-  | Base & {
-      readonly tipo: 'conectar_conta'; readonly canal: CanalEnvio; readonly provedor: string;
-      readonly pool: Pool; readonly quota: number; readonly campos: readonly CampoDeCatalogo[];
-    }
   | Base & { readonly tipo: 'ajustar_quota'; readonly remetente: string; readonly de: number; readonly para: number }
-  | Base & {
-      readonly tipo: 'credencial_ia'; readonly provedor: string; readonly modelo: string;
-      readonly modelos: readonly string[]; readonly campos: readonly CampoDeCatalogo[];
-    }
-  | Base & {
-      readonly tipo: 'conectar_crm'; readonly provedor: string; readonly escreve: boolean;
-      readonly campos: readonly CampoDeCatalogo[];
-    }
+  /**
+   * O que o assistente não faz por desenho: conectar conta, chave ou CRM.
+   * É um cartão que leva à tela onde isso se faz (D68). `pronto` é lido da
+   * `Foto`, nunca marcado à mão: quem diz que a conta existe é o banco.
+   */
+  | Base & { readonly tipo: 'configurar'; readonly rota: string; readonly pronto: boolean }
   | Base & { readonly tipo: 'criar_campanha'; readonly modelo: string; readonly nome: string; readonly canais: readonly CanalEnvio[] }
   | Base & {
       readonly tipo: 'ligar_agentes';
       /** Agente do catálogo por canal; a cópia do cliente nasce em `atribuir_agente`. */
       readonly agentes: readonly { canal: CanalEnvio; agente: string; nome: string }[];
-      /** Credencial que já existe, ou `null` = a que a ação `credencial_ia` criar. */
+      /** A conta de IA que a campanha passa a usar, ou `null` enquanto ela não existe. */
       readonly credencial: string | null;
     }
-  | Base & { readonly tipo: 'importar' };
+  | Base & { readonly tipo: 'abrir'; readonly rota: string };
 
 export interface Plano {
   readonly acoes: readonly Acao[];
   /** O que o plano não resolve e a pessoa precisa saber antes de autorizar. */
   readonly avisos: readonly string[];
 }
+
+/** Onde se conecta a conta de cada canal. E-mail mora em Configurações (D62). */
+export function rotaDoCanal(canal: CanalEnvio, familia: Familia): { rota: string; onde: string } {
+  if (canal === 'email') return { rota: '/config/email', onde: 'Configurações ▸ E-mail' };
+  if (canal === 'whatsapp') {
+    return { rota: `/canais/whatsapp/${familia}`, onde: `Canais ▸ WhatsApp ▸ ${familia === 'oficial' ? 'Oficial' : 'Não oficial'}` };
+  }
+  return { rota: '/canais/sms', onde: 'Canais ▸ SMS' };
+}
+
+const CHAVE_LA = 'a chave é digitada lá e vai direto para o cofre (Vault) — o assistente não a vê';
 
 export function montarPlano(f: Foto, bruto: Respostas): Plano {
   // Só o que a conversa ainda pergunta entra no plano.
@@ -462,7 +497,6 @@ export function montarPlano(f: Foto, bruto: Respostas): Plano {
     if (!escolha) continue;
     const alvo = porDia[canal] ?? sugestaoDiaria(canal, pool);
     const existentes = contasDe(f, canal, pool);
-    const soma = existentes.reduce((s, x) => s + x.quota_diaria, 0);
 
     if (escolha === NAO) {
       if (!existentes.length) {
@@ -489,76 +523,87 @@ export function montarPlano(f: Foto, bruto: Respostas): Plano {
         ? (f.provedores.find((p) => p.slug === existentes[0]!.provedor)?.oficial ? 'oficial' : 'nao') : 'oficial';
       const teto = tetoPorConta(canal, fam, pool);
       if (cada > teto) {
-        avisos.push(`${NOME[canal]}: ${cada} por conta é mais do que o ponto de partida de ${teto}. Contas novas que começam alto são as que caem — considere conectar mais contas.`);
+        avisos.push(`${NOME[canal]}: ${cada} por conta é mais do que o ponto de partida de ${teto}. Contas novas que começam alto são as que caem — considere conectar mais contas na tela do canal.`);
       }
       continue;
     }
 
+    // Provedor escolhido e nenhuma conta ainda: com conta, a pergunta só
+    // oferece usar. Conectar é na tela do canal, onde a chave é digitada.
     const prov = f.provedores.find((p) => p.slug === escolha);
     if (!prov) continue;
-    const teto = tetoPorConta(canal, prov.oficial ? 'oficial' : 'nao', pool);
-    const falta = alvo - soma;
-    const quota = Math.max(1, Math.min(teto, falta > 0 ? falta : Math.ceil(alvo / (existentes.length + 1))));
+    const fam: Familia = prov.oficial ? 'oficial' : 'nao';
+    const teto = tetoPorConta(canal, fam, pool);
+    const quota = Math.max(1, Math.min(teto, alvo));
+    const { rota, onde } = rotaDoCanal(canal, fam);
 
     acoes.push({
-      id: `conta:${canal}`, tipo: 'conectar_conta', canal, provedor: prov.slug, pool, quota, campos: prov.campos,
+      id: `config:${canal}`, tipo: 'configurar', rota,
+      pronto: existentes.some((x) => x.provedor === prov.slug),
       titulo: `Conectar uma conta ${prov.nome} (${NOME[canal]})`,
       efeitos: [
-        `cadastra a conta para ${nomePool}, com até ${quota} mensagens por dia`,
+        `em ${onde}, cadastre a conta para ${nomePool}, com até ${quota} mensagens por dia`,
+        CHAVE_LA,
         ...(pool === 'fria'
           ? ['lista fria nunca usa o número nem o domínio da operação institucional — use um separado'] : []),
-        'a chave de acesso vai direto para o cofre (Vault); nem esta tela consegue lê-la de volta',
-        ...(canal === 'whatsapp' && !prov.oficial
-          ? ['depois de conectar, a URL de webhook do chip aparece na tela do canal — é por ela que as respostas chegam'] : []),
+        'quando a conta aparecer, o assistente continua daqui sozinho',
       ],
       exige: 'administra', dependeDe: [],
     });
 
-    const capacidade = soma + quota;
-    if (capacidade < alvo) {
-      const mais = Math.ceil((alvo - capacidade) / teto);
-      avisos.push(`${NOME[canal]}: com esta conta o canal chega a ${capacidade} por dia, e você pediu ${alvo}. Para chegar lá, faltam ${mais === 1 ? 'mais uma conta' : `mais ${mais} contas`} de até ${teto} por dia.`);
+    if (quota < alvo) {
+      const mais = Math.ceil((alvo - quota) / teto);
+      avisos.push(`${NOME[canal]}: uma conta começa em até ${quota} por dia, e você pediu ${alvo}. Para chegar lá, faltam ${mais === 1 ? 'mais uma conta' : `mais ${mais} contas`} de até ${teto} por dia.`);
     }
   }
 
-  // IA
+  // IA: a conta é escolhida, nunca criada aqui (D68).
   const ia = texto(r, 'ia');
   let credencial: string | null | undefined;
   if (ia && ia !== NAO) {
-    if (ia.startsWith(`${USAR}:`)) {
-      credencial = ia.slice(USAR.length + 1);
+    const conta = texto(r, 'ia:conta');
+    if (conta) {
+      credencial = conta;
     } else {
       const p = f.provedoresIA.find((x) => x.slug === ia);
-      if (p) {
-        credencial = null;
-        acoes.push({
-          id: 'ia', tipo: 'credencial_ia', provedor: p.slug, modelo: p.modelos_sugeridos[0] ?? '',
-          modelos: p.modelos_sugeridos, campos: p.campos,
-          titulo: `Guardar a chave de IA (${p.nome})`,
-          efeitos: ['a chave vai para o Vault, em nome do seu cliente — o produto não usa chave própria',
-                    'sozinha ela não faz nada: o agente da campanha é que passa a usá-la para escrever rascunhos'],
-          exige: 'administra', dependeDe: [],
-        });
-      }
+      credencial = null;
+      acoes.push({
+        id: 'config:ia', tipo: 'configurar', rota: '/config/ia', pronto: false,
+        titulo: `Conectar uma conta de ${p?.nome ?? ia}`,
+        efeitos: [
+          `em Configurações ▸ Provedores de IA, conecte uma conta de ${p?.nome ?? ia} — pode ser mais de uma`,
+          CHAVE_LA,
+          'quando a conta aparecer, o assistente pergunta qual delas a campanha usa',
+        ],
+        exige: 'administra', dependeDe: [],
+      });
     }
   }
 
   // CRM
   const crm = texto(r, 'crm');
-  if (crm && crm !== NAO && !crm.startsWith(`${USAR}:`)) {
+  if (crm && crm !== NAO) {
     const p = f.provedoresCRM.find((x) => x.slug === crm);
     if (p) {
+      const con = f.conexoesCRM.find((c) => c.ativo && c.provedor === p.slug);
       acoes.push({
-        id: 'crm', tipo: 'conectar_crm', provedor: p.slug, escreve: p.tem_adapter, campos: p.campos,
-        titulo: `Conectar o ${p.nome}`,
-        efeitos: [
-          'a credencial vai para o Vault',
-          p.tem_adapter
-            ? 'depois de conectar, o assistente lê os pipes e campos; quais fases e campos recebem cada fato você escolhe na tela da plataforma'
-            : `por enquanto só guarda: nenhum fato é escrito no ${p.nome} até o adapter existir`,
+        id: 'config:crm', tipo: 'configurar', rota: '/config/vinculadas', pronto: !!con,
+        titulo: con ? `${p.nome} conectado: ${con.nome}` : `Conectar o ${p.nome}`,
+        efeitos: con ? ['a conexão já existe e está ligada'] : [
+          `em Configurações ▸ Plataformas vinculadas, conecte o ${p.nome}`,
+          CHAVE_LA,
+          ...(p.tem_adapter ? [] : [`por enquanto só guarda: nenhum fato é escrito no ${p.nome} até o adapter existir`]),
         ],
         exige: 'administra', dependeDe: [],
       });
+      if (con && p.tem_adapter) {
+        acoes.push({
+          id: 'crm:fatos', tipo: 'abrir', rota: `/config/vinculadas/${con.id}`,
+          titulo: `Escolher o que cada fato faz no ${p.nome}`,
+          efeitos: ['abre a tela da conexão: quem respondeu, quem pediu para sair e quem concluiu vão para a fase ou o campo que você escolher'],
+          exige: 'administra', dependeDe: [],
+        });
+      }
     }
   }
 
@@ -584,31 +629,40 @@ export function montarPlano(f: Foto, bruto: Respostas): Plano {
           .sort((x, y) => x.nome.localeCompare(y.nome))[0];
         return a ? [{ canal: c, agente: a.id, nome: a.nome }] : [];
       });
+      const conta = credencial ? f.credenciaisIA.find((c) => c.id === credencial) : undefined;
       if (agentes.length) {
         acoes.push({
           id: 'agentes', tipo: 'ligar_agentes', agentes, credencial,
           titulo: 'Pôr um agente em cada canal da campanha',
           efeitos: [
-            ...agentes.map((a) => `${NOME[a.canal]}: ${a.nome}, compondo com a sua chave de IA`),
+            ...agentes.map((a) => `${NOME[a.canal]}: ${a.nome}`),
+            conta ? `a campanha compõe com a conta "${conta.nome}"` : 'a campanha compõe com a conta de IA que você conectar',
             'o agente escreve o rascunho; quem manda é uma pessoa, na tela de Respostas',
           ],
           exige: 'opera',
-          dependeDe: ['campanha', ...(credencial === null ? ['ia'] : [])],
+          dependeDe: ['campanha', ...(credencial === null ? ['config:ia'] : [])],
         });
       }
     }
   } else if (credencial !== undefined) {
-    avisos.push('A chave de IA fica guardada, mas só compõe quando um agente for escolhido numa campanha — isso se faz na tela da campanha.');
+    avisos.push('A conta de IA fica escolhida só quando houver campanha: escolha-a na tela da campanha, em "Quem responde".');
   }
 
   acoes.push({
-    id: 'importar', tipo: 'importar',
+    id: 'importar', tipo: 'abrir', rota: '/contatos/importar',
     titulo: f.contatos ? 'Importar mais contatos' : 'Importar os primeiros contatos',
     efeitos: ['abre a importação de planilha: ela mostra o que cada coluna virou e o que aconteceria, antes de gravar qualquer coisa'],
     exige: 'opera', dependeDe: [],
   });
 
   return { acoes, avisos };
+}
+
+/** Dependência cumprida: feita nesta conversa, ou pronta segundo o banco. */
+export function cumprida(plano: readonly Acao[], feitos: Readonly<Record<string, string>>, id: string): boolean {
+  if (feitos[id]) return true;
+  const a = plano.find((x) => x.id === id);
+  return !!a && a.tipo === 'configurar' && a.pronto;
 }
 
 /** `null` = pode. Texto = por que não, para o cartão dizer em vez de falhar. */
@@ -646,7 +700,10 @@ export function situacao(f: Foto): Item[] {
         ? contas.map((x) => `${NOME[x.c]}: ${x.n} conta${x.n > 1 ? 's' : ''}, até ${x.dia}/dia`).join(' · ')
         : 'nenhuma conta conectada — sem ela nada sai' },
     { id: 'ia', titulo: 'Inteligência artificial', feito: ia.length > 0,
-      detalhe: ia.length ? ia.map((c) => c.nome).join(', ') : 'opcional: sem ela, não há rascunho de resposta' },
+      detalhe: ia.length
+        ? f.provedoresIA.map((p) => ({ p, n: ia.filter((c) => c.provedor === p.slug).length }))
+            .filter((x) => x.n).map((x) => `${x.p.nome}: ${x.n} conta${x.n > 1 ? 's' : ''}`).join(' · ')
+        : 'opcional: sem ela, não há rascunho de resposta — as contas se conectam em Configurações' },
     { id: 'crm', titulo: 'CRM', feito: crm.length > 0,
       detalhe: crm.length ? crm.map((c) => c.nome).join(', ') : 'opcional: sem ele, os fatos ficam só aqui' },
     { id: 'campanha', titulo: 'Campanha', feito: camps.length > 0,

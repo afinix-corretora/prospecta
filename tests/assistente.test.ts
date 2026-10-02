@@ -3,12 +3,14 @@
 // O que este arquivo sustenta é que o assistente não promete o que o motor não
 // faz: canal sem adapter não é escolhível, conta de outro pool não conta,
 // resposta órfã não chega ao plano, e nenhum cartão anda sem o papel certo.
+// E, desde o D68, que ele não pede chave nenhuma: escolhe entre as contas
+// conectadas em Configurações, e aponta para lá quando não há.
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
-  impedimento, montarPlano, NAO, roteiro, situacao, USAR, voltarPara,
+  cumprida, impedimento, montarPlano, NAO, roteiro, situacao, USAR, voltarPara,
 } from '../app/src/assistente.ts';
 import type { Acao, Foto, Respostas } from '../app/src/assistente.ts';
 
@@ -119,7 +121,8 @@ test('conta de outro pool não conta como "já tenho"', () => {
   const fria = atual(morna, { canais: ['whatsapp'], pool: 'fria', porDia: { whatsapp: 40 }, 'familia:whatsapp': 'nao' })!;
   assert.ok(!fria.opcoes.some((o) => o.valor === USAR));
   const quente = atual(morna, { canais: ['whatsapp'], pool: 'morna', porDia: { whatsapp: 40 }, 'familia:whatsapp': 'nao' })!;
-  assert.equal(quente.opcoes[0]!.valor, USAR);
+  // Com conta, a escolha é usar: conectar mais uma é na tela do canal (D68).
+  assert.deepEqual(quente.opcoes.map((o) => o.valor), [USAR, NAO]);
 });
 
 test('voltar apaga a resposta e as que vieram depois', () => {
@@ -135,19 +138,21 @@ test('voltar apaga a resposta e as que vieram depois', () => {
 test('desmarcar um canal tira dele o plano inteiro: resposta órfã não chega', () => {
   const r = { ...COMPLETO, canais: ['whatsapp'] };
   const plano = montarPlano(FOTO, r);
-  assert.ok(!plano.acoes.some((a) => a.tipo === 'conectar_conta' && a.canal === 'email'));
+  assert.ok(!plano.acoes.some((a) => a.id === 'config:email'));
+  assert.ok(plano.acoes.some((a) => a.id === 'config:whatsapp'), 'o canal que ficou continua no plano');
   const camp = doTipo(plano.acoes, 'criar_campanha')[0]!;
   assert.deepEqual(camp.canais, ['whatsapp'], 'campanha multicanal com um canal só: cruzamento parcial (D47)');
 });
 
-test('chip frio começa baixo, e o plano diz quantos faltam para o volume pedido', () => {
+test('chip frio começa baixo, e o plano diz quantas contas faltam para o volume pedido', () => {
   const plano = montarPlano(FOTO, COMPLETO);
-  const wa = doTipo(plano.acoes, 'conectar_conta').find((a) => a.canal === 'whatsapp')!;
-  assert.equal(wa.quota, 40);
-  assert.equal(wa.pool, 'fria');
-  assert.ok(plano.avisos.some((x) => /chega a 40 por dia, e você pediu 200.*mais 4 contas/.test(x)), plano.avisos.join('\n'));
-  // E-mail cabe numa conta só: sem aviso.
-  assert.equal(doTipo(plano.acoes, 'conectar_conta').find((a) => a.canal === 'email')!.quota, 100);
+  const wa = doTipo(plano.acoes, 'configurar').find((a) => a.id === 'config:whatsapp')!;
+  assert.equal(wa.rota, '/canais/whatsapp/nao');
+  assert.ok(wa.efeitos.some((e) => /lista fria, com até 40 mensagens por dia/.test(e)), wa.efeitos.join('\n'));
+  assert.ok(plano.avisos.some((x) => /até 40 por dia, e você pediu 200.*mais 4 contas/.test(x)), plano.avisos.join('\n'));
+  // E-mail cabe numa conta só: sem aviso, e a conta se conecta em Configurações.
+  const em = doTipo(plano.acoes, 'configurar').find((a) => a.id === 'config:email')!;
+  assert.equal(em.rota, '/config/email');
   assert.ok(!plano.avisos.some((x) => x.startsWith('E-mail')));
 });
 
@@ -159,7 +164,7 @@ test('usar as contas que existem distribui o total, e só propõe mexer na que m
   const plano = montarPlano(f, { ...COMPLETO, canais: ['whatsapp'], porDia: { whatsapp: 60 }, 'provedor:whatsapp': USAR });
   const ajustes = doTipo(plano.acoes, 'ajustar_quota');
   assert.deepEqual(ajustes.map((a) => [a.remetente, a.de, a.para]), [['a', 50, 30]]);
-  assert.ok(!doTipo(plano.acoes, 'conectar_conta').length);
+  assert.ok(!doTipo(plano.acoes, 'configurar').some((a) => a.id === 'config:whatsapp'), 'quem usa o que tem não é mandado conectar');
 });
 
 test('"configurar depois" sem conta nenhuma avisa que o canal fica parado', () => {
@@ -167,27 +172,38 @@ test('"configurar depois" sem conta nenhuma avisa que o canal fica parado', () =
   assert.ok(plano.avisos.some((x) => /E-mail ficou sem conta.*nada sai/.test(x)));
 });
 
-test('nenhuma ação carrega segredo: só a definição do campo, com a marca', () => {
+test('nenhuma ação pede chave: conectar é sempre levar a Configurações (D68)', () => {
   const plano = montarPlano(FOTO, COMPLETO);
-  const comCampos = plano.acoes.filter((a) => 'campos' in a) as Extract<Acao, { campos: unknown }>[];
-  assert.equal(comCampos.length, 4);
-  for (const a of comCampos) {
-    assert.ok(a.campos.some((c) => c.segredo), `${a.id} marca o segredo para a tela dizer "Vault"`);
-    assert.ok(a.campos.every((c) => !('valor' in c)));
-  }
+  assert.ok(plano.acoes.every((a) => !('campos' in a)), 'nenhum cartão tem campo de catálogo');
+  const configurar = doTipo(plano.acoes, 'configurar');
+  assert.deepEqual(configurar.map((a) => a.id).sort(), ['config:crm', 'config:email', 'config:ia', 'config:whatsapp']);
+  assert.ok(configurar.every((a) => a.exige === 'administra' && a.efeitos.some((e) => /Vault/.test(e)) || a.pronto));
 });
 
-test('agentes dependem da campanha e da chave nova; com chave existente, só da campanha', () => {
-  const nova = doTipo(montarPlano(FOTO, COMPLETO).acoes, 'ligar_agentes')[0]!;
-  assert.deepEqual(nova.dependeDe, ['campanha', 'ia']);
-  assert.equal(nova.credencial, null);
-  assert.deepEqual(nova.agentes.map((a) => [a.canal, a.agente]), [['whatsapp', 'ag-wa'], ['email', 'ag-mail']]);
+test('IA: escolhe o provedor; sem conta, o plano aponta Configurações e o agente espera', () => {
+  const plano = montarPlano(FOTO, COMPLETO);
+  const ia = doTipo(plano.acoes, 'configurar').find((a) => a.id === 'config:ia')!;
+  assert.equal(ia.rota, '/config/ia');
+  const ag = doTipo(plano.acoes, 'ligar_agentes')[0]!;
+  assert.deepEqual([ag.credencial, ag.dependeDe], [null, ['campanha', 'config:ia']]);
+  assert.deepEqual(ag.agentes.map((a) => [a.canal, a.agente]), [['whatsapp', 'ag-wa'], ['email', 'ag-mail']]);
+});
 
-  const f = { ...FOTO, credenciaisIA: [{ id: 'k1', nome: 'Claude', provedor: 'anthropic', ativo: true }] };
-  const plano = montarPlano(f, { ...COMPLETO, ia: `${USAR}:k1` });
-  assert.ok(!doTipo(plano.acoes, 'credencial_ia').length);
-  const usa = doTipo(plano.acoes, 'ligar_agentes')[0]!;
-  assert.deepEqual([usa.credencial, usa.dependeDe], ['k1', ['campanha']]);
+test('IA: com contas conectadas, a pergunta seguinte é qual delas — só as do provedor, só as ligadas', () => {
+  const f = { ...FOTO, credenciaisIA: [
+    { id: 'k1', nome: 'Claude comercial', provedor: 'anthropic', modelo: 'claude-sonnet-5', ativo: true },
+    { id: 'k2', nome: 'Claude desligado', provedor: 'anthropic', modelo: 'claude-sonnet-5', ativo: false },
+    { id: 'k3', nome: 'Outra IA', provedor: 'openai', modelo: 'gpt-5', ativo: true },
+  ] };
+  const p = atual(f, COMPLETO)!;
+  assert.equal(p.chave, 'ia:conta');
+  assert.deepEqual(p.opcoes.map((o) => o.valor), ['k1']);
+  const plano = montarPlano(f, { ...COMPLETO, 'ia:conta': 'k1' });
+  assert.ok(!doTipo(plano.acoes, 'configurar').some((a) => a.id === 'config:ia'));
+  const ag = doTipo(plano.acoes, 'ligar_agentes')[0]!;
+  assert.deepEqual([ag.credencial, ag.dependeDe], ['k1', ['campanha']]);
+  // Conta de outro provedor não serve de resposta.
+  assert.equal(atual(f, { ...COMPLETO, 'ia:conta': 'k3' })!.chave, 'ia:conta');
 });
 
 test('sem IA não há agente; IA sem campanha avisa onde escolher o agente', () => {
@@ -200,13 +216,22 @@ test('sem IA não há agente; IA sem campanha avisa onde escolher o agente', () 
 test('IA de provedor sem adapter não é escolhível', () => {
   const r = { ...COMPLETO, ia: 'google' };
   assert.equal(atual(FOTO, r)!.chave, 'ia');
-  assert.ok(!doTipo(montarPlano(FOTO, r).acoes, 'credencial_ia').length);
+  assert.ok(!doTipo(montarPlano(FOTO, r).acoes, 'configurar').some((a) => a.id === 'config:ia'));
 });
 
 test('CRM sem adapter diz que só guarda', () => {
-  const crm = doTipo(montarPlano(FOTO, { ...COMPLETO, crm: 'hubspot' }).acoes, 'conectar_crm')[0]!;
-  assert.equal(crm.escreve, false);
+  const crm = doTipo(montarPlano(FOTO, { ...COMPLETO, crm: 'hubspot' }).acoes, 'configurar').find((a) => a.id === 'config:crm')!;
   assert.ok(crm.efeitos.some((e) => /só guarda/.test(e)));
+});
+
+test('CRM já conectado: pronto lido do banco, e o próximo passo é escolher o que cada fato faz', () => {
+  const f = { ...FOTO, conexoesCRM: [{ id: 'p1', nome: 'Pipefy Afinix', provedor: 'pipefy', ativo: true }] };
+  const plano = montarPlano(f, COMPLETO);
+  const crm = doTipo(plano.acoes, 'configurar').find((a) => a.id === 'config:crm')!;
+  assert.equal(crm.pronto, true);
+  assert.ok(cumprida(plano.acoes, {}, 'config:crm'), 'pronto no banco cumpre a dependência');
+  assert.ok(!cumprida(plano.acoes, {}, 'config:ia'), 'o que não está no banco nem foi feito, não');
+  assert.equal(doTipo(plano.acoes, 'abrir').find((a) => a.id === 'crm:fatos')!.rota, '/config/vinculadas/p1');
 });
 
 test('modelos: só o mesmo pool e com canal em comum', () => {
@@ -219,11 +244,11 @@ test('modelos: só o mesmo pool e com canal em comum', () => {
 // Permissão e situação
 // ---------------------------------------------------------------------------
 
-test('operador cria campanha, mas não conecta conta nem guarda chave', () => {
+test('operador cria campanha e liga agente, mas o que é de Configurações fica com quem administra', () => {
   const op = { ...FOTO, administra: false };
   const plano = montarPlano(op, COMPLETO);
   for (const a of plano.acoes) {
-    const deve = a.tipo === 'criar_campanha' || a.tipo === 'ligar_agentes' || a.tipo === 'importar';
+    const deve = a.tipo === 'criar_campanha' || a.tipo === 'ligar_agentes' || a.tipo === 'abrir';
     assert.equal(impedimento(op, a) === null, deve, a.id);
   }
   const leitor = { ...FOTO, administra: false, opera: false };
