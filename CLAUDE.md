@@ -332,12 +332,21 @@ e elas têm teste automatizado obrigatório.**
 - **Nunca** perguntar "esta resposta é positiva?". A pergunta é "é recusa?", e o que não for recusa
   vai para uma pessoa. Detectar entusiasmo foi o que falhou no projeto anterior — o classificador
   reperguntava dados e reativava tarde e duplicado (D58).
-- **Nunca** tratar recusa da oferta como pedido de saída. "Não tenho interesse" é *não quero esta
-  oferta*, não *nunca mais fale comigo* — e estava na lista de opt-out valendo sozinho, suprimindo
-  para sempre quem só recusou. Supressão é irreversível; recusa não (D58).
-- **Nunca** fatorar dois classificadores que têm assimetrias opostas. `pedido_de_saida` erra para o
-  lado de não suprimir; `eh_recusa` erra para o lado de entregar o lead. Uma função comum convida a
-  "melhorar as duas de uma vez", que é o que não pode acontecer (D58).
+- **Nunca** fundir as ações da blacklist. Recusar a oferta e pedir para sair são fatos diferentes
+  (D58), e a operação decidiu que, no padrão do produto, os dois suprimem (D63). A decisão é do
+  CLIENTE, termo a termo: a ação `recusa` continua existindo justamente para quem quiser o D58 de
+  volta sem migration. Perder a distinção é tirar dele a escolha.
+- **Nunca** deixar uma recusa engolir um pedido de saída. Desde o D63 há um classificador só,
+  `regra_da_resposta`, e a assimetria que o D58 guardava em duas funções mora na ORDEM das ações:
+  `suprimir` > `identidade_invalida` > `recusa`. "não preciso, pare" é blacklist (D63).
+- **Nunca** deixar um cliente nascer sem blacklist. Lista vazia não dá erro: "pare" passa batido e a
+  pessoa recebe o próximo toque. O gatilho em `tenants` semeia o padrão, e o teste o sabota (D63).
+- **Nunca** bloquear endereço fora de `esta_suprimido`. Domínio bloqueado é a mesma pergunta que o
+  roteador, o gatilho de `messages` e o despacho já fazem; um portão novo seria um caminho a mais
+  para alguém esquecer (D63).
+- **Nunca** mandar `DROP` junto com o resto pelo MCP do Supabase. O DROP espera a confirmação de uma
+  pessoa e o chamado inteiro estoura o tempo sem aplicar nada; a migration que apaga vai separada,
+  e o que ela apaga precisa estar sem chamador antes (D63).
 - **Nunca** isentar uma tabela de um meta-teste antes de conferir de QUAL pergunta ela está sendo
   isenta. `recusa_termos` é catálogo e não tem `tenant_id` com razão — mas a mesma lista a isentava
   também do teste de RLS, e ela precisava de RLS. Quem pegou foi o advisor (D58).
@@ -491,6 +500,12 @@ e elas têm teste automatizado obrigatório.**
 > que uma campanha nova reabra o lead. O motor move nos fatos que já produzia; `oportunidade`
 > nasce sem produtor **de propósito**, e a tela diz isso.
 >
+> A **blacklist** é do cliente desde o **D63**: `blacklist_termos` (termo, contexto e AÇÃO —
+> suprimir, endereço errado ou recusa) e `blacklist_dominios`, por tenant, editáveis em
+> Configurações ▸ Blacklist. Todo cliente nasce com o padrão do produto, que é a união das listas
+> do D48 e do D58 — com a recusa SUPRIMINDO, por decisão de operação que reverteu o D58. Domínio
+> bloqueado entra em `esta_suprimido`, então vale no roteador e no despacho.
+>
 > As **respostas** ganharam tela no **D56**, e a falta era grave: o texto era gravado desde o D48 e
 > o único leitor era o classificador de opt-out. A pessoa respondia, a invariante 4 encerrava a
 > cadência dela em todas as campanhas, e ninguém no produto conseguia ler o que ela disse — lead
@@ -538,8 +553,9 @@ e elas têm teste automatizado obrigatório.**
 > **derivados do schema** cobram `tenant_id`, RLS e FK composta de toda tabela nova — lista escrita
 > à mão envelhece sem avisar, e essa já tinha perdido a `provider_servers` (D31).
 >
-> O schema está **aplicado no projeto `hucuwjvihqgftdjpnych`** (53 migrations no repositório, 60
-> registros no projeto — duas corretivas de texto, uma separação, duas do D46 (superfície e
+> O schema está **aplicado no projeto `hucuwjvihqgftdjpnych`** (55 migrations no repositório, 61
+> registros no projeto — a 55ª, que só apaga os dois classificadores sem chamador do D63, espera
+> confirmação de uma pessoa para ser aplicada (D63) — duas corretivas de texto, uma separação, duas do D46 (superfície e
 > tenant explícito), o bootstrap do tenant de teste, a corretiva de `search_path` do D54 e a do
 > corpo da função no D59, ver D32, D39, D46, D53, D54 e D59; as duas do D59 entraram em 26/09 (mais
 > a corretiva, que é o terceiro registro e não existe como arquivo — o repositório já traz o corpo

@@ -438,6 +438,91 @@ export async function alternarRemetente(id: string, ativo: boolean) {
 }
 
 // ---------------------------------------------------------------------------
+// Configurações ▸ Blacklist (D63)
+// ---------------------------------------------------------------------------
+//
+// Escrita direta na tabela, sem função em `public`: o RLS já diz que só quem
+// administra escreve (D41). Quem normaliza o termo é o banco, com a mesma
+// função que normaliza a resposta — a tela manda o que a pessoa digitou.
+
+export type AcaoBlacklist = 'suprimir' | 'identidade_invalida' | 'recusa';
+
+export interface TermoBlacklist {
+  id: string;
+  termo: string;
+  /** `null` = vale sozinho. Preenchido = só com uma destas nas três palavras seguintes. */
+  exige_uma_de: string[] | null;
+  acao: AcaoBlacklist;
+  nota: string | null;
+  ativo: boolean;
+  origem: 'padrao' | 'cliente';
+}
+
+export interface DominioBloqueado {
+  id: string;
+  dominio: string;
+  nota: string | null;
+  ativo: boolean;
+}
+
+export const lerBlacklistTermos = () =>
+  tabela<TermoBlacklist>('blacklist_termos', 'id, termo, exige_uma_de, acao, nota, ativo, origem', 'termo');
+
+export const lerDominiosBloqueados = () =>
+  tabela<DominioBloqueado>('blacklist_dominios', 'id, dominio, nota, ativo', 'dominio');
+
+export async function criarTermoBlacklist(d: {
+  tenant: string; termo: string; contexto: string[]; acao: AcaoBlacklist; nota: string;
+}) {
+  const { error } = await sb.from('blacklist_termos').insert({
+    tenant_id: d.tenant, termo: d.termo, acao: d.acao,
+    exige_uma_de: d.contexto.length ? d.contexto : null,
+    nota: d.nota.trim() || null,
+  });
+  if (error) throw error;
+}
+
+export async function mudarTermoBlacklist(
+  id: string, mudanca: Partial<Pick<TermoBlacklist, 'acao' | 'ativo'>>,
+) {
+  const { error } = await sb.from('blacklist_termos').update(mudanca).eq('id', id);
+  if (error) throw error;
+}
+
+export async function apagarTermoBlacklist(id: string) {
+  const { error } = await sb.from('blacklist_termos').delete().eq('id', id);
+  if (error) throw error;
+}
+
+export async function bloquearDominio(d: { tenant: string; dominio: string; nota: string }) {
+  const { error } = await sb.from('blacklist_dominios').insert({
+    tenant_id: d.tenant, dominio: d.dominio, nota: d.nota.trim() || null,
+  });
+  if (error) throw error;
+}
+
+export async function alternarDominio(id: string, ativo: boolean) {
+  const { error } = await sb.from('blacklist_dominios').update({ ativo }).eq('id', id);
+  if (error) throw error;
+}
+
+export async function apagarDominio(id: string) {
+  const { error } = await sb.from('blacklist_dominios').delete().eq('id', id);
+  if (error) throw error;
+}
+
+/** O que esta frase dispararia — perguntado ao classificador de verdade, no
+ *  banco. Reescrever a regra aqui seria a segunda leitura que diverge (D55). */
+export async function testarBlacklist(
+  tenant: string, texto: string,
+): Promise<{ termo: string; acao: AcaoBlacklist } | null> {
+  const { data, error } = await sb.rpc('testar_blacklist', { p_tenant: tenant, p_texto: texto });
+  if (error) throw error;
+  const linhas = (data ?? []) as { termo: string; acao: AcaoBlacklist }[];
+  return linhas[0] ?? null;
+}
+
+// ---------------------------------------------------------------------------
 // Configurações ▸ E-mail (D62)
 // ---------------------------------------------------------------------------
 

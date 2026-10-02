@@ -11,6 +11,10 @@
 \set ON_ERROR_STOP on
 SET client_min_messages = warning;
 
+-- Desde o D63 a lista é do cliente: `blacklist_termos`, semeada com o padrão
+-- do produto quando o cliente nasce. `oo.saida` pergunta ao classificador de
+-- verdade, na blacklist do tenant padrão das fixtures.
+
 CREATE SCHEMA oo;
 CREATE TABLE oo.resultado (
   id serial PRIMARY KEY, nome text NOT NULL, ok boolean NOT NULL, detalhe text NOT NULL DEFAULT ''
@@ -19,6 +23,12 @@ CREATE FUNCTION oo.confere(p_nome text, p_cond boolean, p_detalhe text DEFAULT '
 RETURNS void LANGUAGE plpgsql AS $$
 BEGIN INSERT INTO oo.resultado (nome, ok, detalhe)
   VALUES (p_nome, coalesce(p_cond,false), coalesce(p_detalhe,'')); END; $$;
+
+CREATE FUNCTION oo.saida(p_texto text) RETURNS text
+LANGUAGE sql STABLE AS $$
+  SELECT termo FROM privado.regra_da_resposta(privado.tenant_padrao(), p_texto)
+   WHERE acao = 'suprimir';
+$$;
 
 -- ===========================================================================
 -- 1. O classificador, nas duas direções
@@ -44,7 +54,7 @@ BEGIN
     'nao perturbe',
     'REMOVER DA LISTA AGORA'
   ] LOOP
-    IF privado.pedido_de_saida(f) IS NULL THEN
+    IF oo.saida(f) IS NULL THEN
       v_escapou := v_escapou || f || ' | ';
     END IF;
   END LOOP;
@@ -52,35 +62,27 @@ BEGIN
 END;
 $$;
 
--- D58: "nao tenho interesse" e "sem interesse" SAÍRAM desta lista.
+-- D63: "nao tenho interesse" e "sem interesse" VOLTARAM a suprimir.
 --
--- Estavam aqui valendo sozinhos, e o efeito era suprimir para sempre quem só
--- tinha recusado a oferta. Recusar não é pedir para sair: quem não quer plano
--- individual hoje pode querer PME em seis meses. É a mesma leitura que este
--- arquivo já fazia de "quero sair do meu plano" — só não tinha sido aplicada
--- a estas duas.
---
--- Elas continuam reconhecidas, em `recusa_termos`: o card fica em `respondeu`
--- e não vira oportunidade. O que muda é que a pessoa não é apagada.
+-- O D58 os tinha tirado do opt-out: recusar a oferta não é pedir para sair. A
+-- operação decidiu o contrário — recusa vai para a blacklist —, e é por isso
+-- que a lista virou do cliente: quem preferir o comportamento do D58 troca a
+-- ação do termo para `recusa` na tela (tests/qualificacao.sql exercita isso).
 DO $$
-DECLARE f text; v_suprimiu text := '';
+DECLARE f text; v_escapou text := '';
 BEGIN
   FOREACH f IN ARRAY ARRAY[
     'nao tenho interesse',
     'sem interesse',
-    'nao tenho interesse, obrigado'
+    'nao tenho interesse, obrigado',
+    'Não, obrigado'
   ] LOOP
-    IF privado.pedido_de_saida(f) IS NOT NULL THEN
-      v_suprimiu := v_suprimiu || f || ' | ';
-    END IF;
-    -- E o cenário consegue falhar: se a recusa também deixasse de ser
-    -- reconhecida, a frase não seria classificada por ninguém.
-    IF privado.eh_recusa(f) IS NULL THEN
-      v_suprimiu := v_suprimiu || '(nem recusa: ' || f || ') | ';
+    IF oo.saida(f) IS NULL THEN
+      v_escapou := v_escapou || f || ' | ';
     END IF;
   END LOOP;
-  PERFORM oo.confere('recusar a oferta não suprime — é recusa, não opt-out (D58)',
-    v_suprimiu = '', v_suprimiu);
+  PERFORM oo.confere('recusa da oferta suprime no padrão do produto (D63)',
+    v_escapou = '', v_escapou);
 END;
 $$;
 
@@ -108,8 +110,8 @@ BEGIN
     'quanto custa? quero saber mais',
     ''
   ] LOOP
-    IF privado.pedido_de_saida(f) IS NOT NULL THEN
-      v_pego := v_pego || f || ' -> ' || privado.pedido_de_saida(f) || ' | ';
+    IF oo.saida(f) IS NOT NULL THEN
+      v_pego := v_pego || f || ' -> ' || oo.saida(f) || ' | ';
     END IF;
   END LOOP;
   PERFORM oo.confere('nenhum lead vivo é suprimido por engano', v_pego = '', v_pego);
@@ -172,8 +174,9 @@ BEGIN
   -- de", e as duas leituras estão certas.
   PERFORM oo.confere('e o motivo guarda o termo que casou, para auditoria',
     v_motivo LIKE '%termo: %'
-    AND EXISTS (SELECT 1 FROM opt_out_termos o
-                 WHERE o.termo = rtrim(split_part(v_motivo, 'termo: ', 2), ')')),
+    AND EXISTS (SELECT 1 FROM blacklist_termos o
+                 WHERE o.tenant_id = privado.tenant_padrao()
+                   AND o.termo = rtrim(split_part(v_motivo, 'termo: ', 2), ')')),
     coalesce(v_motivo,'(nulo)'));
 
   PERFORM oo.confere('a cadência dele encerrou',
@@ -247,19 +250,21 @@ END;
 $$;
 
 -- ===========================================================================
--- 4. A lista é editável sem tocar em lógica
+-- 4. A lista é editável sem tocar em lógica — e é do cliente
 -- ===========================================================================
 
 DO $$
 DECLARE v_antes text; v_depois text;
 BEGIN
-  v_antes := coalesce(privado.pedido_de_saida('chega disso tudo'), '(nenhum)');
-  INSERT INTO opt_out_termos (termo, exige_uma_de, nota)
-  VALUES ('chega disso', NULL, 'termo de teste');
-  v_depois := coalesce(privado.pedido_de_saida('chega disso tudo'), '(nenhum)');
-  PERFORM oo.confere('acrescentar um termo à tabela muda o resultado, sem tocar em código',
+  v_antes := coalesce(oo.saida('chega disso tudo'), '(nenhum)');
+  -- Escrito como a pessoa digita: maiúscula, acento, pontuação. Quem normaliza
+  -- é o banco, com a mesma função que normaliza a resposta (D32).
+  INSERT INTO blacklist_termos (termo, acao, nota)
+  VALUES ('  Chega DISSO! ', 'suprimir', 'termo de teste');
+  v_depois := coalesce(oo.saida('chega disso tudo'), '(nenhum)');
+  PERFORM oo.confere('acrescentar um termo à blacklist muda o resultado, sem tocar em código',
     v_antes = '(nenhum)' AND v_depois = 'chega disso', v_antes || ' -> ' || v_depois);
-  DELETE FROM opt_out_termos WHERE termo = 'chega disso';
+  DELETE FROM blacklist_termos WHERE termo = 'chega disso';
 END;
 $$;
 

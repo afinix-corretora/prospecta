@@ -347,9 +347,9 @@ COMMIT;
 CREATE VIEW tn.sem_dono AS SELECT unnest(ARRAY[
   'tenants', 'channel_provider_catalog', 'ai_provider_catalog',
   -- `opt_out_termos` entra pelo mesmo motivo dos catálogos: é IDIOMA, não dado
-  -- de cliente. "pare" quer dizer a mesma coisa para todo mundo. Se um dia um
-  -- cliente precisar de vocabulário próprio, isso é decisão — e a decisão
-  -- passa por tirar esta linha daqui, que é exatamente o ponto da lista (D48).
+  -- de cliente. Desde o D63 o vocabulário de cada cliente mora em
+  -- `blacklist_termos`, que tem tenant e fica FORA desta lista; esta aqui
+  -- virou só o padrão que todo cliente novo recebe — catálogo de verdade.
   'opt_out_termos',
   -- `recusa_termos` pelo mesmo motivo, e é o par do de cima: um diz quem pede
   -- para sair, o outro quem recusa a oferta. Foi por estarem lado a lado que

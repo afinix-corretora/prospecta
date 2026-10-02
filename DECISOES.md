@@ -2225,3 +2225,55 @@ DEFINER chamáveis pela tela, que checam `pode_administrar`/`pode_operar` em có
 
 **Não resolvido aqui.** `salvar_credencial_remetente` cria um segredo novo no Vault a cada
 salvamento e deixa o anterior órfão. Não vaza nada — ninguém aponta para ele —, mas acumula.
+
+### D63 — A blacklist é do cliente
+
+**O pedido.** Configurações ganha **Blacklist**, onde o cliente define termos, ações e recusas — "todo
+tipo de blacklist". E a decisão de operação que reverte o D58: quem responde "não tenho interesse"
+também vai para a blacklist.
+
+**O que era.** O vocabulário era do PRODUTO: `opt_out_termos` (D48) e `recusa_termos` (D58), sem
+tenant, editáveis só por migration, lidos por dois classificadores com assimetrias opostas. O
+comentário de `tests/tenants.sql` já dizia que vocabulário por cliente seria decisão. Chegou.
+
+**O que é.**
+
+- `blacklist_termos`, por tenant, e cada termo tem uma **ação**, porque "casou" não diz o que fazer:
+  `suprimir` (a pessoa, em todo canal; CRM ouve `opt_out`), `identidade_invalida` (só o endereço —
+  "número errado" —, pelo caminho do D49; CRM ouve `identidade_invalida`) e `recusa` (encerra o ciclo
+  sem suprimir; é o D58, que continua disponível para o cliente que o preferir).
+- `blacklist_dominios`, por tenant: e-mail de um domínio e dos subdomínios nunca recebe. Mora em
+  `esta_suprimido`, a pergunta que roteador, gatilho de `messages` e despacho já fazem — o teste
+  bloqueia o domínio DEPOIS de criada a mensagem e confere que ela vira `cancelado` (D39).
+- Todo cliente nasce com o padrão (gatilho em `tenants`; os existentes semeados na migration): a
+  união das duas listas do produto, com a recusa como `suprimir`, mais três termos de endereço
+  errado. `nao quero`, que estava nas duas com contextos diferentes, vira um termo com a união.
+- Um classificador só, `regra_da_resposta`, com a ordem `suprimir` > `identidade_invalida` > `recusa`
+  e, dentro da ação, o termo mais longo. A assimetria que o D58 guardava em duas funções agora mora
+  nessa ordem: uma recusa nunca engole um "pare".
+- O termo é normalizado no banco, pela mesma função que normaliza a resposta (D32); a tela manda o
+  que a pessoa digitou. "Testar uma resposta" pergunta ao classificador de verdade
+  (`testar_blacklist`), em vez de reescrever a regra em TypeScript (D55).
+
+**O que não muda.** Supressão continua imutável. Apagar ou desligar um termo não devolve ninguém —
+a tela diz isso antes da lista. E a tela avisa (sem travar) quando alguém cria um termo de uma
+palavra só, sem contexto, suprimindo: é o erro que o D48 documentou com "sair".
+
+**Testes que codificavam o mundo de antes.** `tests/funil.sql` usava "não tenho interesse" como a
+resposta que para em `respondeu`; no padrão novo ela suprime. O conserto foi o cenário — o cliente do
+teste escolhe a ação `recusa` para os dois termos —, não a asserção (a regra do D58). O mesmo em
+`tests/qualificacao.sql`, que agora exercita a ação `recusa` trocando-a pela tela.
+`tests/blacklist.sql` tem 59 asserções; três sabotagens (sem a cláusula de domínio, sem a
+semeadura, sem contexto e sem ordem no classificador) acendem 6, 11 e 2.
+
+**O DROP separado.** No projeto, o MCP do Supabase espera a confirmação de uma pessoa para qualquer
+DROP — até `DROP FUNCTION IF EXISTS` de uma função que não existe —, e o chamado inteiro estoura o
+tempo sem aplicar nada. Por isso apagar `pedido_de_saida` e `eh_recusa`, que perderam o último leitor,
+foi para uma migration própria (`20261002110100_blacklist_aposenta_classificadores`). Sem chamador,
+elas não mudam comportamento nenhum enquanto esperam.
+
+**Estado.** A primeira migration está aplicada no projeto (61º registro): 32 termos semeados no
+tenant que existe, grade conferida (UPDATE só em `termo, exige_uma_de, acao, nota, ativo`; nada para
+anon), e "Não tenho interesse, obrigado" classificado como `suprimir`. O `get_advisors` só
+acrescentou `testar_blacklist` à família WARN de DEFINER chamáveis pela tela. **Pendente:** a segunda
+migration, que precisa da confirmação de alguém na hora de aplicar.

@@ -196,8 +196,14 @@ export function Funil() {
           não tenta adivinhar se a resposta foi entusiasmada — ele pergunta
           apenas <b>&ldquo;isto é uma recusa?&rdquo;</b>, e a dúvida conta como não.
           Descartar um card que não servia custa dois segundos; perder um lead bom
-          é silencioso. Quem recusa fica em <b>Respondeu</b> e <b>não</b> é
-          suprimido — recusar esta oferta não é pedir para nunca mais ser contatado.
+          é silencioso.
+        </p>
+        <p style={{ color: 'var(--ink-2)', fontSize: 13 }}>
+          O que conta como recusa — e o que conta como pedido de saída — é a{' '}
+          <b>blacklist</b> deste cliente, em Configurações. No padrão, recusar a
+          oferta (&ldquo;não tenho interesse&rdquo;) põe a pessoa na blacklist, e ela vai
+          para <b>Pediu para sair</b>. O termo com a ação <b>Recusa</b> deixa o card
+          em <b>Respondeu</b>, sem suprimir.
         </p>
         <p style={{ color: 'var(--ink-2)', fontSize: 13, marginBottom: 0 }}>
           Uma campanha nova traz de volta para prospecção quem estava em <b>Sem

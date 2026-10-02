@@ -125,6 +125,7 @@ rodar funil      "$RAIZ/tests/funil.sql"
 rodar qualifica  "$RAIZ/tests/qualificacao.sql"
 rodar plataformas "$RAIZ/tests/plataformas.sql"
 rodar email_campanha "$RAIZ/tests/email_por_campanha.sql"
+rodar blacklist      "$RAIZ/tests/blacklist.sql"
 
 # ---------------------------------------------------------------------------
 # Adapters de canal — TypeScript, sem rede (fetch injetado).

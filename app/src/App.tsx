@@ -6,6 +6,7 @@ import { Aviso, Campo } from './componentes/base';
 import { DefinirSenha, Entrar } from './telas/Entrar';
 import { Canal } from './telas/Canal';
 import { ConfigEmail } from './telas/ConfigEmail';
+import { ConfigBlacklist } from './telas/ConfigBlacklist';
 import { Importar } from './telas/Importar';
 import { Contatos } from './telas/Contatos';
 import { Campanha } from './telas/Campanha';
@@ -120,6 +121,7 @@ function Casca() {
           <Route path="/canais/:canal/:familia" element={<Canal />} />
           <Route path="/config" element={<Config />} />
           <Route path="/config/email" element={<ConfigEmail />} />
+          <Route path="/config/blacklist" element={<ConfigBlacklist />} />
           <Route path="/config/ia" element={<ConfigIA />} />
           <Route path="/config/agentes" element={<ConfigAgentes />} />
           <Route path="/config/modelos" element={<ConfigModelos />} />

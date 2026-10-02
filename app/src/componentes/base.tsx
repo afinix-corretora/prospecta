@@ -10,6 +10,7 @@ export const IC: Record<string, ReactNode> = {
   agente: <><circle cx="12" cy="8" r="3.5" /><path d="M4.5 20a7.5 7.5 0 0 1 15 0" /></>,
   modelo: <><rect x="3.5" y="4.5" width="17" height="15" rx="2.5" /><path d="M8 9.5h8M8 14h5" /></>,
   plataforma: <><rect x="3.5" y="4.5" width="17" height="12" rx="2.5" /><path d="M8 20h8M12 16.5V20" /></>,
+  bloqueio: <><circle cx="12" cy="12" r="8.5" /><path d="M6 6l12 12" /></>,
   servidor: <><rect x="3.5" y="4" width="17" height="6.5" rx="2" /><rect x="3.5" y="13.5" width="17" height="6.5" rx="2" /><path d="M7 7.25h.01M7 16.75h.01" /></>,
   campanha: <><path d="M4 10v4a1 1 0 0 0 1 1h3l6 4V5L8 9H5a1 1 0 0 0-1 1z" /><path d="M17.5 9a4 4 0 0 1 0 6" /></>,
 };

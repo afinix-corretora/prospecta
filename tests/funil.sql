@@ -38,6 +38,13 @@ GRANT EXECUTE ON FUNCTION fu.estagio(uuid) TO authenticated;
 \set oper   '\'f0000000-0000-0000-0000-0000000000a2\''
 
 INSERT INTO tenants (id, nome, slug) VALUES (:tenant, 'Corretora Funil', 'corretora-funil');
+
+-- D63: no padrão do produto a recusa suprime, e a pessoa iria para `opt_out`.
+-- Este arquivo testa o movimento do FUNIL e precisa de uma resposta que pare
+-- em `respondeu` — então este cliente escolheu, na blacklist dele, a ação
+-- `recusa` para os dois termos que os cenários usam. É o que a tela faz.
+UPDATE blacklist_termos SET acao = 'recusa'
+ WHERE tenant_id = :tenant AND termo IN ('nao tenho interesse', 'sem interesse');
 INSERT INTO tenant_users (tenant_id, user_id, papel) VALUES (:tenant, :oper, 'operador');
 
 INSERT INTO campaigns (id, tenant_id, nome, tipo, base_legal, canais_habilitados)

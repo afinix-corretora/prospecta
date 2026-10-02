@@ -12,6 +12,12 @@
 --                               Oportunidade. Barato e visível.
 --
 -- Por isso metade deste arquivo testa coisas que NÃO são recusa.
+--
+-- Desde o D63 a lista é do CLIENTE (`blacklist_termos`) e cada termo tem uma
+-- ação. A pergunta deste arquivo continua a mesma — "a resposta casou alguma
+-- regra?" —, e o que muda é que o padrão do produto SUPRIME a recusa: decisão
+-- de operação que reverteu o D58. A ação `recusa`, que era o comportamento do
+-- D58, continua existindo, e a seção 3 a exercita trocando a ação de um termo.
 
 \set ON_ERROR_STOP on
 SET client_min_messages = warning;
@@ -29,7 +35,7 @@ CREATE FUNCTION ql.recusa(p_texto text, p_esperado boolean)
 RETURNS void LANGUAGE plpgsql AS $$
 DECLARE v text;
 BEGIN
-  v := privado.eh_recusa(p_texto);
+  SELECT termo INTO v FROM privado.regra_da_resposta(privado.tenant_padrao(), p_texto);
   PERFORM ql.confere(
     CASE WHEN p_esperado THEN 'RECUSA: ' ELSE 'não é recusa: ' END || p_texto,
     (v IS NOT NULL) = p_esperado,
@@ -79,7 +85,8 @@ SELECT ql.recusa('ok', false);
 
 -- Texto vazio ou ausente não é recusa — é falta de informação.
 SELECT ql.recusa('', false);
-SELECT ql.confere('texto nulo não é recusa', privado.eh_recusa(NULL) IS NULL);
+SELECT ql.confere('texto nulo não é recusa',
+  NOT EXISTS (SELECT 1 FROM privado.regra_da_resposta(privado.tenant_padrao(), NULL)));
 
 -- Palavra inteira, não fragmento: a mesma trava do D48.
 SELECT ql.recusa('o plano nao preciscava ser tao caro', false);
@@ -147,34 +154,44 @@ SELECT ql.confere('quem se interessa vira oportunidade',
   ql.estagio('a1000000-0000-0000-0000-0000000000d1') = 'oportunidade',
   ql.estagio('a1000000-0000-0000-0000-0000000000d1'));
 
--- Bruno recusa: fica em respondeu, sem estágio de recusa inventado.
+-- Bruno recusa. Este cliente decidiu que "nao tenho interesse" é RECUSA e não
+-- blacklist — a ação do D58, escolhida na tela. O padrão do produto é
+-- suprimir (D63); trocar a ação de um termo é o que a tela faz.
+UPDATE blacklist_termos SET acao = 'recusa'
+ WHERE tenant_id = :tenant AND termo = 'nao tenho interesse';
+SELECT ql.confere('o cliente nasceu com a blacklist padrão',
+  (SELECT count(*) > 20 FROM blacklist_termos WHERE tenant_id = :tenant),
+  (SELECT count(*)::text FROM blacklist_termos WHERE tenant_id = :tenant));
+
+-- Fica em respondeu, sem estágio de recusa inventado.
 INSERT INTO message_events (tenant_id, message_id, tipo, payload)
 VALUES (:tenant, 'a1000000-0000-0000-0000-00000000aa02', 'respondido',
         '{"texto":"nao tenho interesse, obrigado"}'::jsonb);
 SELECT ql.confere('quem recusa fica em respondeu, não vira oportunidade',
   ql.estagio('a1000000-0000-0000-0000-0000000000d2') = 'respondeu',
   ql.estagio('a1000000-0000-0000-0000-0000000000d2'));
--- O achado do D58: antes desta correção, "nao tenho interesse" estava na
--- lista de OPT-OUT valendo sozinho, e esta pessoa era suprimida para sempre.
--- Recusar a oferta não é pedir para sair da lista.
-SELECT ql.confere('e quem recusa NÃO é suprimido — pode valer uma campanha futura',
+-- Com a ação `recusa`, quem recusa NÃO é suprimido — pode valer uma campanha
+-- futura. É o comportamento do D58, agora escolha do cliente.
+SELECT ql.confere('com a ação recusa, quem recusa NÃO é suprimido',
   NOT EXISTS (SELECT 1 FROM suppression
                WHERE contact_id = 'a1000000-0000-0000-0000-0000000000d2'));
 
-SELECT ql.confere('"nao tenho interesse" deixou de ser opt-out',
-  privado.pedido_de_saida('nao tenho interesse, obrigado') IS NULL,
-  coalesce(privado.pedido_de_saida('nao tenho interesse, obrigado'), '(nenhum)'));
-SELECT ql.confere('"sem interesse" deixou de ser opt-out',
-  privado.pedido_de_saida('sem interesse') IS NULL,
-  coalesce(privado.pedido_de_saida('sem interesse'), '(nenhum)'));
+-- E o padrão do produto (D63): sem o cliente mexer, recusa é blacklist.
+SELECT ql.confere('no padrão, "nao tenho interesse" suprime (D63)',
+  (SELECT acao = 'suprimir' FROM privado.regra_da_resposta(privado.tenant_padrao(),
+                                                           'nao tenho interesse, obrigado')),
+  (SELECT acao::text FROM privado.regra_da_resposta(privado.tenant_padrao(),
+                                                     'nao tenho interesse, obrigado')));
+SELECT ql.confere('no padrão, "sem interesse" suprime (D63)',
+  (SELECT acao = 'suprimir' FROM privado.regra_da_resposta(privado.tenant_padrao(), 'sem interesse')));
 
 -- E o que É pedido de saída continua sendo, valendo sozinho.
 SELECT ql.confere('"pare" continua suprimindo sozinho',
-  privado.pedido_de_saida('pare') IS NOT NULL);
+  (SELECT acao = 'suprimir' FROM privado.regra_da_resposta(privado.tenant_padrao(), 'pare')));
 SELECT ql.confere('"descadastrar" continua suprimindo sozinho',
-  privado.pedido_de_saida('quero descadastrar') IS NOT NULL);
+  (SELECT acao = 'suprimir' FROM privado.regra_da_resposta(privado.tenant_padrao(), 'quero descadastrar')));
 SELECT ql.confere('"nao envie mais" continua suprimindo sozinho',
-  privado.pedido_de_saida('nao envie mais') IS NOT NULL);
+  (SELECT acao = 'suprimir' FROM privado.regra_da_resposta(privado.tenant_padrao(), 'nao envie mais')));
 
 -- Carla pede para sair: opt_out ganha de tudo.
 INSERT INTO message_events (tenant_id, message_id, tipo, payload)

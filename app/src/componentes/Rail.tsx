@@ -155,10 +155,13 @@ export function Rail({ provedores }: { provedores: ProvedorCanal[] }) {
         </button>
         <div className="sub" data-aberto={emConfig}>
           <div>
+            <button aria-current={atual('/config/email')} onClick={() => nav('/config/email')}>E-mail</button>
+            <button aria-current={atual('/config/blacklist')} onClick={() => nav('/config/blacklist')}>Blacklist</button>
             <button aria-current={atual('/config/ia')} onClick={() => nav('/config/ia')}>Provedores de IA</button>
             <button aria-current={atual('/config/agentes')} onClick={() => nav('/config/agentes')}>Agentes</button>
             <button aria-current={atual('/config/modelos')} onClick={() => nav('/config/modelos')}>Modelos de conversa</button>
             <button aria-current={atual('/config/plataformas')} onClick={() => nav('/config/plataformas')}>Plataformas de contato</button>
+            <button aria-current={atual('/config/vinculadas')} onClick={() => nav('/config/vinculadas')}>Plataformas vinculadas</button>
           </div>
         </div>
       </nav>

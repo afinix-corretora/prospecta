@@ -185,9 +185,10 @@ export function LinhaConta({ conta, provedores, administra, aoMudar }: {
         <p>
           {p?.nome ?? conta.provedor} · pool {conta.tipo_permitido} ·{' '}
           {conta.enviados_na_janela}/{conta.quota_diaria} hoje ·{' '}
-          <b style={{ color: ativo ? 'var(--ok)' : 'var(--warn)' }}>
+          {/* `strong` e não `b`: `.item .txt b` é o título da linha. */}
+          <strong style={{ color: ativo ? 'var(--ok)' : 'var(--warn)', fontWeight: 600 }}>
             {ESTADO_CONTA[conta.estado] ?? conta.estado}
-          </b>
+          </strong>
           {conta.provider_server_id ? ' · criado pela plataforma' : ''}
         </p>
         <p style={{ marginTop: 6 }}>
@@ -259,9 +260,9 @@ function Verificacao({ conta }: { conta: Remetente }) {
   });
   return (
     <span>
-      <b style={{ color: conta.verificacao_ok ? 'var(--ok)' : 'var(--crit)' }}>
+      <strong style={{ color: conta.verificacao_ok ? 'var(--ok)' : 'var(--crit)', fontWeight: 600 }}>
         {conta.verificacao_ok ? 'ok' : 'falhou'}
-      </b>
+      </strong>
       {conta.verificacao_detalhe ? ` — ${conta.verificacao_detalhe}` : ''}
       <span style={{ color: 'var(--ink-3)' }}> · {quando}</span>
     </span>
