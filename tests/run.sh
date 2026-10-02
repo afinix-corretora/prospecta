@@ -203,6 +203,21 @@ BANCO_FONTE="$(novo_banco fonte)"
 node --experimental-strip-types "$RAIZ/tests/planilha_para_sql.ts" \
   | psql -v ON_ERROR_STOP=1 -d "$BANCO_FONTE" -f -
 
+# O backfill do legado, pelo mesmo caminho da planilha: o dado chega em
+# `legado.*`, a normalização é a do TypeScript de verdade (D32), e só então o
+# SQL grava. O fixture roda antes da normalização porque a primeira asserção
+# é justamente que gravar sem normalizar é recusado (D65).
+echo ""
+echo "→ backfill do legado: pessoas e supressão (normalizar.ts → backfill.sql)"
+BANCO_BF="$(novo_banco backfill)"
+for f in backfill/mapa_status.sql backfill/legado.sql backfill/backfill.sql tests/backfill_fixture.sql; do
+  psql -q -v ON_ERROR_STOP=1 -d "$BANCO_BF" -f "$RAIZ/$f"
+done
+psql -At -d "$BANCO_BF" -c "SELECT tipo || chr(9) || bruto FROM legado.brutos" \
+  | node --experimental-strip-types "$RAIZ/backfill/normalizar.ts" \
+  | psql -q -v ON_ERROR_STOP=1 -d "$BANCO_BF"
+psql -v ON_ERROR_STOP=1 -d "$BANCO_BF" -f "$RAIZ/tests/backfill_legado.sql"
+
 # A outra fronteira, e da mesma natureza: duas listas escritas à mão, em
 # linguagens diferentes, que precisam concordar. `tem_adapter` no catálogo é o
 # que o pool lê; `adapters/registro.ts` é o que o despachante consulta. Nada as

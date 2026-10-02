@@ -571,8 +571,13 @@ e elas têm teste automatizado obrigatório.**
 > `privado.estreitar_escrita_do_cliente()` pelo NOME depois de imitar o `GRANT ALL` do Supabase,
 > senão o suite conferiria uma superfície mais larga que a real.
 >
-> Falta da Fase 2: o backfill em si, que depende de acesso aos dados do projeto legado
-> `gtivnngoeccqbvfjiyne` — e com ele a comparação contra o Disparador.
+> O **backfill** tem a primeira parte desde o **D65**: pessoas e supressão, com prévia, contra o
+> schema REAL do legado `gtivnngoeccqbvfjiyne` — reconstruído das 97 migrations do repositório
+> `sdr-resgate-evolution`, porque o banco dele continua sem acesso. O dado chega por exportação
+> (`backfill/RODAR.md`), a normalização é a do TypeScript (D32), e a supressão não depende de a
+> ingestão dar certo. Falta da Fase 2: levar cadências, enrollments, mensagens e eventos — o que
+> depende de decidir o que fazer com quem o legado ainda cadenciava —, e com isso a comparação
+> contra o Disparador.
 >
 > O schema é **multi-tenant desde a primeira migration** (D18): `tenant_id` em toda tabela de
 > domínio, chaves estrangeiras compostas `(tenant_id, id)` e RLS por papel. `tests/tenants.sql`

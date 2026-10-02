@@ -2352,3 +2352,54 @@ Criar card no CRM para quem não tem é possível, mas não é idempotente sem u
 quando houver onde guardá-la. Mudança feita no card depois da primeira leitura não volta ao contato:
 a fonte pula cards já vinculados. E o ProfitCare espera a confirmação de que é a linha "Softcare" e
 a documentação da API.
+
+### D65 — O backfill começa pelas pessoas e pela supressão
+
+**O bloqueio, e como contorná-lo sem adivinhar.** O projeto legado `gtivnngoeccqbvfjiyne` continua
+inacessível: a MCP responde "sem permissão". Mas o schema dele não estava inacessível. O repositório
+`sdr-resgate-evolution` é aquele projeto (o `config.toml` diz o id), e as 97 migrations dele,
+aplicadas num banco local, reconstroem as 52 tabelas que o inventário da Fase 0 contou. As onze que
+o backfill lê viraram `backfill/legado.sql` **geradas do banco reconstruído**, com colunas e tipos
+reais. Backfill escrito contra coluna adivinhada é o que quebra no dia, com o dado na mão.
+
+**O recorte.** Esta etapa grava contatos, identidades e supressão, nessa ordem e numa transação.
+Ela não leva cadências: inscrever exige uma cadência por campanha antiga (D47), e essa escolha é de
+alguém. A prévia conta quantos leads cada campanha ainda tinha em curso, para a decisão ser tomada
+com o número na mão.
+
+**As escolhas.**
+
+- **Uma pessoa por telefone normalizado.** A normalização é a do TypeScript (`backfill/normalizar.ts`
+  chama `adapters/telefone.ts` e `adapters/email.ts`), e o SQL só lê o resultado (D32).
+- **O telefone do legado é de WhatsApp**, porque o legado conversava por ele. É o papel `whatsapp`
+  da leitura, a coluna que declara o canal. Vira SMS também só quando é celular (D33).
+- **O nono dígito.** WhatsApp antigo guardava número sem o nono dígito, e pela regra de
+  `telefone.ts` ele é fixo. Esses números entram como WhatsApp, sem SMS, e a prévia conta quantos
+  são e quantos aparecem nas duas formas. Mudar a regra é mudar a normalização de todo o produto,
+  e isso é decisão, não detalhe do backfill.
+- **Suprimir por três caminhos, todos para o mesmo lado** (D13.4): a lista de bloqueio, o contato
+  bloqueado pelo operador (`is_blocked`, que o mapa não cobria) e o lead que o mapa manda suprimir.
+- **A supressão não depende de a ingestão dar certo.** Quem o legado bloqueou e não pôde virar
+  contato (as identidades já eram de contatos diferentes no cliente) é suprimido pelo endereço, nos
+  dois canais do telefone.
+- **Nada é fundido.** E-mail que aparece em dois telefones não é ligado a nenhum. Colisão com
+  contatos do cliente vira linha em `backfill.recusas`, com o motivo.
+- **Os opt-outs do legado não vão para a fila do CRM.** O gatilho do D45 os enfileiraria. São
+  decisões que o legado já tinha tomado, e nenhum destes contatos tem card ligado. O relatório
+  conta os que não foram.
+
+**A prévia mentia, e o teste pegou.** O texto dizia "nome só preenche". `ingerir_contato` troca o
+nome quando o novo vem preenchido; só o vazio não apaga. Corrigido o texto, não a regra: a regra é a
+de toda ingestão, e mudar só no backfill seria a segunda regra.
+
+**Testes.** `tests/backfill_fixture.sql` monta o legado em miniatura e prova, antes de normalizar,
+que gravar é recusado. A suíte passa então o fixture pelo `normalizar.ts` de verdade, e
+`tests/backfill_legado.sql` confere o resto. São 39 asserções. Duas sabotagens: sem a supressão por
+endereço dos recusados caem 2, e sem o caminho do contato bloqueado caem 3.
+
+**Para rodar** com o dado real: `backfill/RODAR.md`. Quem tem acesso ao legado exporta, a prévia é
+lida, e só então se grava.
+
+**Fica para depois:** campanhas, cadências, enrollments, mensagens e eventos do legado, com a linha do
+tempo preservada (MAPA-STATUS). Isso depende de decidir o que fazer com quem ainda estava em
+cadência.
