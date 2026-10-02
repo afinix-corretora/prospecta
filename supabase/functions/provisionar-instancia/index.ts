@@ -12,8 +12,16 @@
 //
 // O QR não é guardado: vai na resposta e morre ali. Guardar QR é guardar
 // credencial de sessão de WhatsApp.
+//
+// Quem pede precisa ALCANÇAR o servidor. Até o D62 esta function lia o
+// servidor só com a chave do serviço, que passa por cima do RLS: qualquer
+// usuário logado, de qualquer cliente, que soubesse o id de um servidor,
+// criava instância com o token de administração de outro cliente. Agora o
+// servidor é lido primeiro com o JWT do pedido, e quem decide é o RLS de
+// `provider_servers` (quem administra o cliente).
 
 import { clienteAdmin } from '../_shared/banco-supabase.ts';
+import { clienteDoUsuario, preflight, responder } from '../_shared/http.ts';
 import { criarAdapter } from '../../../adapters/registro.ts';
 
 interface Pedido {
@@ -26,12 +34,17 @@ interface Pedido {
 }
 
 Deno.serve(async (req) => {
-  if (req.method !== 'POST') {
-    return Response.json({ ok: false, erro: 'use POST' }, { status: 405 });
-  }
+  if (req.method === 'OPTIONS') return preflight();
+  if (req.method !== 'POST') return responder({ ok: false, erro: 'use POST' }, 405);
 
   try {
     const p = (await req.json()) as Pedido;
+
+    const { data: visivel, error: erroVisao } = await clienteDoUsuario(req)
+      .from('provider_servers').select('id').eq('id', p.server_id).maybeSingle();
+    if (erroVisao) throw new Error(`servidor ${p.server_id}: ${erroVisao.message}`);
+    if (!visivel) return responder({ ok: false, erro: 'servidor não encontrado' }, 404);
+
     const sb = clienteAdmin();
 
     const { data: servidor, error } = await sb
@@ -66,8 +79,7 @@ Deno.serve(async (req) => {
       webhookUrl,
     });
     if (!criada.ok || !criada.credenciais) {
-      return Response.json({ ok: false, erro: criada.erro ?? 'falha ao criar instância' },
-        { status: 502 });
+      return responder({ ok: false, erro: criada.erro ?? 'falha ao criar instância' }, 502);
     }
 
     const { data: conta, error: erroConta } = await sb.rpc('criar_remetente_provisionado', {
@@ -84,7 +96,7 @@ Deno.serve(async (req) => {
 
     const linha = (conta ?? [])[0] as { sender_id: string; webhook_token: string };
 
-    return Response.json({
+    return responder({
       ok: true,
       sender_id: linha.sender_id,
       webhook_url: webhookUrl,
@@ -93,9 +105,6 @@ Deno.serve(async (req) => {
     });
   } catch (e) {
     console.error('[provisionar-instancia]', e);
-    return Response.json(
-      { ok: false, erro: e instanceof Error ? e.message : String(e) },
-      { status: 500 },
-    );
+    return responder({ ok: false, erro: e instanceof Error ? e.message : String(e) }, 500);
   }
 });

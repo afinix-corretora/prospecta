@@ -48,6 +48,11 @@ export interface Remetente {
   webhook_token: string;
   provider_server_id: string | null;
   config: Record<string, string>;
+  /** Última pergunta ao provedor feita pelo botão "Verificar conexão" (D62).
+   *  `null` em `verificacao_ok` é "nunca verificada", que não é "falhou". */
+  verificado_em: string | null;
+  verificacao_ok: boolean | null;
+  verificacao_detalhe: string | null;
 }
 
 export interface Servidor {
@@ -70,6 +75,9 @@ export interface Campanha {
   /** A versão de flow que esta campanha roda hoje. NULL = ainda não ligada,
    *  e nesse estado inscrever recusa alto em vez de encerrar vazio (D47). */
   flow_version_id: string | null;
+  /** A conta de e-mail que esta campanha usa (D62). NULL = rodízio entre as
+   *  contas de e-mail do pool, que é o comportamento de antes. */
+  remetente_email_id: string | null;
 }
 
 export interface Modelo {
@@ -179,17 +187,26 @@ export const lerConexoesCRM = () =>
   tabela<ConexaoCRM>('crm_connections',
     'id, nome, provedor, credencial_secret_id, config, ativo, atualizado_em', 'nome');
 
-export const lerRemetentes = () =>
-  tabela<Remetente>('sender_accounts',
-    'id, canal, identificador, apelido, provedor, tipo_permitido, quota_diaria, ' +
-    'enviados_na_janela, estado, health_score, webhook_token, provider_server_id, config');
+/** Conta removida (D62) fica no banco — as mensagens antigas apontam para
+ *  ela — mas sai de toda lista. O filtro é aqui, na leitura, e não em cada
+ *  tela: uma tela que esquecesse mostraria a conta "fora do pool à mão", e a
+ *  pessoa a devolveria ao pool sem saber que a tinha removido. */
+export async function lerRemetentes(): Promise<Remetente[]> {
+  const { data, error } = await sb.from('sender_accounts')
+    .select('id, canal, identificador, apelido, provedor, tipo_permitido, quota_diaria, ' +
+      'enviados_na_janela, estado, health_score, webhook_token, provider_server_id, config, ' +
+      'verificado_em, verificacao_ok, verificacao_detalhe')
+    .is('removido_em', null);
+  if (error) throw error;
+  return (data ?? []) as unknown as Remetente[];
+}
 
 export const lerServidores = () =>
   tabela<Servidor>('provider_servers', 'id, provedor, nome, base_url, admin_secret_id, ativo', 'nome');
 
 export const lerCampanhas = () =>
   tabela<Campanha>('campaigns',
-    'id, nome, tipo, objetivo, ativa, canais_habilitados, template_slug, flow_version_id');
+    'id, nome, tipo, objetivo, ativa, canais_habilitados, template_slug, flow_version_id, remetente_email_id');
 
 export const lerModelos = () =>
   tabela<Modelo>('campaign_templates', 'slug, nome, descricao, objetivo, tipo, canais, passos, ordem', 'ordem');
@@ -417,6 +434,71 @@ export async function alternarRemetente(id: string, ativo: boolean) {
     .from('sender_accounts')
     .update({ estado: ativo ? 'ativo' : 'desativado' })
     .eq('id', id);
+  if (error) throw error;
+}
+
+// ---------------------------------------------------------------------------
+// Configurações ▸ E-mail (D62)
+// ---------------------------------------------------------------------------
+
+export interface ContaDeEmail {
+  id: string;
+  apelido: string | null;
+  identificador: string;
+  provedor: string;
+  provedor_nome: string;
+  tipo_permitido: 'morna' | 'fria';
+  estado: string;
+  verificado_em: string | null;
+  verificacao_ok: boolean | null;
+  verificacao_detalhe: string | null;
+}
+
+/** As contas de e-mail que uma campanha pode escolher. Operador lê (é ele
+ *  quem monta campanha); o RLS de `sender_accounts` também deixaria, mas a
+ *  função já tira as removidas e traz o nome do provedor. */
+export async function lerContasDeEmail(tenant: string): Promise<ContaDeEmail[]> {
+  const { data, error } = await sb.rpc('contas_de_email', { p_tenant: tenant });
+  if (error) throw error;
+  return (data ?? []) as ContaDeEmail[];
+}
+
+export type Verificacao =
+  | { ok: true; saude: { ok: boolean; detalhe: string } }
+  | { ok: false; erro: string };
+
+/**
+ * "Verificar conexão": quem pergunta ao provedor é a edge function, porque a
+ * tela não tem o segredo e não deve ter. O resultado também fica gravado na
+ * conta, e é de lá que a lista o lê depois — o retorno daqui é só para a
+ * resposta aparecer sem recarregar.
+ */
+export async function verificarRemetente(id: string): Promise<Verificacao> {
+  const { data, error } = await sb.functions.invoke('verificar-remetente', {
+    body: { sender_id: id },
+  });
+  if (error) {
+    const corpo = await (error as { context?: Response }).context?.json?.().catch(() => null);
+    return { ok: false, erro: corpo?.erro ?? error.message };
+  }
+  return data as Verificacao;
+}
+
+/**
+ * Remover não apaga: arquiva. As mensagens antigas apontam para a conta, e
+ * apagar a linha levaria o histórico junto. A função recusa — dizendo quais —
+ * se alguma campanha escolheu esta conta: tirar o chão de uma campanha ligada
+ * não dá erro, dá campanha parada sem remetente.
+ */
+export async function removerRemetente(id: string) {
+  const { error } = await sb.rpc('remover_remetente', { p_sender_id: id });
+  if (error) throw error;
+}
+
+/** Qual conta de e-mail a campanha usa. `null` volta ao rodízio. Quem confere
+ *  canal, pool (D4) e conta removida é o gatilho no banco, não esta tela. */
+export async function definirEmailDaCampanha(campanha: string, conta: string | null) {
+  const { error } = await sb.from('campaigns').update({ remetente_email_id: conta }).eq('id', campanha);
   if (error) throw error;
 }
 

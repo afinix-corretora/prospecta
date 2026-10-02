@@ -4,7 +4,7 @@ import { useSessao } from '../sessao';
 import { mensagemDeErro, BASE_FUNCOES } from '../supabase';
 import {
   alternarRemetente, criarRemetente, lerProvedoresCanal, lerRemetentes, lerServidores,
-  provisionarInstancia, salvarCredencial, salvarServidor,
+  provisionarInstancia, removerRemetente, salvarCredencial, salvarServidor, verificarRemetente,
 } from '../dados';
 import type { ProvedorCanal, Remetente, Servidor } from '../dados';
 import {
@@ -137,7 +137,7 @@ const ESTADO_CONTA: Record<string, string> = {
   desativado: 'fora do pool à mão',
 };
 
-function LinhaConta({ conta, provedores, administra, aoMudar }: {
+export function LinhaConta({ conta, provedores, administra, aoMudar }: {
   conta: Remetente; provedores: ProvedorCanal[];
   administra: boolean; aoMudar(): Promise<void>;
 }) {
@@ -147,12 +147,33 @@ function LinhaConta({ conta, provedores, administra, aoMudar }: {
   const [mexendo, setMexendo] = useState(false);
   const [erro, setErro] = useState('');
 
+  const [verificando, setVerificando] = useState(false);
+  const [confirmando, setConfirmando] = useState(false);
+
   const ativo = conta.estado === 'ativo';
 
   async function alternar() {
     setMexendo(true); setErro('');
     try { await alternarRemetente(conta.id, !ativo); await aoMudar(); }
     catch (e) { setErro(mensagemDeErro(e)); }
+    finally { setMexendo(false); }
+  }
+
+  // A verificação NÃO tira a conta do pool, nem quando falha (D62): quem tira
+  // é o circuito, com envio de verdade. Duas fontes de "esta conta está fora"
+  // discordariam entre si. O resultado é gravado e a lista o lê de lá.
+  async function verificar() {
+    setVerificando(true); setErro('');
+    const r = await verificarRemetente(conta.id);
+    setVerificando(false);
+    if (!r.ok) { setErro(r.erro); return; }
+    await aoMudar();
+  }
+
+  async function remover() {
+    setMexendo(true); setErro('');
+    try { await removerRemetente(conta.id); await aoMudar(); }
+    catch (e) { setErro(mensagemDeErro(e)); setConfirmando(false); }
     finally { setMexendo(false); }
   }
 
@@ -188,10 +209,62 @@ function LinhaConta({ conta, provedores, administra, aoMudar }: {
             </span>
           </p>
         )}
+        <p style={{ marginTop: 6 }}>
+          <span style={{ color: 'var(--ink-3)' }}>conexão: </span>
+          <Verificacao conta={conta} />
+        </p>
+        {administra && (
+          <p style={{ marginTop: 6 }}>
+            <button className="btn" style={{ fontSize: 11, padding: '3px 8px' }}
+                    disabled={verificando} onClick={() => void verificar()}>
+              {verificando ? 'perguntando ao provedor…' : 'Verificar conexão'}
+            </button>
+            {!confirmando ? (
+              <button className="btn" style={{ fontSize: 11, padding: '3px 8px', marginLeft: 6 }}
+                      disabled={mexendo} onClick={() => setConfirmando(true)}>
+                Remover
+              </button>
+            ) : (
+              <>
+                <span className="ajuda" style={{ marginLeft: 8 }}>
+                  Sai da lista e do pool para sempre; o histórico fica.
+                </span>
+                <button className="btn" style={{ fontSize: 11, padding: '3px 8px', marginLeft: 6, color: 'var(--crit)' }}
+                        disabled={mexendo} onClick={() => void remover()}>
+                  {mexendo ? 'removendo…' : 'Confirmar remoção'}
+                </button>
+                <button className="btn" style={{ fontSize: 11, padding: '3px 8px', marginLeft: 6 }}
+                        disabled={mexendo} onClick={() => setConfirmando(false)}>
+                  Cancelar
+                </button>
+              </>
+            )}
+          </p>
+        )}
         {erro && <p style={{ color: 'var(--crit)', fontSize: 11 }}>{erro}</p>}
       </span>
       <span className={`delta ${pct >= 100 ? 'baixa' : pct > 60 ? 'neutra' : ''}`}>{pct}%</span>
     </div>
+  );
+}
+
+/** O que a última verificação disse. "Nunca verificada" é dito como tal:
+ *  ausência de resultado não é sucesso, e mostrar nada pareceria "ok". */
+function Verificacao({ conta }: { conta: Remetente }) {
+  if (conta.verificacao_ok === null || !conta.verificado_em) {
+    return <span style={{ color: 'var(--ink-3)' }}>nunca verificada</span>;
+  }
+  const quando = new Date(conta.verificado_em).toLocaleString('pt-BR', {
+    day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit',
+  });
+  return (
+    <span>
+      <b style={{ color: conta.verificacao_ok ? 'var(--ok)' : 'var(--crit)' }}>
+        {conta.verificacao_ok ? 'ok' : 'falhou'}
+      </b>
+      {conta.verificacao_detalhe ? ` — ${conta.verificacao_detalhe}` : ''}
+      <span style={{ color: 'var(--ink-3)' }}> · {quando}</span>
+    </span>
   );
 }
 
@@ -376,7 +449,7 @@ function CriarInstancia(props: {
 // Conectar conta que já existe no provedor
 // ---------------------------------------------------------------------------
 
-function ConectarConta(props: {
+export function ConectarConta(props: {
   provs: ProvedorCanal[]; canal: string; administra: boolean; tenant: string; aoMudar(): Promise<void>;
 }) {
   const [slug, setSlug] = useState('');

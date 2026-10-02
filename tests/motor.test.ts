@@ -10,6 +10,8 @@ import type { Banco, Culpa, MensagemParaEnviar } from '../motor/porta.ts';
 import type { ChannelAdapter, EventoNormalizado, ResultadoEnvio } from '../adapters/tipos.ts';
 import { despachar, umaPassada } from '../motor/despachante.ts';
 import { lerCorpoWebhook, receberWebhook } from '../motor/webhooks.ts';
+import { verificarRemetente } from '../motor/verificacao.ts';
+import type { PortaVerificacao } from '../motor/verificacao.ts';
 
 interface Registro {
   messageId: string; ok: boolean; providerMessageId?: string; erro?: string; culpa?: Culpa;
@@ -368,4 +370,119 @@ test('id do provedor continua tendo precedência sobre número', async () => {
   // O chip viaja junto do id: é ele que diz o tenant nas duas vias (D38).
   assert.deepEqual(eventos, [{ id: 'prov-1', tipo: 'entregue', senderId: 'chip-1' }]);
   assert.deepEqual(porNumero, []);
+});
+
+// ---------------------------------------------------------------------------
+// Verificar a conexão de uma conta (D62)
+// ---------------------------------------------------------------------------
+
+function portaFalsa(opcoes: {
+  conta?: { provedor: string; removida: boolean } | null;
+  segredo?: string | null;
+} = {}) {
+  const gravados: { senderId: string; ok: boolean; detalhe: string }[] = [];
+  const pedidosDeSegredo: string[] = [];
+  const porta: PortaVerificacao = {
+    async contaVisivel() {
+      return opcoes.conta === undefined ? { provedor: 'resend', removida: false } : opcoes.conta;
+    },
+    async segredo(id) {
+      pedidosDeSegredo.push(id);
+      return opcoes.segredo === undefined ? '{"api_key":"re_x"}' : opcoes.segredo;
+    },
+    async registrar(senderId, ok, detalhe) { gravados.push({ senderId, ok, detalhe }); },
+  };
+  return { porta, gravados, pedidosDeSegredo };
+}
+
+function saudeFalsa(saude: { ok: boolean; detalhe: string } | (() => never)) {
+  const recebidas: Record<string, string>[] = [];
+  const adapter = {
+    canal: 'email', provedor: 'falso',
+    async send() { return { ok: true }; },
+    normalizeWebhook() { return []; },
+    async checkHealth(c: Record<string, string>) {
+      recebidas.push(c);
+      return typeof saude === 'function' ? saude() : saude;
+    },
+  } as unknown as ChannelAdapter;
+  return { criar: () => adapter, recebidas };
+}
+
+test('verificação: pergunta ao provedor com a credencial do Vault e grava o resultado', async () => {
+  const { porta, gravados } = portaFalsa();
+  const { criar, recebidas } = saudeFalsa({ ok: true, detalhe: 'HTTP 200' });
+
+  const r = await verificarRemetente(porta, 's-1', { criar });
+
+  assert.deepEqual(r, { encontrada: true, saude: { ok: true, detalhe: 'HTTP 200' } });
+  assert.deepEqual(recebidas, [{ api_key: 're_x' }]);
+  assert.deepEqual(gravados, [{ senderId: 's-1', ok: true, detalhe: 'HTTP 200' }]);
+});
+
+test('verificação: conta que quem pediu não enxerga não lê segredo nem grava nada', async () => {
+  const { porta, gravados, pedidosDeSegredo } = portaFalsa({ conta: null });
+  const { criar, recebidas } = saudeFalsa({ ok: true, detalhe: '' });
+
+  const r = await verificarRemetente(porta, 's-de-outro-cliente', { criar });
+
+  assert.deepEqual(r, { encontrada: false });
+  // O ponto do teste: o segredo de uma conta que não é dele nem é LIDO.
+  assert.deepEqual(pedidosDeSegredo, []);
+  assert.deepEqual(recebidas, []);
+  assert.deepEqual(gravados, []);
+});
+
+test('verificação: falha do provedor é gravada como falha, com o motivo', async () => {
+  const { porta, gravados } = portaFalsa();
+  const { criar } = saudeFalsa({ ok: false, detalhe: 'HTTP 401' });
+
+  const r = await verificarRemetente(porta, 's-1', { criar });
+
+  assert.equal(r.encontrada && r.saude.ok, false);
+  assert.deepEqual(gravados, [{ senderId: 's-1', ok: false, detalhe: 'HTTP 401' }]);
+});
+
+test('verificação: sem credencial no Vault diz isso, sem chamar o provedor', async () => {
+  const { porta, gravados } = portaFalsa({ segredo: null });
+  const { criar, recebidas } = saudeFalsa({ ok: true, detalhe: '' });
+
+  await verificarRemetente(porta, 's-1', { criar });
+
+  assert.deepEqual(recebidas, []);
+  assert.deepEqual(gravados, [{ senderId: 's-1', ok: false, detalhe: 'sem credencial guardada no Vault' }]);
+});
+
+test('verificação: provedor sem adapter não vira exceção nem falso "ok"', async () => {
+  const { porta, gravados } = portaFalsa({ conta: { provedor: 'smtp', removida: false } });
+
+  await verificarRemetente(porta, 's-1', {
+    criar: () => { throw new Error('provedor sem adapter: smtp'); },
+  });
+
+  assert.equal(gravados.length, 1);
+  assert.equal(gravados[0]?.ok, false);
+  assert.match(gravados[0]?.detalhe ?? '', /não tem adapter/);
+});
+
+test('verificação: exceção do adapter é gravada, não sobe como 500 sem rastro', async () => {
+  const { porta, gravados } = portaFalsa();
+  const { criar } = saudeFalsa(() => { throw new Error('getaddrinfo ENOTFOUND'); });
+
+  const r = await verificarRemetente(porta, 's-1', { criar });
+
+  assert.equal(r.encontrada && r.saude.ok, false);
+  assert.deepEqual(gravados, [{ senderId: 's-1', ok: false, detalhe: 'getaddrinfo ENOTFOUND' }]);
+});
+
+test('verificação: conta removida não é perguntada nem marcada como pronta', async () => {
+  const { porta, gravados, pedidosDeSegredo } = portaFalsa({ conta: { provedor: 'resend', removida: true } });
+  const { criar, recebidas } = saudeFalsa({ ok: true, detalhe: 'HTTP 200' });
+
+  const r = await verificarRemetente(porta, 's-1', { criar });
+
+  assert.deepEqual(r, { encontrada: true, saude: { ok: false, detalhe: 'conta removida' } });
+  assert.deepEqual(pedidosDeSegredo, []);
+  assert.deepEqual(recebidas, []);
+  assert.deepEqual(gravados, []);
 });

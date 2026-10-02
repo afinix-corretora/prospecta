@@ -381,6 +381,17 @@ e elas têm teste automatizado obrigatório.**
 - **Nunca** ler corpo de webhook só como JSON. Formulário virava `{}` sem erro, e o bounce respondia
   200 sem virar evento. Quem decide é o `Content-Type` (D61).
 
+- **Nunca** deixar a escolha da pessoa valer só para o que ainda vai nascer. A campanha que escolhe
+  o provedor de e-mail é respeitada pelo agendador E pelo despachante, e o despachante confere a
+  mensagem que já está na fila — escolher num e rebalancear no outro é o D40 (D62).
+- **Nunca** apagar conta que já mandou alguma coisa. `messages` cai em cascata e leva os eventos;
+  remover é arquivar (`removido_em`), e a função recusa enquanto alguma campanha a escolheu (D62).
+- **Nunca** deixar uma edge function chamada pela tela decidir o alcance com a chave do serviço. A
+  chave passa por cima do RLS: o alvo é lido primeiro com o JWT de quem pediu, e quem responde é a
+  política, que tem teste (D62).
+- **Nunca** dar INSERT de tabela inteira numa tabela que guarda ponteiro de Vault. Por coluna, sem
+  o ponteiro — o D59 vale para toda tabela de credencial, e `sender_accounts` é uma delas (D62).
+
 ---
 
 ## Convenções
@@ -432,6 +443,11 @@ e elas têm teste automatizado obrigatório.**
 > A **tela de contatos** (D35) lista, busca por nome ou número, e inscreve em campanha — também com
 > prévia (`prever_inscricao`), porque aqui o erro é silencioso: inscrever quem não tem identidade no
 > canal dos passos não dá erro, dá uma campanha "concluída" sem mensagem nenhuma.
+>
+> O **e-mail** mora em Configurações desde o **D62**: o cliente cadastra quantos provedores quiser,
+> verifica a conexão pela tela (a edge function `verificar-remetente` pergunta ao provedor com o
+> segredo do Vault) e remove arquivando. Cada campanha escolhe um em `remetente_email_id`, e o
+> roteador respeita a escolha nas duas pontas — agendador e despachante. `NULL` é o rodízio de antes.
 >
 > A **tela da campanha** (D36) fecha o laço: o que o motor fez, contado no banco
 > (`resumo_da_campanha`) e lido de `message_events` (`eventos_da_campanha`). É ela que torna o
@@ -522,7 +538,7 @@ e elas têm teste automatizado obrigatório.**
 > **derivados do schema** cobram `tenant_id`, RLS e FK composta de toda tabela nova — lista escrita
 > à mão envelhece sem avisar, e essa já tinha perdido a `provider_servers` (D31).
 >
-> O schema está **aplicado no projeto `hucuwjvihqgftdjpnych`** (52 migrations no repositório, 59
+> O schema está **aplicado no projeto `hucuwjvihqgftdjpnych`** (53 migrations no repositório, 60
 > registros no projeto — duas corretivas de texto, uma separação, duas do D46 (superfície e
 > tenant explícito), o bootstrap do tenant de teste, a corretiva de `search_path` do D54 e a do
 > corpo da função no D59, ver D32, D39, D46, D53, D54 e D59; as duas do D59 entraram em 26/09 (mais
@@ -541,10 +557,12 @@ e elas têm teste automatizado obrigatório.**
 > linha discordar. O do projeto não dá para conferir do suite (precisa de rede), então quem mexer
 > no schema confere pelo `list_migrations` junto com o `get_advisors` que já é obrigatório.
 >
-> As três edge functions estão na **versão 4** no projeto desde 02/10, com o código do D61 no ar
-> (SMTP Locaweb e webhook em formulário): cada arquivo do bundle foi lido de volta do projeto e
-> comparado byte a byte com o repositório (15, 15 e 14 arquivos), e a migration do D61 só entrou
-> depois das três, para o catálogo nunca prometer um adapter que o worker não tinha (D31). Quem responde pela pergunta daqui para frente são os dois
+> As edge functions são quatro desde o D62. `canal-webhook` e `motor-worker` estão na **versão 4**
+> desde 02/10, com o código do D61 no ar (SMTP Locaweb e webhook em formulário), e a migration do
+> D61 só entrou depois delas, para o catálogo nunca prometer um adapter que o worker não tinha
+> (D31). `provisionar-instancia` está na **versão 5** e `verificar-remetente` na **versão 1**, as
+> duas do D62 — as que a TELA chama, com CORS e com o alvo lido pelo JWT de quem pediu. Cada
+> arquivo de cada bundle foi lido de volta do projeto e comparado byte a byte (15, 15, 15 e 16). Quem responde pela pergunta daqui para frente são os dois
 > verificadores — `conferir-publicado.py`, no suite, pelo digest do que cada function empacota, e
 > `conferir-contra-projeto.py`, fora do suite porque precisa de rede, pela comparação com o que o
 > projeto tem. `LIGAR.md` é o procedimento de ligar o motor, com a conferência do D44 entre guardar

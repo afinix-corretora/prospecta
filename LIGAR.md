@@ -223,8 +223,10 @@ no projeto juntas em 02/10 — primeiro as functions, depois o catálogo (D61).
 
 ## 4. As edge functions
 
-**Estão publicadas e conferidas** — as três na versão 4, em 02/10, com cada arquivo do bundle lido
-de volta do projeto e comparado byte a byte com o repositório (D52, D61). Nada a fazer aqui hoje.
+**Estão publicadas e conferidas** — `canal-webhook` e `motor-worker` na versão 4 (D61),
+`provisionar-instancia` na 5 e `verificar-remetente` na 1 (D62), todas em 02/10, com cada arquivo do
+bundle lido de volta do projeto e comparado byte a byte com o repositório (D52). Nada a fazer aqui
+hoje.
 
 Mas esta seção já disse "já feito" antes e ficou falsa sem avisar, no dia em que `adapters/` mudou.
 Então a frase acima não vale como garantia: quem responde é

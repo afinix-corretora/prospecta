@@ -13,12 +13,13 @@ import { useParams } from 'react-router-dom';
 import { useSessao } from '../sessao';
 import { Aviso, Kpi, NOME_CANAL, Secao, corCanal } from '../componentes/base';
 import {
-  alternarCampanha, atribuirAgente, definirFlowDaCampanha, lerAgentes,
+  alternarCampanha, atribuirAgente, definirEmailDaCampanha, definirFlowDaCampanha, lerAgentes,
+  lerContasDeEmail,
   lerAgentesDaCampanha, lerCampanhas, lerEventosDaCampanha, lerMensagensDaCampanha,
   lerRespostas, lerResumoDaCampanha, lerVersoesDeFlow, pausarInscricoes,
 } from '../dados';
 import type {
-  Agente, AgenteDaCampanha, Campanha as Camp, EventoDaCampanha, MensagemComposta,
+  Agente, AgenteDaCampanha, Campanha as Camp, ContaDeEmail, EventoDaCampanha, MensagemComposta,
   RespostaRecebida, ResumoDaCampanha, VersaoDeFlow,
 } from '../dados';
 import { ListaDeRespostas } from './Respostas';
@@ -60,6 +61,7 @@ export function Campanha() {
   const [agentes, setAgentes] = useState<Agente[]>([]);
   const [daCampanha, setDaCampanha] = useState<AgenteDaCampanha[]>([]);
   const [respostas, setRespostas] = useState<RespostaRecebida[]>([]);
+  const [emails, setEmails] = useState<ContaDeEmail[]>([]);
   const [erro, setErro] = useState('');
   const [carregando, setCarregando] = useState(true);
 
@@ -67,7 +69,7 @@ export function Campanha() {
     if (!tenant || !id) return;
     setErro('');
     try {
-      const [cs, r, ev, ms, vs, ags, ca, rs] = await Promise.all([
+      const [cs, r, ev, ms, vs, ags, ca, rs, em] = await Promise.all([
         lerCampanhas(),
         lerResumoDaCampanha(tenant.tenant_id, id),
         lerEventosDaCampanha(tenant.tenant_id, id),
@@ -76,6 +78,7 @@ export function Campanha() {
         lerAgentes(),
         lerAgentesDaCampanha(id),
         lerRespostas(tenant.tenant_id, id),
+        lerContasDeEmail(tenant.tenant_id),
       ]);
       setCampanha(cs.find((c) => c.id === id) ?? null);
       setResumo(r);
@@ -85,6 +88,7 @@ export function Campanha() {
       setAgentes(ags);
       setDaCampanha(ca);
       setRespostas(rs);
+      setEmails(em);
     } catch (e) { setErro(mensagemDeErro(e)); }
     finally { setCarregando(false); }
   }
@@ -112,6 +116,11 @@ export function Campanha() {
 
       <Cadencia campanha={campanha} versoes={versoes} podeOperar={opera}
                 aoMudar={recarregar} aoFalhar={setErro} />
+
+      {campanha.canais_habilitados.includes('email') && (
+        <EmailDaCampanha campanha={campanha} contas={emails} podeOperar={opera}
+                         aoMudar={recarregar} aoFalhar={setErro} />
+      )}
 
       <Agentes campanha={campanha} agentes={agentes} atribuidos={daCampanha}
                podeOperar={opera} aoMudar={recarregar} aoFalhar={setErro} />
@@ -397,6 +406,82 @@ function Cadencia({ campanha, versoes, podeOperar, aoMudar, aoFalhar }: {
               {salvando ? 'ligando…' : atual ? 'Trocar a cadência' : 'Ligar a cadência'}
             </button>
           </>
+        )}
+      </div>
+    </>
+  );
+}
+
+/**
+ * Qual provedor de e-mail esta campanha usa (D62).
+ *
+ * O cliente cadastra vários em Configurações ▸ E-mail; a campanha escolhe um.
+ * Sem escolha, o rodízio entre as contas de e-mail do pool é o de antes. Com
+ * escolha, a conta escolhida fora do pool SEGURA o e-mail desta campanha em
+ * vez de mandar por outra: mandar pelo provedor que ninguém escolheu seria a
+ * escolha valendo só enquanto nada dá errado.
+ *
+ * A lista só oferece conta do mesmo pool da campanha, mas quem decide é o
+ * gatilho do banco (D4) — esta tela só evita oferecer o que ele recusaria.
+ */
+function EmailDaCampanha({ campanha, contas, podeOperar, aoMudar, aoFalhar }: {
+  campanha: Camp; contas: ContaDeEmail[]; podeOperar: boolean;
+  aoMudar(): Promise<void>; aoFalhar(m: string): void;
+}) {
+  const [salvando, setSalvando] = useState(false);
+  const atual = contas.find((c) => c.id === campanha.remetente_email_id) ?? null;
+  const doPool = contas.filter((c) => c.tipo_permitido === campanha.tipo);
+  const outroPool = contas.length - doPool.length;
+
+  async function escolher(valor: string) {
+    setSalvando(true); aoFalhar('');
+    try { await definirEmailDaCampanha(campanha.id, valor || null); await aoMudar(); }
+    catch (e) { aoFalhar(mensagemDeErro(e)); }
+    finally { setSalvando(false); }
+  }
+
+  const nome = (c: ContaDeEmail) => `${c.apelido || c.identificador} · ${c.provedor_nome}`;
+
+  return (
+    <>
+      <Secao titulo="Provedor de e-mail" nota={atual ? 'escolhido para esta campanha' : 'rodízio do pool'} />
+      <div className="painel">
+        {atual ? (
+          <p style={{ color: 'var(--ink-2)', fontSize: 13, marginTop: 0 }}>
+            <b style={{ color: 'var(--ink)' }}>{nome(atual)}</b>
+            {' · '}<span className="mono">{atual.identificador}</span>
+            {atual.estado !== 'ativo' && (
+              <b style={{ color: 'var(--warn)' }}>
+                {' '}· fora do pool agora: o e-mail desta campanha espera até ela voltar
+              </b>
+            )}
+            {atual.verificacao_ok === false && (
+              <b style={{ color: 'var(--crit)' }}> · última verificação falhou</b>
+            )}
+          </p>
+        ) : (
+          <p style={{ color: 'var(--ink-2)', fontSize: 13, marginTop: 0 }}>
+            Nenhuma conta escolhida: o e-mail sai pela conta de e-mail do pool {campanha.tipo} com
+            mais saúde e menos envios no dia.
+          </p>
+        )}
+
+        {podeOperar && (
+          <div className="campo" style={{ marginBottom: 0 }}>
+            <label htmlFor="cmp-email">Enviar e-mail por</label>
+            <select id="cmp-email" disabled={salvando}
+                    value={campanha.remetente_email_id ?? ''}
+                    onChange={(e) => void escolher(e.target.value)}>
+              <option value="">rodízio entre as contas do pool</option>
+              {doPool.map((c) => <option key={c.id} value={c.id}>{nome(c)}</option>)}
+            </select>
+            <span className="ajuda">
+              {doPool.length
+                ? 'Adicionar, verificar e remover conta é em Configurações ▸ E-mail.'
+                : `Nenhuma conta de e-mail no pool ${campanha.tipo}. Cadastre em Configurações ▸ E-mail.`}
+              {outroPool > 0 && ` ${outroPool} conta(s) de outro pool não aparecem: campanha fria não usa remetente de base própria, nem o contrário.`}
+            </span>
+          </div>
         )}
       </div>
     </>

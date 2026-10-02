@@ -32,7 +32,7 @@ function useDados<T>(carregar: () => Promise<T>, deps: unknown[] = []) {
   return { dados, erro, carregando, recarregar };
 }
 
-function Moldura({ titulo, sub, voltar, children }: {
+export function Moldura({ titulo, sub, voltar, children }: {
   titulo: string; sub: string; voltar?: () => void; children: React.ReactNode;
 }) {
   return (
@@ -451,9 +451,14 @@ export function Config() {
   const { dados } = useDados(async () => ({
     ia: await lerProvedoresIA(), agentes: await lerAgentes(), modelos: await lerModelos(),
     canal: await lerProvedoresCanal(), crm: await lerProvedoresCRM(),
+    remetentes: await lerRemetentes(),
   }), [tenant?.tenant_id]);
+  const emails = (dados?.remetentes ?? []).filter((r) => r.canal === 'email').length;
 
   const itens: [string, string, string, string, string][] = [
+    ['/config/email', 'email', 'E-mail',
+     'Os provedores de e-mail deste cliente: adicionar, verificar a conexão e remover. Cada campanha escolhe um.',
+     `${emails} conta${emails === 1 ? '' : 's'}`],
     ['/config/ia', 'ia', 'Provedores de IA',
      'Anthropic, OpenAI, Gemini, Perplexity, DeepSeek e compatíveis. A chave mora no Vault.',
      `${dados?.ia.length ?? 0} provedores`],

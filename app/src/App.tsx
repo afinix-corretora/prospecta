@@ -5,6 +5,7 @@ import { Rail } from './componentes/Rail';
 import { Aviso, Campo } from './componentes/base';
 import { DefinirSenha, Entrar } from './telas/Entrar';
 import { Canal } from './telas/Canal';
+import { ConfigEmail } from './telas/ConfigEmail';
 import { Importar } from './telas/Importar';
 import { Contatos } from './telas/Contatos';
 import { Campanha } from './telas/Campanha';
@@ -112,9 +113,13 @@ function Casca() {
           <Route path="/writeback" element={<Writeback />} />
           <Route path="/contatos/importar" element={<Importar />} />
           <Route path="/canais" element={<Canais />} />
+          {/* E-mail mora em Configurações (D62): a mesma conta em duas telas
+              seria duas versões do mesmo fato. */}
+          <Route path="/canais/email" element={<Navigate to="/config/email" replace />} />
           <Route path="/canais/:canal" element={<Canal />} />
           <Route path="/canais/:canal/:familia" element={<Canal />} />
           <Route path="/config" element={<Config />} />
+          <Route path="/config/email" element={<ConfigEmail />} />
           <Route path="/config/ia" element={<ConfigIA />} />
           <Route path="/config/agentes" element={<ConfigAgentes />} />
           <Route path="/config/modelos" element={<ConfigModelos />} />

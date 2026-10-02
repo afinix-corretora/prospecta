@@ -2148,3 +2148,80 @@ virava `{}` sem erro: todo bounce da Locaweb responderia 200 e não viraria even
 **Não conferido contra a conta real.** O formato do `POST` e o do webhook vêm da documentação
 pública e de um cliente .NET de terceiros; a primeira conta cadastrada precisa de um envio em
 shadow mode desligado para um endereço de teste antes de entrar numa campanha.
+
+### D62 — O e-mail de cada campanha, a conta que se remove sem apagar a história, e a conexão conferida pela tela
+
+**O pedido.** O cliente escolhe, nas configurações, qual provedor de e-mail usar. Pode cadastrar
+vários, mas cada campanha usa um. Configurações ganha um submenu **E-mail** com adicionar,
+remover e verificar o estado da conexão.
+
+**1. A escolha mora na campanha, e quem a respeita é o roteador.** `campaigns.remetente_email_id`
+(FK composta `(tenant_id, id)`, D18). `NULL` é o rodízio de antes — as campanhas existentes
+continuam fazendo o que já faziam, porque mudar o comportamento delas em silêncio é pior do que
+mantê-lo. `privado.remetentes_da_campanha` é `remetentes_disponiveis` com o filtro da campanha, e
+**agendador e despachante passam os dois a perguntar a ela**: escolher a conta no agendador e
+deixar `reivindicar_pendentes` rebalancear para outra seria o D40 — os dois discordando sobre o
+mesmo fato. O despachante também confere a escolha na mensagem que **já existe** (passo 4): trocar
+o provedor na tela vale para o que está na fila, não só para o que vai nascer. É o D37 aplicado à
+escolha da pessoa.
+
+Conta escolhida fora do pool **segura** o e-mail da campanha (o passo espera, D31) em vez de sair
+por outra. Mandar pelo provedor que ninguém escolheu seria a escolha valendo só enquanto nada dá
+errado. `proximo_horario_da_campanha` tem o mesmo filtro: sem ele, a campanha seria acordada pela
+quota de OUTRA conta — passada inútil e um "adiado até" mentindo.
+
+Um gatilho (`campaigns_valida_email`, DEFINER porque o operador escolhe e não enxerga
+`sender_accounts`) recusa com SQLSTATE 23001 o que o motor não conseguiria cumprir: campanha sem
+e-mail (gravar valor que o motor não lê, D55), conta de outro canal, conta removida, e conta de
+outro pool — o D4 aqui, legível na hora da escolha, e não como exceção no meio do lote.
+
+**2. Remover é arquivar.** `messages.sender_account_id` é `ON DELETE CASCADE`, e `message_events`
+vai junto: apagar uma conta apagava a história de tudo o que ela mandou, e o webhook dela — que
+ainda recebe bounce de e-mail de ontem — deixava de resolver. `remover_remetente` grava
+`removido_em` e `estado = 'desativado'` (um CHECK impede o par incoerente, senão "devolver ao pool"
+ressuscitaria a conta), e recusa — listando quais — quando alguma campanha a escolheu. O ponteiro
+do Vault fica: mensagem em voo ainda precisa do segredo, e o pendente o despacho rebalanceia. A
+unicidade do identificador virou índice parcial, para o mesmo endereço poder ser cadastrado de novo.
+
+**3. Verificar é do worker.** A tela não tem o segredo e não deve ter. A edge function
+`verificar-remetente` lê a conta **com o JWT de quem pediu** (o RLS decide se ele alcança), lê o
+segredo com a chave do serviço, chama o `checkHealth` do adapter e grava o resultado
+(`registrar_verificacao_remetente`, só `service_role`). A decisão mora em `motor/verificacao.ts`,
+com sete testes. A verificação **não tira a conta do pool**: quem tira é o circuito, com envio de
+verdade; duas fontes de "esta conta está fora" discordariam.
+
+**Três furos achados no caminho, todos de privilégio.**
+
+- `authenticated` tinha INSERT de tabela inteira em `sender_accounts`: dava para criar conta com
+  `credenciais_secret_id` apontando para o segredo de outro cliente — o D59 na quarta tabela de
+  credencial. Agora o INSERT é por coluna, sem o ponteiro.
+- `authenticated` tinha DELETE em `sender_accounts`, que apagava em cascata mensagens e eventos —
+  história append-only. Revogado; remover é a função.
+- `provisionar-instancia` lia o servidor só com a chave do serviço: qualquer usuário logado, de
+  qualquer cliente, que soubesse um `server_id`, criava instância com o token de administração de
+  outro cliente. Agora o servidor é lido primeiro com o JWT do pedido. A function também não
+  respondia ao `OPTIONS` do navegador — o app não conseguia chamá-la. `_shared/http.ts` dá CORS e o
+  cliente do usuário às duas functions que a tela chama.
+
+**O corpo da grade no projeto não era o do repositório — só nos comentários.** Antes de aplicar,
+o corpo de `processar_vencidos`, `reivindicar_pendentes` e `estreitar_escrita_do_cliente` no projeto
+foi comparado por md5 com o do banco montado com as migrations. Os dois primeiros bateram; o
+terceiro, não: a corretiva do D59 entrou no projeto sem os comentários longos. As instruções são as
+mesmas, linha a linha, e o corpo novo é um superconjunto — a diferença não esconde regra nenhuma.
+
+**A tela.** Configurações ▸ **E-mail** lista as contas (sem as removidas), com provedor, pool,
+quota, estado e a última verificação ("nunca verificada" é dito como tal — ausência de resultado
+não é sucesso), e diz quais campanhas escolheram cada conta. Verificar e remover ficaram na linha
+de conta comum, então valem também para WhatsApp e SMS. `/canais/email` redireciona para lá: a
+mesma conta em duas telas seriam duas versões do mesmo fato. A tela da campanha ganha "Provedor de
+e-mail", só quando a campanha usa e-mail, oferecendo só contas do pool dela.
+
+**Estado.** Aplicado e publicado em 02/10: a migration (60º registro no projeto), a grade conferida
+no projeto depois de aplicar (INSERT por coluna sem ponteiro de Vault, sem DELETE,
+`remetente_email_id` no UPDATE de `campaigns`), e as duas functions — `verificar-remetente` v1 e
+`provisionar-instancia` v5 — lidas de volta e comparadas byte a byte (16/16 e 15/15). O
+`get_advisors` só acrescentou `remover_remetente` e `contas_de_email` à família WARN de funções
+DEFINER chamáveis pela tela, que checam `pode_administrar`/`pode_operar` em código.
+
+**Não resolvido aqui.** `salvar_credencial_remetente` cria um segredo novo no Vault a cada
+salvamento e deixa o anterior órfão. Não vaza nada — ninguém aponta para ele —, mas acumula.
