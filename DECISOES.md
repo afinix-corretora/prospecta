@@ -2403,3 +2403,53 @@ lida, e só então se grava.
 **Fica para depois:** campanhas, cadências, enrollments, mensagens e eventos do legado, com a linha do
 tempo preservada (MAPA-STATUS). Isso depende de decidir o que fazer com quem ainda estava em
 cadência.
+
+### D66 — O agente compõe; uma pessoa decide
+
+**O pedido.** Uma ferramenta 100% autônoma, com agentes configuráveis por instrução,
+comportamento, o que é permitido e o que é proibido, e restrições, no molde do SDR Resgate, só
+que multicanal.
+
+**Por que não começar pelo autônomo.** `PROPOSTA-CONVERSA.md` mostrou que o agente que manda
+sozinho encosta em três garantias. São a invariante 4, o gate do D40 (que cancela a mensagem
+pendente em enrollment encerrado por resposta) e a chave `(enrollment_id, step_id)`, e cada uma
+foi escrita depois de um defeito real. A opção A entrega a parte cara e incerta, o agente compor
+bem, sem tocar em nenhuma delas. Foi o que se construiu.
+
+**O que existe.**
+
+- **`rascunhos`**: uma linha por resposta que o agente leu, com o texto ou com o motivo de não
+  haver texto. São sete situações: pronto, recusa, escalar, bloqueado, limite, sem_credencial e
+  erro. Uma resposta tem um rascunho (índice único), e só a mais recente de cada pessoa espera
+  rascunho.
+- **`respostas_para_rascunhar`**: a fila do worker, com tudo o que o agente precisa (instrução,
+  conversa nos dois sentidos, variáveis do contato). Ela **exclui quem está suprimido**, a pessoa e
+  o endereço, porque rascunho pronto é convite a uma pessoa mandar.
+- **`adapters/ia.ts`**: o Claude (Messages API) e a família "chat completions" (OpenAI, DeepSeek,
+  OpenRouter, Perplexity, endpoint compatível), só por `fetch` (D30). O Gemini fica sem adapter, e
+  `ai_provider_catalog.tem_adapter` diz isso. `tests/registro_para_sql.ts` compara as duas listas,
+  que é o D54 no terceiro catálogo.
+- **`motor/agente.ts`**: o pedido ao modelo e os **freios em código**. A instrução pede ao modelo; o
+  freio confere o que ele devolveu. Barra frase proibida (sem acento e sem caixa), texto acima do
+  tamanho máximo e pedido de CPF, senha ou cartão, e reconhece a marca de escalar. Recusa da
+  blacklist, limite de trocas e falta de credencial não chamam modelo nenhum.
+- **O agente ganhou porta.** `proibido` e `tamanho_maximo` são colunas novas, e `limite_trocas` e
+  `escalar_quando`, que existiam sem leitor (PROPOSTA §6), passaram a ser lidos. A credencial se
+  escolhe na tela. O UPDATE de `agents` virou por coluna, sem o dono e sem `pronto`, porque o RLS
+  segurava a linha enquanto o privilégio soltava a coluna (D54).
+- **As telas.** A de Respostas mostra o rascunho embaixo da resposta, com "copiar", ou o porquê de
+  não haver. A de Agentes edita o agente do cliente. Três textos que diziam "nada no motor lê
+  `campaign_agents`" ficaram falsos no dia e foram reescritos (D58).
+
+**Erro transitório não vira linha.** Um 529 ou uma queda de rede é tentado de novo na passada
+seguinte. Só o que não melhora sozinho (chave recusada, modelo inexistente, recusa do modelo) fica
+gravado como `erro`, com o motivo.
+
+**Testes.** `tests/rascunhos.sql` (21) e `tests/agente.test.ts` (14). Tirar o filtro de supressão
+da fila derruba "suprimida, ela some da fila do agente". Foi escrito e removido um "e conta para o
+limite de trocas" que era `true` sozinho, a asserção que o cenário não viola (D36). O limite é
+cobrado pelo número de rascunhos anteriores na resposta seguinte.
+
+**Ficou para decidir:** a opção B, desenhada em `PROPOSTA-CONVERSA.md` §8, com recomendação para as
+quatro perguntas. A recomendação: autônomo por agente, a resposta paga quota, janela de 24h como
+trava, e teto diário por cliente.

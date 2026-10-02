@@ -496,10 +496,10 @@ function EmailDaCampanha({ campanha, contas, podeOperar, aoMudar, aoFalhar }: {
  * ele é usado — assim editar o seu não mexe no catálogo — e a chave
  * `(campaign_id, canal)` garante um agente por canal.
  *
- * E é só isso que acontece hoje: **nada no motor lê `campaign_agents`**.
- * Nenhum adapter, nenhuma edge function, nenhuma função SQL do despacho.
- * Resposta encerra a cadência (invariante 4) e ninguém conversa depois. A
- * atribuição fica gravada e pronta para quando o laço de conversa existir.
+ * Desde o D66 o motor LÊ `campaign_agents`: quando o contato responde, o agente
+ * do canal compõe um rascunho, que aparece na tela de Respostas. E é só isso:
+ * nada sai sozinho. Resposta encerra a cadência (invariante 4), e quem continua
+ * a conversa é uma pessoa, com o rascunho na mão.
  *
  * A tela diz isso em voz alta de propósito. Oferecer a escolha e deixar a
  * pessoa supor que ela produz efeito é a decoração do D31 com cara de
@@ -560,14 +560,13 @@ function Agentes({ campanha, agentes, atribuidos, podeOperar, aoMudar, aoFalhar 
         })}
 
         <Aviso tipo="neutro">
-          <b>Ainda não há quem responda.</b> Escolher o agente grava a escolha, e
-          é tudo o que ela faz por enquanto: nenhuma parte do motor lê esta
-          tabela. Quando o contato responde, a cadência é encerrada (é a
-          invariante 4) e a conversa não continua sozinha. Deixar isto escrito é
-          melhor do que descobrir por um lead sem resposta.
+          <b>O agente escreve o rascunho; quem manda é uma pessoa.</b> Quando o contato
+          responde, a cadência encerra (é a invariante 4) e o agente deste canal deixa um
+          rascunho na tela de Respostas, para ser lido, ajustado e mandado pelo aplicativo do
+          canal. Nada sai sozinho. Sem credencial de IA escolhida no agente, ele diz que não
+          tem com que compor.
           {semAgente.length > 0 && (
-            <> Sem agente em {semAgente.map((c) => NOME_CANAL[c] ?? c).join(', ')} —
-            o que, hoje, dá no mesmo.</>
+            <> Sem agente em {semAgente.map((c) => NOME_CANAL[c] ?? c).join(', ')}: ali não há rascunho.</>
           )}
         </Aviso>
       </div>

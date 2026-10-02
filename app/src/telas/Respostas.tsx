@@ -15,24 +15,32 @@
  * atribuição: inventar estado aqui seria criar colunas sem quem as escreva, o
  * `tem_adapter` do D31 de novo. Quem responde de verdade é uma pessoa, no
  * aplicativo do canal, e é isso que a tela diz.
+ *
+ * Desde o D66 cada resposta pode trazer o rascunho do agente da campanha: o
+ * texto pronto para copiar, ou o motivo de não haver texto. Continua leitura —
+ * o rascunho não sai sozinho, e a tela não finge que saiu.
  */
 import { useEffect, useState } from 'react';
 import { useSessao } from '../sessao';
 import { Aviso, Kpi, NOME_CANAL, Secao, corCanal } from '../componentes/base';
-import { lerRespostas } from '../dados';
-import type { RespostaRecebida } from '../dados';
+import { lerRascunhos, lerRespostas } from '../dados';
+import type { Rascunho, RespostaRecebida, SituacaoRascunho } from '../dados';
 import { mensagemDeErro } from '../supabase';
 
 export function Respostas() {
   const { tenant } = useSessao();
   const [lista, setLista] = useState<RespostaRecebida[]>([]);
+  const [rascunhos, setRascunhos] = useState<Rascunho[]>([]);
   const [erro, setErro] = useState('');
   const [carregando, setCarregando] = useState(true);
 
   async function recarregar() {
     if (!tenant) return;
     setCarregando(true); setErro('');
-    try { setLista(await lerRespostas(tenant.tenant_id)); }
+    try {
+      const [l, r] = await Promise.all([lerRespostas(tenant.tenant_id), lerRascunhos()]);
+      setLista(l); setRascunhos(r);
+    }
     catch (e) { setErro(mensagemDeErro(e)); }
     finally { setCarregando(false); }
   }
@@ -47,8 +55,9 @@ export function Respostas() {
     <div className="wrap">
       <div className="cabeca"><div>
         <h1>Respostas</h1>
-        <p>O que voltou dos contatos. Responder é com você, no aplicativo do canal —
-           esta tela existe para você saber que há o que responder.</p>
+        <p>O que voltou dos contatos. Responder é com você, no aplicativo do canal. Quando a
+           campanha tem agente, ele deixa um rascunho embaixo da resposta — para você ler,
+           ajustar e mandar. Nada sai sozinho.</p>
       </div></div>
 
       {erro && <Aviso tipo="erro">{erro}</Aviso>}
@@ -62,7 +71,7 @@ export function Respostas() {
              sub="gente que respondeu e não pediu para sair" />
       </section>
 
-      <ListaDeRespostas lista={lista} />
+      <ListaDeRespostas lista={lista} rascunhos={rascunhos} />
 
       <button className="btn" onClick={() => void recarregar()}>Atualizar</button>
     </div>
@@ -75,9 +84,14 @@ export function Respostas() {
  * Cada resposta vem com a mensagem que a provocou. Sem isso, "sim, pode ser"
  * não quer dizer nada — e é justamente a resposta curta que é a mais comum.
  */
-export function ListaDeRespostas({ lista, semCampanha }: {
-  lista: RespostaRecebida[]; semCampanha?: boolean;
+export function ListaDeRespostas({ lista, semCampanha, rascunhos = [] }: {
+  lista: RespostaRecebida[]; semCampanha?: boolean; rascunhos?: Rascunho[];
 }) {
+  // Contato e instante, comparados como data: as duas pontas vêm do mesmo
+  // `ocorrido_em`, mas por caminhos que podem formatar o texto diferente.
+  const chave = (contato: string, quando: string) => `${contato}|${new Date(quando).getTime()}`;
+  const doAgente = new Map(rascunhos.map((r) => [chave(r.contact_id, r.resposta_em), r]));
+
   if (lista.length === 0) {
     return (
       <div className="painel">
@@ -146,6 +160,8 @@ export function ListaDeRespostas({ lista, semCampanha }: {
               </p>
             )}
 
+            <RascunhoDaResposta r={doAgente.get(chave(r.contact_id, r.ocorrido_em))} />
+
             {r.suprimido && (
               <p style={{ margin: '6px 0 0', fontSize: 12, color: 'var(--crit)' }}>
                 Esta pessoa está na supressão — não fale com ela por este canal.
@@ -156,6 +172,46 @@ export function ListaDeRespostas({ lista, semCampanha }: {
         ))}
       </div>
     </>
+  );
+}
+
+const POR_QUE_NAO: Record<Exclude<SituacaoRascunho, 'pronto'>, string> = {
+  recusa: 'Sem rascunho: é recusa da oferta.',
+  escalar: 'O agente passou para uma pessoa.',
+  bloqueado: 'O texto do agente foi barrado por um freio.',
+  limite: 'Sem rascunho: a conversa passou do limite de trocas do agente.',
+  sem_credencial: 'Sem rascunho: o agente não tem com que compor.',
+  erro: 'O provedor de IA recusou compor.',
+};
+
+/** O rascunho embaixo da resposta: o texto para copiar, ou o porquê de não haver. */
+function RascunhoDaResposta({ r }: { r?: Rascunho }) {
+  const [copiado, setCopiado] = useState(false);
+  if (!r) return null;
+  if (r.situacao !== 'pronto' || !r.texto) {
+    return (
+      <p style={{ margin: '6px 0 0', fontSize: 12, color: 'var(--ink-3)' }}>
+        {POR_QUE_NAO[r.situacao as Exclude<SituacaoRascunho, 'pronto'>]}{r.motivo ? ` ${r.motivo}.` : ''}
+      </p>
+    );
+  }
+  const texto = r.texto;
+  return (
+    <div style={{ margin: '8px 0 0', padding: '8px 10px', border: '1px dashed var(--line)', borderRadius: 8 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, alignItems: 'baseline' }}>
+        <span style={{ fontSize: 11, color: 'var(--ink-3)' }}>
+          Rascunho do agente{r.modelo ? ` · ${r.modelo}` : ''} — não enviado
+        </span>
+        <button className="btn" style={{ fontSize: 11, padding: '2px 8px' }}
+                onClick={async () => {
+                  try { await navigator.clipboard.writeText(texto); } catch { /* o texto segue à vista */ }
+                  setCopiado(true); setTimeout(() => setCopiado(false), 1200);
+                }}>
+          {copiado ? 'copiado' : 'Copiar'}
+        </button>
+      </div>
+      <p style={{ margin: '4px 0 0', color: 'var(--ink)', whiteSpace: 'pre-wrap' }}>{texto}</p>
+    </div>
   );
 }
 

@@ -13,11 +13,16 @@
 // não pode prender os fatos que já existem. O modo não chega às duas do CRM
 // de propósito — shadow mode é decidido onde o fato nasce (D45), e ler um CRM
 // não é efeito externo.
+//
+// Desde o D66, uma quarta: os rascunhos do agente. Também com o seu `try`, e
+// também sem modo: rascunho não sai para ninguém — quem manda é uma pessoa.
 
 import { bancoSupabase, clienteAdmin } from '../_shared/banco-supabase.ts';
 import { bancoCrmSupabase } from '../_shared/banco-crm.ts';
 import { umaPassada } from '../../../motor/despachante.ts';
 import { drenarWritebacks, lerFontes } from '../../../motor/crm.ts';
+import { bancoAgenteSupabase } from '../_shared/banco-agente.ts';
+import { rascunharRespostas } from '../../../motor/agente.ts';
 
 const erro = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
@@ -52,11 +57,19 @@ Deno.serve(async (req) => {
     falhas.push(`fontes: ${erro(e)}`);
   }
 
+  let rascunhos: unknown = null;
+  try {
+    rascunhos = await rascunharRespostas(bancoAgenteSupabase(sb), 20);
+  } catch (e) {
+    console.error('[motor-worker] rascunhos', e);
+    falhas.push(`rascunhos: ${erro(e)}`);
+  }
+
   // 500 quando qualquer parte falhou: o `net._http_response` do pg_cron é o
   // único lugar onde passada quebrada aparece, e 200 com erro dentro seria a
   // passada 401 do D44 com outra cara.
   const ok = falhas.length === 0;
   const resto = (cadencia ?? {}) as Record<string, unknown>;
-  return Response.json({ ok, modo, ...resto, writeback, fontes, ...(ok ? {} : { erro: falhas.join(' | ') }) },
+  return Response.json({ ok, modo, ...resto, writeback, fontes, rascunhos, ...(ok ? {} : { erro: falhas.join(' | ') }) },
     { status: ok ? 200 : 500 });
 });

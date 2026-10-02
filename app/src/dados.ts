@@ -102,6 +102,12 @@ export interface Agente {
   limite_trocas: number;
   pronto: boolean;
   tenant_id: string | null;
+  /** Com que credencial o agente compõe (D66). NULL = não compõe, e a tela diz. */
+  ai_credential_id: string | null;
+  /** Frases que o rascunho nunca contém — conferidas em código, não só pedidas. */
+  proibido: string[];
+  tamanho_maximo: number;
+  ativo: boolean;
 }
 
 export interface CredencialIA {
@@ -123,6 +129,8 @@ export interface ProvedorIA {
   modelos_sugeridos: string[];
   docs_url: string | null;
   ordem: number;
+  /** Se o motor sabe compor rascunho com este provedor (D66). */
+  tem_adapter: boolean;
 }
 
 /** Plataforma de CRM que o produto sabe receber credencial (D59).
@@ -172,7 +180,7 @@ export const lerProvedoresCanal = () =>
 
 export const lerProvedoresIA = () =>
   tabela<ProvedorIA>('ai_provider_catalog',
-    'slug, nome, descricao, campos, modelos_sugeridos, docs_url, ordem', 'ordem');
+    'slug, nome, descricao, campos, modelos_sugeridos, docs_url, ordem, tem_adapter', 'ordem');
 
 export const lerCredenciaisIA = () =>
   tabela<CredencialIA>('ai_credentials', 'id, nome, provedor, modelo, chave_secret_id, config, ativo', 'nome');
@@ -213,7 +221,8 @@ export const lerModelos = () =>
 
 export const lerAgentes = () =>
   tabela<Agente>('agents',
-    'id, nome, canal, papel, descricao, instrucoes, escalar_quando, limite_trocas, pronto, tenant_id');
+    'id, nome, canal, papel, descricao, instrucoes, escalar_quando, limite_trocas, pronto, tenant_id, ' +
+    'ai_credential_id, proibido, tamanho_maximo, ativo');
 
 // ---------------------------------------------------------------------------
 // Escritas
@@ -1335,4 +1344,37 @@ export async function lerWritebacksSaidos(limite = 20): Promise<WritebackSaido[]
     .order('criado_em', { ascending: false }).limit(limite);
   if (error) throw error;
   return (data ?? []) as WritebackSaido[];
+}
+
+// ---------------------------------------------------------------------------
+// O agente e o rascunho (D66)
+// ---------------------------------------------------------------------------
+
+export type SituacaoRascunho = 'pronto' | 'recusa' | 'escalar' | 'bloqueado' | 'limite' | 'sem_credencial' | 'erro';
+
+export interface Rascunho {
+  contact_id: string;
+  agent_id: string | null;
+  resposta_em: string;
+  situacao: SituacaoRascunho;
+  texto: string | null;
+  motivo: string | null;
+  modelo: string | null;
+}
+
+/** Os rascunhos recentes. A tela casa cada um com a resposta pelo contato e
+ *  pelo instante, que vêm da mesma linha de `message_events`. */
+export async function lerRascunhos(limite = 300): Promise<Rascunho[]> {
+  const { data, error } = await sb.from('rascunhos')
+    .select('contact_id, agent_id, resposta_em, situacao, texto, motivo, modelo')
+    .order('resposta_em', { ascending: false }).limit(limite);
+  if (error) throw error;
+  return (data ?? []) as Rascunho[];
+}
+
+/** Só as colunas que a grade deixa a tela escrever (D66). */
+export async function salvarAgente(id: string, campos: Pick<Agente,
+  'instrucoes' | 'escalar_quando' | 'limite_trocas' | 'tamanho_maximo' | 'proibido' | 'ai_credential_id' | 'ativo'>) {
+  const { error } = await sb.from('agents').update(campos).eq('id', id);
+  if (error) throw error;
 }

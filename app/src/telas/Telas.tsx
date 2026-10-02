@@ -5,7 +5,7 @@ import { mensagemDeErro } from '../supabase';
 import {
   alternarConexaoCRM, criarCampanha, criarCampanhaDeModelo, lerAgentes, lerCampanhas,
   lerCanaisEntregaveis, lerConexoesCRM, lerCredenciaisIA, lerModelos, lerProvedoresCRM,
-  lerProvedoresCanal, lerProvedoresIA, lerRemetentes, lerVersoesDeFlow, salvarCredencialCRM,
+  lerProvedoresCanal, lerProvedoresIA, lerRemetentes, lerVersoesDeFlow, salvarAgente, salvarCredencialCRM,
   salvarCredencialIA,
 } from '../dados';
 import type {
@@ -466,7 +466,7 @@ export function Config() {
      'Anthropic, OpenAI, Gemini, Perplexity, DeepSeek e compatíveis. A chave mora no Vault.',
      `${dados?.ia.length ?? 0} provedores`],
     ['/config/agentes', 'agente', 'Agentes',
-     'A persona que responde em cada canal quando a pessoa reage à cadência.',
+     'A persona de cada canal: quando a pessoa responde, ela escreve o rascunho que alguém manda.',
      `${dados?.agentes.length ?? 0} agentes`],
     ['/config/modelos', 'modelo', 'Modelos de conversa',
      'As receitas de cadência: canais, atrasos e texto de cada passo.',
@@ -514,7 +514,7 @@ export function ConfigIA() {
              sub="Escolha o provedor e os campos certos aparecem. A chave vai para o Vault — o banco recusa gravá-la em qualquer outro lugar.">
       {erro && <Aviso tipo="erro">{erro}</Aviso>}
 
-      <Secao titulo="Credenciais" nota="é o que os agentes usam para responder" />
+      <Secao titulo="Credenciais" nota="é com elas que os agentes compõem o rascunho" />
       <section className="indice" style={{ marginBottom: 14 }}>
         {creds.length ? creds.map((c) => (
           <div key={c.id} className="item" style={{ cursor: 'default' }}>
@@ -527,6 +527,8 @@ export function ConfigIA() {
               <span className="chips" style={{ marginTop: 6 }}>
                 <span className="chip">{c.chave_secret_id ? 'chave no Vault' : 'sem chave'}</span>
                 {Object.keys(c.config).map((k) => <span key={k} className="chip">{k}</span>)}
+                {/* Dito por credencial: o Gemini guarda a chave e não compõe (D66). */}
+                {!provs.find((x) => x.slug === c.provedor)?.tem_adapter && <span className="chip">não compõe ainda</span>}
               </span>
             </span>
             <span className={`delta ${c.ativo && c.chave_secret_id ? '' : 'neutra'}`}>
@@ -536,7 +538,7 @@ export function ConfigIA() {
         )) : (
           <div className="item" style={{ cursor: 'default' }}><span className="txt">
             <b>Nenhuma credencial cadastrada</b>
-            <p>Sem credencial, agente nenhum responde. O motor segue tocando a cadência — só não conversa.</p>
+            <p>Sem credencial, agente nenhum escreve rascunho. O motor segue tocando a cadência — só não compõe.</p>
           </span></div>
         )}
       </section>
@@ -662,9 +664,13 @@ function FormularioIA(props: {
 
 export function ConfigAgentes() {
   const nav = useNavigate();
-  const { tenant } = useSessao();
-  const { dados, erro, carregando } = useDados(lerAgentes, [tenant?.tenant_id]);
-  const [aberto, setAberto] = useState<Agente | null>(null);
+  const { tenant, opera } = useSessao();
+  const { dados, erro, carregando, recarregar } = useDados(async () => ({
+    agentes: await lerAgentes(),
+    credenciais: await lerCredenciaisIA(),
+    provedores: await lerProvedoresIA(),
+  }), [tenant?.tenant_id]);
+  const [abertoId, setAbertoId] = useState<string | null>(null);
 
   // Usar um agente do catálogo copia a linha para o tenant; sem deduplicar, o
   // original e a cópia apareceriam como dois agentes.
@@ -673,7 +679,7 @@ export function ConfigAgentes() {
   // condicional muda a ordem entre renders e o React quebra.
   const agentes = useMemo(() => {
     const m = new Map<string, Agente>();
-    for (const a of (dados ?? [])) {
+    for (const a of (dados?.agentes ?? [])) {
       const atual = m.get(a.nome);
       if (!atual || (atual.tenant_id === null && a.tenant_id !== null)) m.set(a.nome, a);
     }
@@ -681,30 +687,129 @@ export function ConfigAgentes() {
   }, [dados]);
 
   if (carregando) return <div className="wrap"><p className="vazio">Carregando…</p></div>;
+  const aberto = agentes.find((a) => a.id === abertoId) ?? null;
+  const creds = dados?.credenciais ?? [];
+  const provs = dados?.provedores ?? [];
 
   return (
     <Moldura titulo="Agentes" voltar={() => nav('/config')}
-             sub="Uma persona por canal, escolhida na criação da campanha. O agente é dono da conversa; o motor é dono da cadência.">
+             sub="Uma persona por canal, escolhida na campanha. Quando o contato responde, o agente escreve um rascunho; quem manda é uma pessoa.">
       {erro && <Aviso tipo="erro">{erro}</Aviso>}
       <section className="indice">
-        {agentes.map((a) => (
-          <LinhaIndice key={a.id} icone={a.canal} cor={corCanal(a.canal)} titulo={a.nome}
-                       descricao={`${a.descricao} · ${a.papel} · até ${a.limite_trocas} trocas`}
-                       contagem={a.tenant_id ? 'seu' : 'catálogo'}
-                       aoClicar={() => setAberto(aberto?.id === a.id ? null : a)} />
-        ))}
+        {agentes.map((a) => {
+          const c = creds.find((x) => x.id === a.ai_credential_id);
+          return (
+            <LinhaIndice key={a.id} icone={a.canal} cor={corCanal(a.canal)} titulo={a.nome}
+                         descricao={`${a.descricao} · ${a.papel} · ${a.tenant_id
+                           ? (c ? `compõe com ${c.nome}` : 'sem credencial: não compõe') : 'modelo'}`}
+                         contagem={a.tenant_id ? 'seu' : 'catálogo'}
+                         aoClicar={() => setAbertoId(abertoId === a.id ? null : a.id)} />
+          );
+        })}
       </section>
-      {aberto && (
-        <>
-          <Secao titulo={aberto.nome} nota={`${NOME_CANAL[aberto.canal]} · ${aberto.papel}`} />
-          <div className="painel">
-            <p style={{ whiteSpace: 'pre-wrap', marginTop: 0 }}>{aberto.instrucoes}</p>
-            <Secao titulo="Passa para uma pessoa quando" />
-            <p style={{ marginBottom: 0 }}>{aberto.escalar_quando}</p>
-          </div>
-        </>
-      )}
+      {aberto && (aberto.tenant_id && opera
+        ? <EditorDeAgente key={aberto.id} agente={aberto} credenciais={creds} provedores={provs} aoSalvar={recarregar} />
+        : (
+          <>
+            <Secao titulo={aberto.nome} nota={`${NOME_CANAL[aberto.canal]} · ${aberto.papel}`} />
+            <div className="painel">
+              {!aberto.tenant_id && (
+                <Aviso tipo="neutro">Este é o modelo do catálogo. Ao escolher o agente numa campanha, o
+                  cliente ganha uma cópia própria — é ela que se edita aqui.</Aviso>
+              )}
+              <p style={{ whiteSpace: 'pre-wrap', marginTop: 0 }}>{aberto.instrucoes}</p>
+              <Secao titulo="Passa para uma pessoa quando" />
+              <p style={{ marginBottom: 0 }}>{aberto.escalar_quando}</p>
+            </div>
+          </>
+        ))}
     </Moldura>
+  );
+}
+
+/** O agente do cliente, editável pelo que a grade deixa (D66): o que ele diz,
+ *  quando passa para uma pessoa, o que nunca escreve, e com que credencial.
+ *
+ *  O freio é do motor, não desta tela: aqui se diz o que é proibido; quem
+ *  confere o texto composto é `motor/agente.ts`, depois do modelo responder. */
+function EditorDeAgente({ agente, credenciais, provedores, aoSalvar }: {
+  agente: Agente; credenciais: CredencialIA[]; provedores: ProvedorIA[]; aoSalvar(): Promise<void>;
+}) {
+  const [instrucoes, setInstrucoes] = useState(agente.instrucoes);
+  const [escalar, setEscalar] = useState(agente.escalar_quando);
+  const [limite, setLimite] = useState(String(agente.limite_trocas));
+  const [tamanho, setTamanho] = useState(String(agente.tamanho_maximo));
+  const [proibido, setProibido] = useState(agente.proibido.join('\n'));
+  const [cred, setCred] = useState(agente.ai_credential_id ?? '');
+  const [ativo, setAtivo] = useState(agente.ativo);
+  const [msg, setMsg] = useState<{ tipo: 'erro' | 'ok'; texto: string } | null>(null);
+  const escolhida = credenciais.find((c) => c.id === cred);
+  const compoe = escolhida ? provedores.find((p) => p.slug === escolhida.provedor)?.tem_adapter ?? false : false;
+
+  async function salvar(e: React.FormEvent) {
+    e.preventDefault();
+    setMsg(null);
+    try {
+      await salvarAgente(agente.id, {
+        instrucoes, escalar_quando: escalar,
+        limite_trocas: Number(limite) || agente.limite_trocas,
+        tamanho_maximo: Number(tamanho) || agente.tamanho_maximo,
+        proibido: proibido.split('\n').map((x) => x.trim()).filter(Boolean),
+        ai_credential_id: cred || null, ativo,
+      });
+      setMsg({ tipo: 'ok', texto: 'Agente salvo. Vale para a próxima resposta que chegar.' });
+      await aoSalvar();
+    } catch (e2) { setMsg({ tipo: 'erro', texto: mensagemDeErro(e2) }); }
+  }
+
+  return (
+    <>
+      <Secao titulo={agente.nome} nota={`${NOME_CANAL[agente.canal]} · ${agente.papel}`} />
+      <form className="painel" onSubmit={salvar}>
+        <div className="campo">
+          <label htmlFor="ag-instr">Instrução (o comportamento do agente)</label>
+          <textarea id="ag-instr" rows={8} value={instrucoes} onChange={(e) => setInstrucoes(e.target.value)} />
+          <span className="ajuda">Tom, o que perguntar, o que oferecer. Pelo menos 120 caracteres. Além disto, o
+            motor sempre manda: não inventar preço nem cobertura, não pedir CPF nem cartão, e passar para uma
+            pessoa no caso abaixo.</span>
+        </div>
+        <Campo id="ag-escalar" rotulo="Passa para uma pessoa quando" valor={escalar} aoMudar={setEscalar}
+               ajuda="Nesses casos o agente não escreve rascunho: a resposta aparece marcada para uma pessoa." />
+        <div className="campo">
+          <label htmlFor="ag-proib">Nunca escrever</label>
+          <textarea id="ag-proib" rows={4} value={proibido} onChange={(e) => setProibido(e.target.value)}
+                    placeholder={'garantimos\nsem carência\no menor preço'} />
+          <span className="ajuda">Uma expressão por linha. Não é só pedido ao modelo: o motor confere o texto
+            composto (sem acento e sem caixa) e barra o rascunho que contiver uma delas.</span>
+        </div>
+        <Campo id="ag-tam" rotulo="Tamanho máximo (caracteres)" valor={tamanho} aoMudar={setTamanho}
+               ajuda="Entre 80 e 4000. Texto maior é barrado, não cortado." />
+        <Campo id="ag-lim" rotulo="Limite de trocas" valor={limite} aoMudar={setLimite}
+               ajuda="Depois de tantos rascunhos na mesma conversa, o agente para e diz que é hora de uma pessoa." />
+        <div className="campo">
+          <label htmlFor="ag-cred">Compõe com</label>
+          <select id="ag-cred" value={cred} onChange={(e) => setCred(e.target.value)}>
+            <option value="">Nenhuma credencial — o agente não compõe</option>
+            {credenciais.map((c) => (
+              <option key={c.id} value={c.id}>{c.nome} · {c.provedor} · {c.modelo}{c.ativo ? '' : ' (desligada)'}</option>
+            ))}
+          </select>
+          <span className="ajuda">As credenciais ficam em Configurações ▸ Provedores de IA.</span>
+        </div>
+        {escolhida && !compoe && (
+          <Aviso tipo="neutro">{escolhida.provedor} ainda não tem adapter de rascunho: com esta credencial o agente
+            diz que não tem com que compor.</Aviso>
+        )}
+        {escolhida && !escolhida.ativo && (
+          <Aviso tipo="neutro">Esta credencial está desligada: o agente não compõe enquanto ela estiver assim.</Aviso>
+        )}
+        <label style={{ display: 'flex', gap: 8, alignItems: 'center', margin: '4px 0 12px' }}>
+          <input type="checkbox" checked={ativo} onChange={(e) => setAtivo(e.target.checked)} /> Agente ativo
+        </label>
+        {msg && <Aviso tipo={msg.tipo}>{msg.texto}</Aviso>}
+        <button className="btn prim" disabled={instrucoes.trim().length < 120}>Salvar agente</button>
+      </form>
+    </>
   );
 }
 

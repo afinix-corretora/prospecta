@@ -12,6 +12,13 @@ meses depois, na forma de uma invariante furada.
 > decidido, e `CLAUDE.md` são as regras para quem programa. Este é o único que fala de algo que
 > ainda não existe.
 
+> **Estado em 02/10 (D66): a opção A está construída.** Quando o contato responde, o agente do canal
+> da campanha compõe um rascunho com a credencial de IA escolhida nele, os freios em código conferem
+> o texto, e a tela de Respostas mostra o rascunho para uma pessoa copiar e mandar. Nada sai pelo
+> motor, e nenhuma das três travas da seção 2 foi tocada. A seção 6 também está feita: o agente tem
+> credencial pela tela, e `limite_trocas` e `escalar_quando` têm leitor. O que segue pendente é a
+> **opção B** — e a seção 8, no fim, traz o desenho dela pronto para decisão.
+
 ---
 
 ## 1. O que existe hoje, conferido linha a linha
@@ -169,3 +176,45 @@ Duas coisas, e nenhuma delas depende de você decidir agora:
 Nada sobre backfill, nada sobre o adapter do CRM, e nada sobre ligar o motor — os três seguem
 bloqueados pelos motivos de sempre (acesso ao projeto legado, e os passos do `LIGAR.md` que
 dependem de segredo real).
+
+---
+
+## 8. A opção B, desenhada para decidir (02/10)
+
+A opção A agora existe e produz rascunhos de verdade. O passo seguinte, o agente mandar sozinho, é
+este. Nada dele está começado.
+
+**Recomendação para as quatro perguntas:**
+
+- **(a) Autônomo, mas por agente e com chave.** Cada agente ganha `autonomo boolean` (falso por
+  padrão). Com ele falso, tudo continua como na opção A. A virada é por agente, depois de ler os
+  rascunhos dele.
+- **(b) A resposta do agente PAGA quota.** O provedor conta igual, e o chip banido não distingue
+  prospecção de conversa. Contar a menos fura a invariante 3. Contar a mais só aperta a
+  prospecção, que pode esperar.
+- **(c) Janela de 24h vira trava.** Fica gravado o instante da última mensagem da pessoa por
+  identidade, e o despacho recusa a mensagem de agente fora da janela em WhatsApp e Instagram.
+  Ela vira `cancelado` com o motivo, e o rascunho volta para uma pessoa.
+- **(d) Teto por tenant.** Um limite diário de composições por cliente, contado na própria tabela
+  `rascunhos`. Passou do teto, a situação é `limite`, como já existe hoje para as trocas.
+
+**O desenho, em quatro mudanças:**
+
+1. **`messages.step_id` aceita NULL** só quando a mensagem tem `rascunho_id`. A chave
+   `(enrollment_id, step_id)` vira parcial (`WHERE step_id IS NOT NULL`), e a idempotência da
+   conversa passa a ser `UNIQUE (rascunho_id)`: um rascunho, uma mensagem, no máximo.
+2. **O gate do D40 ganha um critério POSITIVO, e só um.** Uma mensagem num enrollment encerrado por
+   `resposta` passa somente se tiver `rascunho_id` e o rascunho apontar para a ÚLTIMA resposta da
+   pessoa. Qualquer outra continua cancelada, que é o D40 de hoje. A cadência não volta a falar com
+   quem respondeu, porque mensagem de cadência nunca tem `rascunho_id`.
+3. **O caminho de envio é o mesmo.** O agente cria a mensagem pela mesma função que o agendador
+   usa, então valem a supressão no gatilho, a supressão no despacho (D39), o pool por tipo de
+   campanha e a quota (b). Nenhum envio novo fora do roteador.
+4. **A resposta da pessoa ao agente encerra o quê?** O enrollment já está encerrado. A resposta
+   nova só gera o próximo rascunho, e o `limite_trocas` passa a contar mensagens mandadas, não
+   rascunhos.
+
+**O teste que precisa existir antes de qualquer linha de B:** um enrollment encerrado por resposta,
+uma mensagem de cadência pendente (tem de ser cancelada) e uma de agente pendente (tem de sair), as
+duas na mesma passada do despacho. Esse teste prova a distinção que o D40 hoje não faz, e uma
+sabotagem que tire o `rascunho_id` do critério tem de derrubá-lo.

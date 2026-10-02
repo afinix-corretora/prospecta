@@ -10,9 +10,9 @@
     "versao": 1
   },
   "motor-worker": {
-    "digest": "2f12ff257062d4eb",
-    "em": "2026-10-02 (v5, D64; o bundle lido de volta do projeto pela própria resposta salva da MCP, sem transcrição, e comparado byte a byte, 23/23)",
-    "versao": 5
+    "digest": "a0d456c48e0f154c",
+    "em": "2026-10-02 (v6, D66; o bundle lido de volta do projeto pela própria resposta salva da MCP, sem transcrição, e comparado byte a byte, 26/26)",
+    "versao": 6
   },
   "provisionar-instancia": {
     "digest": "1da47ca63de1a86a",

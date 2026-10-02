@@ -25,6 +25,7 @@
 
 import { PROVEDORES_POR_CANAL } from '../adapters/registro.ts';
 import { PLATAFORMAS_COM_ADAPTER } from '../adapters/crm.ts';
+import { PROVEDORES_IA_COM_ADAPTER } from '../adapters/ia.ts';
 
 const linhas: string[] = [];
 const p = (s: string) => linhas.push(s);
@@ -127,6 +128,17 @@ p(`SELECT rg.confere('CRM: o catálogo e o registro dizem as mesmas plataformas'
                   EXCEPT SELECT slug FROM crm_provider_catalog WHERE tem_adapter),
   coalesce((SELECT string_agg(slug, ', ') FROM crm_provider_catalog WHERE tem_adapter), '(nenhuma no catálogo)')
   || ' x ' || (SELECT string_agg(provedor, ', ') FROM rg.crm));`);
+
+// E o terceiro par (D66): quem compõe o rascunho. Catálogo sem adapter faz o
+// agente com credencial dizer "não compõe" sem motivo; adapter sem catálogo
+// faz a fila do agente esperar para sempre por um provedor que já funciona.
+p(`CREATE TABLE rg.ia (provedor text NOT NULL);`);
+p(`INSERT INTO rg.ia (provedor) VALUES ${PROVEDORES_IA_COM_ADAPTER.map((x) => `('${x}')`).join(', ')};`);
+p(`SELECT rg.confere('IA: o catálogo e o registro dizem os mesmos provedores',
+  NOT EXISTS (SELECT slug FROM ai_provider_catalog WHERE tem_adapter EXCEPT SELECT provedor FROM rg.ia)
+  AND NOT EXISTS (SELECT provedor FROM rg.ia EXCEPT SELECT slug FROM ai_provider_catalog WHERE tem_adapter),
+  coalesce((SELECT string_agg(slug, ', ') FROM ai_provider_catalog WHERE tem_adapter), '(nenhum)')
+  || ' x ' || (SELECT string_agg(provedor, ', ') FROM rg.ia));`);
 
 p("\\echo ''");
 p("\\echo '============= CATÁLOGO x REGISTRO DE ADAPTERS ============='");

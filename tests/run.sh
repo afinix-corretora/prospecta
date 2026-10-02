@@ -127,6 +127,7 @@ rodar plataformas "$RAIZ/tests/plataformas.sql"
 rodar email_campanha "$RAIZ/tests/email_por_campanha.sql"
 rodar blacklist      "$RAIZ/tests/blacklist.sql"
 rodar crm_pipefy     "$RAIZ/tests/crm_pipefy.sql"
+rodar rascunhos      "$RAIZ/tests/rascunhos.sql"
 
 # ---------------------------------------------------------------------------
 # Adapters de canal — TypeScript, sem rede (fetch injetado).
@@ -184,6 +185,11 @@ node --experimental-strip-types --test "$RAIZ/tests/entregaveis.test.ts" \
 echo ""
 echo "→ CRM: o adapter do Pipefy, o dreno e as fontes (TypeScript)"
 node --experimental-strip-types --test "$RAIZ/tests/crm.test.ts" \
+  | grep -E "^# (tests|pass|fail)|^not ok"
+
+echo ""
+echo "→ o agente: pedido, freios e as sete saídas (TypeScript)"
+node --experimental-strip-types --test "$RAIZ/tests/agente.test.ts" \
   | grep -E "^# (tests|pass|fail)|^not ok"
 
 echo ""

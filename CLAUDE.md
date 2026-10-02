@@ -411,6 +411,15 @@ e elas têm teste automatizado obrigatório.**
   `planilha.ts` quando a segunda fonte chegou: o mesmo celular entrando como WhatsApp por uma porta e
   sumindo pela outra seria a segunda normalização do D32 (D64).
 
+- **Nunca** confiar só na instrução para frear o agente. O modelo pode desobedecer o que a
+  instrução pede; o freio em código confere o texto composto (proibido, tamanho, dado sensível,
+  escalar) e barra o rascunho, com o motivo (D66).
+- **Nunca** compor rascunho para quem está suprimido. Rascunho pronto é convite a uma pessoa
+  mandar; `respostas_para_rascunhar` exclui a pessoa e o endereço, como o despacho faz (D66).
+- **Nunca** deixar "sem rascunho" ser silêncio. Recusa, limite de trocas, falta de credencial,
+  freio, escalar e erro do provedor são situações com nome, gravadas e mostradas na tela — e erro
+  transitório não vira linha, para a próxima passada tentar de novo (D66).
+
 - **Nunca** deixar a escolha da pessoa valer só para o que ainda vai nascer. A campanha que escolhe
   o provedor de e-mail é respeitada pelo agendador E pelo despachante, e o despachante confere a
   mensagem que já está na fila — escolher num e rebalancear no outro é o D40 (D62).
@@ -541,14 +550,15 @@ e elas têm teste automatizado obrigatório.**
 > (quem abre a caixa pode estar prestes a ligar para quem acabou de pedir para sair). É leitura:
 > não há "lida" nem atribuição, porque seriam colunas sem quem as escreva.
 >
-> Os **agentes** continuam sem consumidor: `campaign_agents` e `agente_do_canal` existem, a tela da
-> campanha atribui um por canal — e **nada no motor os lê**. Resposta encerra a cadência
-> (invariante 4) e ninguém conversa depois. A tela diz isso em voz alta desde o D55; escrever um
-> editor de agente antes de existir o laço de conversa seria construir decoração com capricho.
-> O laço em si está **proposto e não decidido** em `PROPOSTA-CONVERSA.md`: encosta na invariante 4,
-> no gate do D40 (que cancela mensagem pendente em enrollment encerrado por `resposta`) e na chave
-> `(enrollment_id, step_id)`. Nenhuma das opções está começada, e começar uma sem a decisão é o
-> jeito de furar uma invariante por dentro.
+> Os **agentes** compõem desde o **D66**, e só compõem. Quando o contato responde, o agente do
+> canal da campanha escreve um rascunho com a credencial de IA escolhida nele (`adapters/ia.ts`:
+> Claude e a família "chat completions"; o Gemini fica sem adapter, dito em `tem_adapter`). Os
+> freios em `motor/agente.ts` conferem o texto composto: proibido, tamanho, pedido de CPF ou cartão,
+> e a marca de escalar. A tela de Respostas mostra o rascunho para uma pessoa copiar e mandar.
+> **Nada sai pelo motor**: as três travas que o laço autônomo encontra (invariante 4, gate do D40,
+> chave `(enrollment_id, step_id)`) continuam intocadas. Quem está suprimido nem chega ao agente.
+> A opção B, o agente mandar sozinho, está **desenhada e não decidida** em
+> `PROPOSTA-CONVERSA.md` §8, e começar sem a decisão é o jeito de furar uma invariante por dentro.
 >
 > As **cadências** ganharam tela no **D55**: até então, a única forma de existir um `flow_version`
 > era instanciar um dos sete modelos do catálogo — o schema inteiro sem porta, que é o D41 da
@@ -585,7 +595,7 @@ e elas têm teste automatizado obrigatório.**
 > **derivados do schema** cobram `tenant_id`, RLS e FK composta de toda tabela nova — lista escrita
 > à mão envelhece sem avisar, e essa já tinha perdido a `provider_servers` (D31).
 >
-> O schema está **aplicado no projeto `hucuwjvihqgftdjpnych`** (57 migrations no repositório, 63
+> O schema está **aplicado no projeto `hucuwjvihqgftdjpnych`** (58 migrations no repositório, 64
 > registros no projeto — a 55ª, que só apaga os dois classificadores sem chamador do D63, espera
 > confirmação de uma pessoa para ser aplicada (D63) — duas corretivas de texto, uma separação, duas do D46 (superfície e
 > tenant explícito), o bootstrap do tenant de teste, a corretiva de `search_path` do D54 e a do
@@ -605,15 +615,19 @@ e elas têm teste automatizado obrigatório.**
 > linha discordar. O do projeto não dá para conferir do suite (precisa de rede), então quem mexer
 > no schema confere pelo `list_migrations` junto com o `get_advisors` que já é obrigatório.
 >
-> As edge functions são cinco desde o D64. `motor-worker` está na **versão 5** desde 02/10, com o
-> dreno da outbox e a leitura das fontes de CRM (D64), e a migration que liga o `tem_adapter` do
-> Pipefy só entrou depois dela, para o catálogo nunca prometer um adapter que o worker não tinha
+> As edge functions são cinco desde o D64. `motor-worker` está na **versão 6** desde 02/10, com o
+> dreno da outbox e a leitura das fontes de CRM (D64) e os rascunhos do agente (D66). A migration
+> do D66 entrou antes dele, e aqui a ordem do D31 não se inverte: o `tem_adapter` de IA promete
+> RASCUNHO, que só o worker novo produz e que não sai para ninguém — antes dele, a promessa só
+> não era cumprida, sem efeito errado. A migration que liga o `tem_adapter` do
+> Pipefy só entrou depois do v5, para o catálogo nunca prometer um adapter que o worker não tinha
 > (D31). `crm-descobrir` está na **versão 1**, chamada pela TELA como `verificar-remetente`, com o
 > alvo lido pelo JWT de quem pediu. `canal-webhook` segue na **versão 4** (D61), e
 > `provisionar-instancia` (**versão 5**) e `verificar-remetente` (**versão 1**) seguem do D62 —
 > a porta do CRM mora em arquivos próprios (`motor/porta-crm.ts`, `_shared/banco-crm.ts`)
-> justamente para as três não mudarem de bundle. O `motor-worker` v5 foi lido de volta pela
-> resposta que a MCP salvou em arquivo, e comparado SEM transcrição (23/23); o `crm-descobrir`,
+> justamente para as três não mudarem de bundle — e a do agente (`motor/porta-agente.ts`,
+> `_shared/banco-agente.ts`) pelo mesmo motivo. O `motor-worker` v6 foi lido de volta pela
+> resposta que a MCP salvou em arquivo, e comparado SEM transcrição (26/26); o `crm-descobrir`,
 > 6/6. Quem responde pela pergunta daqui para frente são os dois
 > verificadores — `conferir-publicado.py`, no suite, pelo digest do que cada function empacota, e
 > `conferir-contra-projeto.py`, fora do suite porque precisa de rede, pela comparação com o que o
