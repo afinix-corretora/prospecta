@@ -2453,3 +2453,56 @@ cobrado pelo número de rascunhos anteriores na resposta seguinte.
 **Ficou para decidir:** a opção B, desenhada em `PROPOSTA-CONVERSA.md` §8, com recomendação para as
 quatro perguntas. A recomendação: autônomo por agente, a resposta paga quota, janela de 24h como
 trava, e teto diário por cliente.
+
+### D67 — O assistente pergunta, monta o plano, e não faz nada sozinho
+
+**O pedido.** Um menu inicial com um agente que configura tudo: pergunta por quais canais enviar,
+quantas mensagens por dia e o resto, e configura credenciais e acessos pedindo permissão à pessoa.
+
+**Por que roteiro, e não modelo de linguagem.** No primeiro acesso o cliente ainda não tem chave de
+IA, e a chave é dele (D59): o produto não tem uma própria para emprestar. Um assistente que precisa
+de IA para existir não configura o produto que ainda não tem IA. As perguntas são fixas, cada
+resposta vira uma ação concreta, e a lógica inteira (`app/src/assistente.ts`) é pura e testada sem
+rede. Uma camada de conversa livre por cima é possível depois que existir chave, mas a decisão do que
+fazer continua sendo deste roteiro.
+
+**O que ele pergunta.** Canais (o que nenhum provedor sabe enviar aparece marcado, não some, D54);
+para quem (base própria ou lista fria, porque é isso que decide o pool); quantas por dia em cada
+canal; oficial ou não oficial no WhatsApp, numa pergunta só para isso (D27); o provedor de cada
+canal, ou "usar as que já tenho"; IA; CRM; e a primeira campanha, entre os modelos do mesmo pool com
+algum canal em comum (D47).
+
+**O plano.** Cada ação é um cartão que diz o que vai acontecer **antes** do botão que faz. Nada roda
+sem "Autorizar", e a escrita sai com o JWT de quem clicou: quem decide se pode é o RLS. O
+`impedimento` só avisa antes. O cartão de chave usa a mesma função da tela do canal (`conectarConta`,
+que saiu de dentro de `Canal.tsx` para as duas não divergirem sobre o que vai para `config`, D28).
+O valor digitado vive no estado do cartão e é apagado assim que a função o recebe. O que o navegador
+guarda são as respostas, nunca um valor de campo, e o teste de ponta a ponta no navegador confere
+isso: a chave só aparece no corpo de `salvar_credencial_remetente`, nem na linha da conta nem no
+`localStorage`.
+
+**O estado é o banco.** "Onde você está" é lido a cada vez: contas, chaves, conexões, campanhas e
+contatos. Não há tabela de progresso do assistente, porque uma coluna "configurado" seria um fato sem
+quem o produza, e mentiria no dia em que alguém configurasse pela tela (D31). Sem migration.
+
+**Quanto cada conta aguenta.** O assistente propõe um ponto de partida por conta e por dia: 40 para
+chip não oficial em lista fria, 80 em base própria, 250 para o oficial, 200 por conta de e-mail e
+500 por conta de SMS. **Não é limite de provedor**, que muda com a conta e o tempo. É o número
+conservador para começar, editável no cartão. Quando o volume pedido passa do que as contas aguentam,
+o plano diz quantas contas faltam em vez de pôr uma conta só no limite. Conta só conta se for do mesmo
+pool, porque `privado.remetentes_disponiveis` escolhe por `tipo_permitido` e nada mais.
+
+**O que a sabotagem achou.** Aceitar uma opção indisponível fazia `roteiro` girar para sempre: a
+resposta era válida, mas nenhuma pergunta seguinte a lia, e a mesma pergunta voltava. Não era só
+hipótese. No dia em que o Instagram ganhar adapter, ele passaria a ser escolhível sem que o assistente
+soubesse configurá-lo. Hoje a opção fica indisponível "até o assistente saber", e `roteiro` para
+quando a mesma pergunta se repete.
+
+**Acessos de equipe ficam de fora.** Convidar outra pessoa para o cliente exige criar usuário no
+Auth, o que só a chave de serviço faz, e ela não passa pela tela. O assistente diz, em cada cartão,
+qual papel o passo exige (dono ou admin para conta, chave e CRM; operação para campanha, agente e
+importação).
+
+**Testes.** São 20 em `tests/assistente.test.ts`. Cada regra foi sabotada e derrubou pelo menos uma
+asserção: pool ignorado, famílias misturadas, opção indisponível aceita, resposta órfã chegando ao
+plano, permissão desligada e aviso de capacidade desligado.

@@ -48,7 +48,9 @@ export function Rail({ provedores }: { provedores: ProvedorCanal[] }) {
       <div className="brand"><b>Prospecta</b><span>Motor de cadência</span></div>
 
       <nav className="nav">
-        <button aria-current={atual('/')} onClick={() => nav('/')}>Campanhas</button>
+        <button aria-current={atual('/')} onClick={() => nav('/')}>Início</button>
+        <button aria-current={atual('/campanhas') || pathname.startsWith('/campanhas/')}
+                onClick={() => nav('/campanhas')}>Campanhas</button>
 
         {/* Primeiro nível, ao lado das campanhas: é a outra metade da mesma
             pergunta. A campanha diz PARA QUEM e por quais canais; a cadência

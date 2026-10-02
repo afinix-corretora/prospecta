@@ -16,6 +16,7 @@ import { Funil } from './telas/Funil';
 import { Respostas } from './telas/Respostas';
 import { Supressao } from './telas/Supressao';
 import { Writeback } from './telas/Writeback';
+import { Inicio } from './telas/Inicio';
 import {
   Canais, Config, ConfigAgentes, ConfigIA, ConfigModelos, ConfigPlataformas,
   ConfigVinculadas, Hub,
@@ -104,7 +105,11 @@ function Casca() {
       <Rail provedores={provedores} />
       <main>
         <Routes>
-          <Route path="/" element={<Hub />} />
+          {/* O assistente é a porta de entrada (D67): quem chega pela primeira
+              vez não tem o que ver no Hub, e quem já configurou vê, no topo,
+              o que está pronto — lido do banco, não guardado. */}
+          <Route path="/" element={<Inicio />} />
+          <Route path="/campanhas" element={<Hub />} />
           <Route path="/campanhas/:id" element={<Campanha />} />
           <Route path="/cadencias" element={<Cadencias />} />
           <Route path="/cadencias/:id" element={<Cadencia />} />

@@ -277,6 +277,52 @@ export async function criarRemetente(dados: {
   return data.id as string;
 }
 
+/**
+ * Conectar conta que já existe no provedor: a linha primeiro, o segredo logo
+ * depois — `salvar_credencial_remetente` precisa do remetente para saber de
+ * qual tenant e provedor ele é.
+ *
+ * Uma função só, chamada pela tela do canal e pelo assistente (D67): duas
+ * cópias deste passo seriam duas respostas para "o que vai para `config`?", e
+ * a que divergisse gravaria segredo em coluna (D28). O que se separa aqui é só
+ * o que NÃO é segredo; tudo o que foi digitado vai para a função, e é ela que
+ * lê o catálogo e decide.
+ */
+export async function conectarConta(dados: {
+  tenant: string; canal: string; provedor: Pick<ProvedorCanal, 'slug' | 'campos'>;
+  identificador: string; apelido: string; tipo: 'morna' | 'fria'; quota: number;
+  valores: Record<string, string>;
+}): Promise<string> {
+  const { provedor: p, valores } = dados;
+  const config = Object.fromEntries(
+    p.campos.filter((c) => !c.segredo && valores[c.chave]).map((c) => [c.chave, valores[c.chave]!]),
+  );
+  const id = await criarRemetente({
+    tenant: dados.tenant, canal: dados.canal, provedor: p.slug,
+    identificador: dados.identificador, apelido: dados.apelido,
+    tipo: dados.tipo, quota: dados.quota, config,
+  });
+  const segredos = Object.fromEntries(
+    p.campos.filter((c) => valores[c.chave]).map((c) => [c.chave, valores[c.chave]!]),
+  );
+  await salvarCredencial(id, segredos);
+  return id;
+}
+
+/** A quota é das três colunas de `sender_accounts` que a grade deixa a tela
+ *  escrever (D54). O teto de verdade é o banco que aplica. */
+export async function ajustarQuota(id: string, quota: number) {
+  const { error } = await sb.from('sender_accounts').update({ quota_diaria: quota }).eq('id', id);
+  if (error) throw error;
+}
+
+/** Só a contagem: a lista de contatos é da tela de contatos. */
+export async function contarContatos(): Promise<number> {
+  const { count, error } = await sb.from('contacts').select('id', { count: 'exact', head: true });
+  if (error) throw error;
+  return count ?? 0;
+}
+
 export interface InstanciaCriada {
   ok: boolean;
   erro?: string;

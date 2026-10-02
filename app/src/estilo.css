@@ -350,3 +350,47 @@ button.item:hover { border-color: var(--line-strong); transform: translateX(2px)
   border: 1px solid var(--line); border-radius: 7px;
   background: var(--surface); color: var(--ink-2);
 }
+
+/* Início: o assistente de configuração (D67). A conversa é uma coluna de
+   balões — pergunta à esquerda, resposta à direita — e o plano é uma pilha de
+   cartões, cada um com o que vai fazer ANTES do botão que faz. */
+.marca {
+  width: 22px; height: 22px; flex: none; border-radius: 999px; display: grid; place-items: center;
+  border: 1.5px solid var(--line-strong); font-size: 12px; font-weight: 700; color: var(--ok-ink);
+}
+.marca.ok { background: var(--ok); border-color: transparent }
+.conversa { display: grid; gap: 14px }
+.troca { display: grid; gap: 8px }
+.balao {
+  max-width: min(640px, 92%); padding: 10px 14px; border-radius: 14px; font-size: 13.5px; line-height: 1.5;
+}
+.balao.ass { background: var(--surface-2); border-top-left-radius: 4px; justify-self: start }
+.balao.pes {
+  background: var(--accent-soft); border-top-right-radius: 4px; justify-self: end;
+  display: flex; gap: 12px; align-items: baseline;
+}
+.balao.pes .link { font-size: 12px }
+.ajuda-balao { margin: 6px 0 0; font-size: 12px; color: var(--ink-3) }
+.painel.resposta { max-width: 760px }
+.opt[disabled] { opacity: .55; cursor: not-allowed }
+.opt[disabled]:hover { border-color: var(--line) }
+.opt b .chip { margin-left: 8px; background: var(--ok-soft); color: var(--ok) }
+.cartoes { display: grid; gap: 12px; margin-top: 12px }
+.cartao.feito { border-color: var(--ok) }
+.cartao.pulado { opacity: .65 }
+.cartao-cabeca { display: flex; align-items: center; gap: 10px }
+.cartao-cabeca b { flex: 1; font-size: 14px }
+.cartao-cabeca .num {
+  width: 24px; height: 24px; border-radius: 999px; display: grid; place-items: center; flex: none;
+  background: var(--surface-2); font-size: 12px; font-weight: 600;
+}
+.cartao.feito .num { background: var(--ok); color: var(--ok-ink) }
+.cartao .se { margin: 12px 0 4px; font-size: 12px; color: var(--ink-3); text-transform: uppercase; letter-spacing: .04em }
+.cartao .efeitos { margin: 0 0 14px; padding-left: 18px; font-size: 13px; color: var(--ink-2); line-height: 1.55 }
+.cartao .resultado { margin: 10px 0; font-size: 13px; color: var(--ink-2) }
+.acoes-cartao { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px }
+@media (max-width: 860px) {
+  .balao { max-width: 100% }
+  .balao.pes { flex-direction: column; gap: 4px }
+}
+.sec .link { font-size: 12px; color: var(--accent) }

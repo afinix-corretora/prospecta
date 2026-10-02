@@ -193,6 +193,11 @@ node --experimental-strip-types --test "$RAIZ/tests/agente.test.ts" \
   | grep -E "^# (tests|pass|fail)|^not ok"
 
 echo ""
+echo "→ o assistente de configuração: perguntas, plano e permissão (TypeScript)"
+node --experimental-strip-types --test "$RAIZ/tests/assistente.test.ts" \
+  | grep -E "^# (tests|pass|fail)|^not ok"
+
+echo ""
 echo "→ o que a tela lê como variável de template (TypeScript)"
 node --experimental-strip-types --test "$RAIZ/tests/variaveis.test.ts" \
   | grep -E "^# (tests|pass|fail)|^not ok"

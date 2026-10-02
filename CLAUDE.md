@@ -420,6 +420,17 @@ e elas têm teste automatizado obrigatório.**
   freio, escalar e erro do provedor são situações com nome, gravadas e mostradas na tela — e erro
   transitório não vira linha, para a próxima passada tentar de novo (D66).
 
+- **Nunca** deixar o assistente executar o que a pessoa não autorizou. Cada passo é um cartão que
+  diz o que vai acontecer ANTES do botão, e a escrita sai com o JWT de quem clicou — o RLS decide,
+  o assistente só avisa antes (D67).
+- **Nunca** deixar uma chave passar pelo assistente. O valor vive no estado do cartão, vai para a
+  mesma função da tela do canal e some; o que o navegador guarda são respostas, nunca valor de campo
+  (D67).
+- **Nunca** guardar o progresso do assistente numa tabela. "O que está pronto" é lido do banco a cada
+  vez; uma coluna "configurado" mentiria no dia em que alguém configurasse pela tela (D67).
+- **Nunca** aceitar uma resposta que nenhuma pergunta seguinte lê. Foi o laço infinito que a
+  sabotagem do D67 achou: canal escolhível que o assistente não configura (D67).
+
 - **Nunca** deixar a escolha da pessoa valer só para o que ainda vai nascer. A campanha que escolhe
   o provedor de e-mail é respeitada pelo agendador E pelo despachante, e o despachante confere a
   mensagem que já está na fila — escolher num e rebalancear no outro é o D40 (D62).
@@ -559,6 +570,13 @@ e elas têm teste automatizado obrigatório.**
 > chave `(enrollment_id, step_id)`) continuam intocadas. Quem está suprimido nem chega ao agente.
 > A opção B, o agente mandar sozinho, está **desenhada e não decidida** em
 > `PROPOSTA-CONVERSA.md` §8, e começar sem a decisão é o jeito de furar uma invariante por dentro.
+>
+> O **Início** é o assistente de configuração desde o **D67**: pergunta canais, tipo de lista,
+> volume por dia, provedor, IA, CRM e primeira campanha, e devolve um plano de cartões que só roda
+> com "Autorizar". É um roteiro, não um modelo de linguagem — no primeiro acesso não há chave de IA, e
+> ela é do cliente (D59). A lógica é pura (`app/src/assistente.ts`, `tests/assistente.test.ts`), o
+> estado é o banco, e a chave vai pela mesma `conectarConta` da tela do canal. O Hub de campanhas
+> mudou para `/campanhas`.
 >
 > As **cadências** ganharam tela no **D55**: até então, a única forma de existir um `flow_version`
 > era instanciar um dos sete modelos do catálogo — o schema inteiro sem porta, que é o D41 da

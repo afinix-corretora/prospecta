@@ -3,8 +3,8 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { useSessao } from '../sessao';
 import { mensagemDeErro, BASE_FUNCOES } from '../supabase';
 import {
-  alternarRemetente, criarRemetente, lerProvedoresCanal, lerRemetentes, lerServidores,
-  provisionarInstancia, removerRemetente, salvarCredencial, salvarServidor, verificarRemetente,
+  alternarRemetente, conectarConta, lerProvedoresCanal, lerRemetentes, lerServidores,
+  provisionarInstancia, removerRemetente, salvarServidor, verificarRemetente,
 } from '../dados';
 import type { ProvedorCanal, Remetente, Servidor } from '../dados';
 import {
@@ -466,20 +466,11 @@ export function ConectarConta(props: {
     if (!p) return;
     setMsg(null); setEstado('salvando');
     try {
-      // A linha primeiro, o segredo logo depois: `salvar_credencial_remetente`
-      // precisa de um remetente para saber de qual tenant e provedor é.
-      const config = Object.fromEntries(
-        p.campos.filter((c) => !c.segredo && valores[c.chave]).map((c) => [c.chave, valores[c.chave]!]),
-      );
-      const id = await criarRemetente({
-        tenant: props.tenant, canal: props.canal, provedor: p.slug,
+      await conectarConta({
+        tenant: props.tenant, canal: props.canal, provedor: p,
         identificador: base.identificador, apelido: base.apelido,
-        tipo: base.tipo, quota: Number(base.quota) || 1, config,
+        tipo: base.tipo, quota: Number(base.quota) || 1, valores,
       });
-      const segredos = Object.fromEntries(
-        p.campos.filter((c) => valores[c.chave]).map((c) => [c.chave, valores[c.chave]!]),
-      );
-      await salvarCredencial(id, segredos);
       setMsg({ tipo: 'ok', texto: 'Conta conectada. O segredo foi para o Vault.' });
       setValores({}); setBase({ ...base, apelido: '', identificador: '' });
       await props.aoMudar();
