@@ -622,9 +622,10 @@ e elas têm teste automatizado obrigatório.**
 > **derivados do schema** cobram `tenant_id`, RLS e FK composta de toda tabela nova — lista escrita
 > à mão envelhece sem avisar, e essa já tinha perdido a `provider_servers` (D31).
 >
-> O schema está **aplicado no projeto `hucuwjvihqgftdjpnych`** (59 migrations no repositório, 65
-> registros no projeto — a 55ª, que só apaga os dois classificadores sem chamador do D63, espera
-> confirmação de uma pessoa para ser aplicada (D63) — duas corretivas de texto, uma separação, duas do D46 (superfície e
+> O schema está **aplicado no projeto `hucuwjvihqgftdjpnych`** (59 migrations no repositório, 66
+> registros no projeto — a 55ª, que só apaga os dois classificadores sem chamador do D63, entrou em
+> 05/10 pelo SQL Editor, porque o DROP pelo MCP espera uma confirmação que não chega à sessão remota
+> (D63) — duas corretivas de texto, uma separação, duas do D46 (superfície e
 > tenant explícito), o bootstrap do tenant de teste, a corretiva de `search_path` do D54 e a do
 > corpo da função no D59, ver D32, D39, D46, D53, D54 e D59; as duas do D59 entraram em 26/09 (mais
 > a corretiva, que é o terceiro registro e não existe como arquivo — o repositório já traz o corpo

@@ -2275,8 +2275,14 @@ elas não mudam comportamento nenhum enquanto esperam.
 **Estado.** A primeira migration está aplicada no projeto (61º registro): 32 termos semeados no
 tenant que existe, grade conferida (UPDATE só em `termo, exige_uma_de, acao, nota, ativo`; nada para
 anon), e "Não tenho interesse, obrigado" classificado como `suprimir`. O `get_advisors` só
-acrescentou `testar_blacklist` à família WARN de DEFINER chamáveis pela tela. **Pendente:** a segunda
-migration, que precisa da confirmação de alguém na hora de aplicar.
+acrescentou `testar_blacklist` à família WARN de DEFINER chamáveis pela tela.
+
+**A segunda, em 05/10.** Aprovada pelo usuário, ela estourou o tempo duas vezes pelo MCP sem aplicar
+nada: a confirmação que o DROP espera não chega a uma sessão remota. Disfarçar o DROP para passar pela
+trava não é opção — a trava existe para uma pessoa olhar. Quem aplicou foi o usuário, no SQL Editor, com
+o `INSERT` em `supabase_migrations.schema_migrations` junto, para o registro existir como o das outras
+(66º, versão `20261005150043`). Antes, conferido no projeto que nenhuma função, view, dependência ou job
+do `pg_cron` chamava as duas; depois, funções 0 e `get_advisors` sem nada novo.
 
 ### D64 — O CRM recebe o fato, e entrega contatos
 
