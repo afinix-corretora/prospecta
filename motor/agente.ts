@@ -1,15 +1,21 @@
-// O agente compõe; uma pessoa decide (D66).
+// O agente compõe (D66) e, desde o D69, responde sozinho.
 //
 // Para cada resposta que espera rascunho, uma de sete saídas, e só uma delas
 // tem texto:
 //
 //   recusa          a blacklist do cliente diz que é recusa: não se insiste
-//   limite          a conversa já passou de `limite_trocas`: é hora de gente
+//   limite          a conversa já passou de `limite_trocas`, ou o cliente já
+//                   passou do teto diário de composições: é hora de gente
 //   sem_credencial  o agente não tem com que compor, e isso é dito
 //   escalar        o modelo reconheceu um caso de `escalar_quando`
 //   bloqueado       o texto saiu, e um freio o barrou
 //   erro            o provedor recusou de vez (chave, modelo, recusa)
-//   pronto          o rascunho, para uma pessoa ler e mandar
+//   pronto          o texto, que passou por todos os freios
+//
+// O pronto de agente autônomo vai para a fila do motor (`enfileirarResposta`),
+// e é o banco quem decide se sai: supressão, janela de 24h, a conta que
+// conversa, a quota. O que ele não manda volta para uma pessoa com o motivo.
+// O de agente não autônomo fica para uma pessoa, como no D66.
 //
 // Os freios moram AQUI, em código, e não só na instrução: o modelo pode
 // desobedecer a instrução, o freio não. A instrução diz ao modelo o que não
@@ -20,7 +26,7 @@
 import type { Buscador } from '../adapters/tipos.ts';
 import type { ModeloIA } from '../adapters/ia.ts';
 import { criarIa } from '../adapters/ia.ts';
-import type { BancoAgente, RespostaParaRascunhar, Situacao } from './porta-agente.ts';
+import type { BancoAgente, Envio, RespostaParaRascunhar, Situacao } from './porta-agente.ts';
 
 /** A palavra que o modelo devolve, sozinha, quando o caso é de uma pessoa. */
 export const MARCA_ESCALAR = '[ESCALAR]';
@@ -101,20 +107,32 @@ export interface ResumoRascunhos {
   readonly lidas: number;
   readonly porSituacao: Partial<Record<Situacao, number>>;
   readonly adiadas: number;
+  /** D69: para onde foi cada texto pronto. */
+  readonly envio: Partial<Record<Envio, number>>;
+  /** D69: prontos que não puderam ser enfileirados (erro do banco): ficam com uma pessoa. */
+  readonly falhasNoEnvio: number;
 }
 
 export interface OpcoesAgente {
   readonly buscar?: Buscador;
   readonly criar?: (provedor: string, buscar?: Buscador) => ModeloIA;
+  /** O modo da passada. Em `simulado` a resposta do agente nasce simulada, como a cadência (D36). */
+  readonly modo?: 'simulado' | 'real';
 }
 
 export async function rascunharRespostas(
   banco: BancoAgente, limite: number, opcoes: OpcoesAgente = {},
 ): Promise<ResumoRascunhos> {
   const criar = opcoes.criar ?? criarIa;
+  const modo = opcoes.modo ?? 'simulado';
   const respostas = await banco.respostasParaRascunhar(limite);
   const porSituacao: Partial<Record<Situacao, number>> = {};
+  const envio: Partial<Record<Envio, number>> = {};
   let adiadas = 0;
+  let falhasNoEnvio = 0;
+  // O teto vem do banco como fotografia do começo da passada; o que esta
+  // passada compõe soma por cima, senão um lote grande passaria do teto.
+  const compostasAgora = new Map<string, number>();
 
   const registrar = async (r: RespostaParaRascunhar, s: Situacao, texto: string | null, motivo: string | null) => {
     await banco.registrarRascunho(r.message_event_id, r.agent_id, s, texto, motivo, r.modelo);
@@ -134,14 +152,24 @@ export async function rascunharRespostas(
       continue;
     }
     if (!r.credencial_id || !r.provedor || !r.modelo) {
-      await registrar(r, 'sem_credencial', null, `o agente ${r.agente_nome} não tem credencial de IA escolhida`);
+      await registrar(r, 'sem_credencial', null,
+        `nem a campanha nem o agente ${r.agente_nome} têm conta de IA escolhida`);
       continue;
     }
     if (!r.provedor_compoe) {
       await registrar(r, 'sem_credencial', null,
-        `a credencial do agente está desligada, ou ${r.provedor} ainda não tem adapter de rascunho`);
+        `a conta de IA escolhida está desligada, ou ${r.provedor} ainda não tem adapter de rascunho`);
       continue;
     }
+    // (d) O teto do cliente. Custa zero conferir, e passar dele é o modelo
+    // sendo chamado sem ninguém ter decidido gastar.
+    const jaCompostas = r.composicoes_hoje + (compostasAgora.get(r.tenant_id) ?? 0);
+    if (jaCompostas >= r.teto) {
+      await registrar(r, 'limite', null,
+        `o cliente já fez ${jaCompostas} composições nas últimas 24h, e o teto é ${r.teto}: é hora de uma pessoa`);
+      continue;
+    }
+    compostasAgora.set(r.tenant_id, (compostasAgora.get(r.tenant_id) ?? 0) + 1);
 
     let resultado;
     try {
@@ -165,9 +193,28 @@ export async function rascunharRespostas(
     }
 
     const freio = aplicarFreios(resultado.texto, r);
-    if (freio.situacao === 'pronto') await registrar(r, 'pronto', freio.texto, null);
-    else await registrar(r, freio.situacao, null, freio.motivo);
+    if (freio.situacao !== 'pronto') {
+      await registrar(r, freio.situacao, null, freio.motivo);
+      continue;
+    }
+    await registrar(r, 'pronto', freio.texto, null);
+
+    // D69: o texto passou por todos os freios. Agente autônomo manda; o banco
+    // tem a última palavra sobre o como.
+    if (!r.autonomo) {
+      envio.pessoa = (envio.pessoa ?? 0) + 1;
+      continue;
+    }
+    try {
+      const destino = await banco.enfileirarResposta(r.message_event_id, modo);
+      envio[destino] = (envio[destino] ?? 0) + 1;
+    } catch (e) {
+      // O rascunho já está gravado e continua visível na tela de Respostas:
+      // a falha deixa o texto com uma pessoa, e é contada para a passada dizer.
+      console.error('[agente] enfileirar', r.message_event_id, e);
+      falhasNoEnvio += 1;
+    }
   }
 
-  return { lidas: respostas.length, porSituacao, adiadas };
+  return { lidas: respostas.length, porSituacao, adiadas, envio, falhasNoEnvio };
 }

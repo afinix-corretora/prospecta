@@ -181,8 +181,12 @@ dependem de segredo real).
 
 ## 8. A opção B, desenhada para decidir (02/10)
 
+> **Decidida em 05/10 e construída no D69** (`DECISOES.md`). As quatro respostas abaixo valeram como
+> recomendadas, com a autonomia LIGADA por padrão. Uma regra entrou que este desenho não tinha: a
+> resposta sai pela conta que conversa com a pessoa e nunca é rebalanceada.
+
 A opção A agora existe e produz rascunhos de verdade. O passo seguinte, o agente mandar sozinho, é
-este. Nada dele está começado.
+este.
 
 **Recomendação para as quatro perguntas:**
 

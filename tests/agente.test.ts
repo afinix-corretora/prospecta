@@ -1,4 +1,5 @@
-// O agente sem rede (D66): o pedido ao modelo, os freios e as sete saídas.
+// O agente sem rede (D66, D69): o pedido ao modelo, os freios, as sete saídas
+// e, desde o D69, o que vai para a fila do motor.
 //
 // As asserções que importam são as que o modelo não controla: que a recusa,
 // o limite e a falta de credencial não chamam modelo nenhum; que o freio
@@ -10,7 +11,7 @@ import assert from 'node:assert/strict';
 import { criarIa, PROVEDORES_IA_COM_ADAPTER } from '../adapters/ia.ts';
 import type { ModeloIA, PedidoDeComposicao } from '../adapters/ia.ts';
 import { aplicarFreios, montarPedido, MARCA_ESCALAR, rascunharRespostas } from '../motor/agente.ts';
-import type { BancoAgente, RespostaParaRascunhar, Situacao } from '../motor/porta-agente.ts';
+import type { BancoAgente, Envio, RespostaParaRascunhar, Situacao } from '../motor/porta-agente.ts';
 
 const BASE: RespostaParaRascunhar = {
   message_event_id: 'ev1', tenant_id: 't', contact_id: 'c', canal: 'whatsapp',
@@ -23,6 +24,7 @@ const BASE: RespostaParaRascunhar = {
   contato_nome: 'Marina', metadados: { plano: 'Amil', idade: 42 }, campanha: 'Resgate Outubro',
   historico: [{ de: 'nos', texto: 'Oi Marina, ainda pensa no plano?' }, { de: 'pessoa', texto: 'Quanto fica para mim e minha esposa?' }],
   rascunhos_anteriores: 0,
+  autonomo: true, composicoes_hoje: 0, teto: 200,
 };
 
 // ---------------------------------------------------------------------------
@@ -75,15 +77,21 @@ test('freio: pedido de CPF ou cartão nunca vira rascunho, seja qual for a instr
 // As sete saídas
 // ---------------------------------------------------------------------------
 
-function banco(respostas: RespostaParaRascunhar[]) {
+function banco(respostas: RespostaParaRascunhar[], destino: Envio | Error = 'fila') {
   const gravados: { ev: string; s: Situacao; texto: string | null; motivo: string | null }[] = [];
+  const enfileirados: { ev: string; modo: string }[] = [];
   let segredos = 0;
   const b: BancoAgente = {
     async respostasParaRascunhar() { return respostas; },
     async credenciaisDaIa() { segredos += 1; return { api_key: 'sk-ant-x' }; },
     async registrarRascunho(ev, _a, s, texto, motivo) { gravados.push({ ev, s, texto, motivo }); },
+    async enfileirarResposta(ev, modo) {
+      enfileirados.push({ ev, modo });
+      if (destino instanceof Error) throw destino;
+      return destino;
+    },
   };
-  return { b, gravados, segredos: () => segredos };
+  return { b, gravados, enfileirados, segredos: () => segredos };
 }
 
 class IaFalsa implements ModeloIA {
@@ -135,6 +143,75 @@ test('saídas: erro definitivo fica gravado; transitório não vira linha', asyn
 // ---------------------------------------------------------------------------
 // Os protocolos
 // ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
+// D69: o agente responde sozinho
+// ---------------------------------------------------------------------------
+
+test('autônomo: o pronto vai para a fila, no modo da passada', async () => {
+  const { b, enfileirados } = banco([BASE]);
+  const r = await rascunharRespostas(b, 10, { criar: () => new IaFalsa({ ok: true, texto: 'Qual a idade de vocês?' }), modo: 'real' });
+  assert.deepEqual(enfileirados, [{ ev: 'ev1', modo: 'real' }]);
+  assert.deepEqual(r.envio, { fila: 1 });
+});
+
+test('autônomo: sem modo, a passada é simulada (shadow mode por padrão)', async () => {
+  const { b, enfileirados } = banco([BASE]);
+  await rascunharRespostas(b, 10, { criar: () => new IaFalsa({ ok: true, texto: 'Qual a idade de vocês?' }) });
+  assert.equal(enfileirados[0]!.modo, 'simulado');
+});
+
+test('não autônomo: o pronto fica com uma pessoa e nada é enfileirado (D66)', async () => {
+  const { b, enfileirados, gravados } = banco([{ ...BASE, autonomo: false }]);
+  const r = await rascunharRespostas(b, 10, { criar: () => new IaFalsa({ ok: true, texto: 'Qual a idade de vocês?' }) });
+  assert.equal(enfileirados.length, 0);
+  assert.equal(gravados[0]!.s, 'pronto');
+  assert.deepEqual(r.envio, { pessoa: 1 });
+});
+
+test('o que um freio barrou nunca é enfileirado, nem o caso de escalar', async () => {
+  const barrado = banco([BASE]);
+  await rascunharRespostas(barrado.b, 10, { criar: () => new IaFalsa({ ok: true, texto: 'Me passa seu CPF?' }) });
+  const escalar = banco([BASE]);
+  await rascunharRespostas(escalar.b, 10, { criar: () => new IaFalsa({ ok: true, texto: MARCA_ESCALAR }) });
+  assert.equal(barrado.enfileirados.length + escalar.enfileirados.length, 0);
+});
+
+test('o banco devolve: a passada conta, e o rascunho continua gravado', async () => {
+  const { b, gravados } = banco([BASE], 'devolvido');
+  const r = await rascunharRespostas(b, 10, { criar: () => new IaFalsa({ ok: true, texto: 'Qual a idade?' }) });
+  assert.deepEqual(r.envio, { devolvido: 1 });
+  assert.equal(gravados[0]!.s, 'pronto');
+});
+
+test('enfileirar falhou: o texto fica com uma pessoa, e a falha é contada', async () => {
+  const { b, gravados } = banco([BASE], new Error('rede'));
+  const r = await rascunharRespostas(b, 10, { criar: () => new IaFalsa({ ok: true, texto: 'Qual a idade?' }) });
+  assert.equal(r.falhasNoEnvio, 1);
+  assert.equal(gravados[0]!.s, 'pronto');
+});
+
+test('teto do cliente: no teto, não chama modelo e diz por quê', async () => {
+  const ia = new IaFalsa({ ok: true, texto: 'oi' });
+  const { b, gravados, segredos } = banco([{ ...BASE, composicoes_hoje: 200, teto: 200 }]);
+  await rascunharRespostas(b, 10, { criar: () => ia });
+  assert.equal(ia.pedidos.length, 0);
+  assert.equal(segredos(), 0);
+  assert.equal(gravados[0]!.s, 'limite');
+  assert.match(gravados[0]!.motivo!, /teto é 200/);
+});
+
+test('teto do cliente: o lote soma por cima da fotografia do banco', async () => {
+  const ia = new IaFalsa({ ok: true, texto: 'Qual a idade?' });
+  const { b, gravados } = banco([
+    { ...BASE, message_event_id: 'a', composicoes_hoje: 1, teto: 2 },
+    { ...BASE, message_event_id: 'b', composicoes_hoje: 1, teto: 2 },
+    { ...BASE, message_event_id: 'c', tenant_id: 'outro', composicoes_hoje: 1, teto: 2 },
+  ]);
+  await rascunharRespostas(b, 10, { criar: () => ia });
+  assert.deepEqual(gravados.map((g) => [g.ev, g.s]), [['a', 'pronto'], ['b', 'limite'], ['c', 'pronto']]);
+  assert.equal(ia.pedidos.length, 2, 'o teto é por cliente, não da passada inteira');
+});
 
 function buscador(status: number, corpo: unknown) {
   const chamadas: { url: string; headers: Headers; corpo: Record<string, unknown> }[] = [];

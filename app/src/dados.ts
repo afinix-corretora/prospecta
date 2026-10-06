@@ -111,6 +111,8 @@ export interface Agente {
   proibido: string[];
   tamanho_maximo: number;
   ativo: boolean;
+  /** D69: o texto pronto sai sozinho pelo motor. Desligado, fica para uma pessoa (D66). */
+  autonomo: boolean;
 }
 
 export interface CredencialIA {
@@ -226,7 +228,7 @@ export const lerModelos = () =>
 export const lerAgentes = () =>
   tabela<Agente>('agents',
     'id, nome, canal, papel, descricao, instrucoes, escalar_quando, limite_trocas, pronto, tenant_id, ' +
-    'ai_credential_id, proibido, tamanho_maximo, ativo');
+    'ai_credential_id, proibido, tamanho_maximo, ativo, autonomo');
 
 // ---------------------------------------------------------------------------
 // Escritas
@@ -1250,7 +1252,8 @@ export interface MensagemComposta {
   contato: string;
   canal: ProvedorCanal['canal'];
   destino: string;
-  passo: number;
+  /** Nulo na mensagem do agente (D69): ela responde, não é passo de cadência. */
+  passo: number | null;
   status: EventoDaCampanha['status'];
   remetente: string;
   conteudo: string;
@@ -1410,7 +1413,11 @@ export async function lerWritebacksSaidos(limite = 20): Promise<WritebackSaido[]
 
 export type SituacaoRascunho = 'pronto' | 'recusa' | 'escalar' | 'bloqueado' | 'limite' | 'sem_credencial' | 'erro';
 
+/** Para onde foi o texto pronto (D69). */
+export type EnvioRascunho = 'pessoa' | 'fila' | 'devolvido';
+
 export interface Rascunho {
+  id: string;
   contact_id: string;
   agent_id: string | null;
   resposta_em: string;
@@ -1418,21 +1425,36 @@ export interface Rascunho {
   texto: string | null;
   motivo: string | null;
   modelo: string | null;
+  envio: EnvioRascunho;
+  envio_motivo: string | null;
+  /** O status da mensagem do agente, quando o texto foi para a fila. */
+  mensagem_status: string | null;
 }
 
 /** Os rascunhos recentes. A tela casa cada um com a resposta pelo contato e
- *  pelo instante, que vêm da mesma linha de `message_events`. */
+ *  pelo instante, que vêm da mesma linha de `message_events`. Desde o D69,
+ *  com o status da mensagem que o agente mandou — "na fila" não é "enviado". */
 export async function lerRascunhos(limite = 300): Promise<Rascunho[]> {
   const { data, error } = await sb.from('rascunhos')
-    .select('contact_id, agent_id, resposta_em, situacao, texto, motivo, modelo')
+    .select('id, contact_id, agent_id, resposta_em, situacao, texto, motivo, modelo, envio, envio_motivo')
     .order('resposta_em', { ascending: false }).limit(limite);
   if (error) throw error;
-  return (data ?? []) as Rascunho[];
+  const lista = (data ?? []) as Omit<Rascunho, 'mensagem_status'>[];
+  const naFila = lista.filter((r) => r.envio === 'fila').map((r) => r.id);
+  const status = new Map<string, string>();
+  if (naFila.length) {
+    const { data: msgs, error: e2 } = await sb.from('messages')
+      .select('rascunho_id, status').in('rascunho_id', naFila);
+    if (e2) throw e2;
+    for (const m of (msgs ?? []) as { rascunho_id: string; status: string }[]) status.set(m.rascunho_id, m.status);
+  }
+  return lista.map((r) => ({ ...r, mensagem_status: status.get(r.id) ?? null }));
 }
 
 /** Só as colunas que a grade deixa a tela escrever (D66). */
 export async function salvarAgente(id: string, campos: Pick<Agente,
-  'instrucoes' | 'escalar_quando' | 'limite_trocas' | 'tamanho_maximo' | 'proibido' | 'ai_credential_id' | 'ativo'>) {
+  'instrucoes' | 'escalar_quando' | 'limite_trocas' | 'tamanho_maximo' | 'proibido' | 'ai_credential_id' | 'ativo'
+  | 'autonomo'>) {
   const { error } = await sb.from('agents').update(campos).eq('id', id);
   if (error) throw error;
 }

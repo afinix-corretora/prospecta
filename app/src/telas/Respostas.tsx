@@ -17,8 +17,12 @@
  * aplicativo do canal, e é isso que a tela diz.
  *
  * Desde o D66 cada resposta pode trazer o rascunho do agente da campanha: o
- * texto pronto para copiar, ou o motivo de não haver texto. Continua leitura —
- * o rascunho não sai sozinho, e a tela não finge que saiu.
+ * texto pronto para copiar, ou o motivo de não haver texto.
+ *
+ * Desde o D69 o agente pode responder sozinho, e a tela diz o que aconteceu
+ * com cada texto pela mensagem de verdade, não pelo desejo: "na fila",
+ * "enviado", "simulado" — ou devolvido para uma pessoa, com o motivo e o texto
+ * para copiar. A tela continua leitura: quem decide se sai é o motor.
  */
 import { useEffect, useState } from 'react';
 import { useSessao } from '../sessao';
@@ -55,9 +59,10 @@ export function Respostas() {
     <div className="wrap">
       <div className="cabeca"><div>
         <h1>Respostas</h1>
-        <p>O que voltou dos contatos. Responder é com você, no aplicativo do canal. Quando a
-           campanha tem agente, ele deixa um rascunho embaixo da resposta — para você ler,
-           ajustar e mandar. Nada sai sozinho.</p>
+        <p>O que voltou dos contatos, e o que o agente fez com cada resposta. Agente que
+           responde sozinho manda pelo motor; o que ele não pôde mandar volta para você, com o
+           motivo e o texto. Agente que não responde sozinho deixa o rascunho para você ler,
+           ajustar e mandar pelo aplicativo do canal.</p>
       </div></div>
 
       {erro && <Aviso tipo="erro">{erro}</Aviso>}
@@ -184,6 +189,16 @@ const POR_QUE_NAO: Record<Exclude<SituacaoRascunho, 'pronto'>, string> = {
   erro: 'O provedor de IA recusou compor.',
 };
 
+/** O que aconteceu com a mensagem que o agente mandou (D69). Lido da mensagem,
+ *  não do rascunho: "foi para a fila" não é "saiu". */
+const ESTADO_DA_MENSAGEM: Record<string, string> = {
+  pendente: 'na fila do motor — sai na próxima passada',
+  enviado: 'enviada pelo agente',
+  simulado: 'simulada — o motor está em shadow mode, nada saiu',
+  falha: 'o provedor recusou o envio',
+  cancelado: 'cancelada antes de sair',
+};
+
 /** O rascunho embaixo da resposta: o texto para copiar, ou o porquê de não haver. */
 function RascunhoDaResposta({ r }: { r?: Rascunho }) {
   const [copiado, setCopiado] = useState(false);
@@ -196,19 +211,26 @@ function RascunhoDaResposta({ r }: { r?: Rascunho }) {
     );
   }
   const texto = r.texto;
+  const foiPelaFila = r.envio === 'fila';
+  const rotulo = foiPelaFila
+    ? `Resposta do agente${r.modelo ? ` · ${r.modelo}` : ''} — ${ESTADO_DA_MENSAGEM[r.mensagem_status ?? ''] ?? 'na fila do motor'}`
+    : r.envio === 'devolvido'
+      ? `Voltou para você: ${r.envio_motivo ?? 'o motor não mandou'}`
+      : `Rascunho do agente${r.modelo ? ` · ${r.modelo}` : ''} — não enviado`;
   return (
-    <div style={{ margin: '8px 0 0', padding: '8px 10px', border: '1px dashed var(--line)', borderRadius: 8 }}>
+    <div style={{ margin: '8px 0 0', padding: '8px 10px', borderRadius: 8,
+                  border: foiPelaFila ? '1px solid var(--line)' : '1px dashed var(--line)' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, alignItems: 'baseline' }}>
-        <span style={{ fontSize: 11, color: 'var(--ink-3)' }}>
-          Rascunho do agente{r.modelo ? ` · ${r.modelo}` : ''} — não enviado
+        <span style={{ fontSize: 11, color: r.envio === 'devolvido' ? 'var(--warn)' : 'var(--ink-3)' }}>
+          {rotulo}
         </span>
-        <button className="btn" style={{ fontSize: 11, padding: '2px 8px' }}
+        {!foiPelaFila && <button className="btn" style={{ fontSize: 11, padding: '2px 8px' }}
                 onClick={async () => {
                   try { await navigator.clipboard.writeText(texto); } catch { /* o texto segue à vista */ }
                   setCopiado(true); setTimeout(() => setCopiado(false), 1200);
                 }}>
           {copiado ? 'copiado' : 'Copiar'}
-        </button>
+        </button>}
       </div>
       <p style={{ margin: '4px 0 0', color: 'var(--ink)', whiteSpace: 'pre-wrap' }}>{texto}</p>
     </div>

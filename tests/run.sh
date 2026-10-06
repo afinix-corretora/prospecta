@@ -128,6 +128,7 @@ rodar email_campanha "$RAIZ/tests/email_por_campanha.sql"
 rodar blacklist      "$RAIZ/tests/blacklist.sql"
 rodar crm_pipefy     "$RAIZ/tests/crm_pipefy.sql"
 rodar rascunhos      "$RAIZ/tests/rascunhos.sql"
+rodar agente_responde "$RAIZ/tests/agente_responde.sql"
 
 # ---------------------------------------------------------------------------
 # Adapters de canal — TypeScript, sem rede (fetch injetado).

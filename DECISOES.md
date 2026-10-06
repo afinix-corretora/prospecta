@@ -2556,3 +2556,107 @@ São 65 registros, e o `get_advisors` não achou nada novo.
 **Fica por dizer.** O motivo `sem_credencial` do motor ainda diz "a credencial do agente está
 desligada" quando a conta desligada é a da campanha. O texto mora em `motor/agente.ts`, e corrigir
 exige republicar o worker. Fica para a próxima vez que ele for publicado por outro motivo.
+
+### D69 — O agente responde sozinho
+
+**A decisão.** Em 05/10 o usuário decidiu a opção B de `PROPOSTA-CONVERSA.md` §8: o agente tem
+autonomia para responder. As quatro perguntas do §8 ficaram assim:
+
+- **(a)** A autonomia é por agente (`agents.autonomo`) e vem **ligada**, porque essa é a decisão.
+  Desligar devolve o agente ao D66: rascunho para uma pessoa.
+- **(b)** A resposta do agente paga quota, como qualquer mensagem (invariante 3).
+- **(c)** No WhatsApp e no Instagram, fora da janela de 24h a mensagem não sai. O rascunho volta para
+  uma pessoa com o motivo.
+- **(d)** Há um teto diário de composições por cliente (`tenants.teto_agente_dia`, 200 por padrão),
+  contado na própria `rascunhos`. Passou do teto, a situação é `limite` e o modelo nem é chamado.
+
+**As três travas, uma a uma.**
+
+- **Invariante 4:** continua absoluta. A resposta encerra todas as inscrições da pessoa e a cadência
+  não volta a falar com ela. O que passa é a mensagem do agente, que nunca é de cadência.
+- **Gate do D40:** ganhou um critério positivo, e só um. Numa inscrição encerrada por `resposta`,
+  passa somente a mensagem que tem `rascunho_id` **e** responde à última resposta da pessoa. Mensagem
+  de cadência nunca tem `rascunho_id` e segue cancelada. Resposta nova aposenta a mensagem que
+  respondia à anterior, e o rascunho dela volta para uma pessoa.
+- **Chave `(enrollment_id, step_id)`:** a mensagem do agente não tem passo. `messages.step_id` aceita
+  NULL, um CHECK exige passo **ou** rascunho (nunca os dois, nunca nenhum), e a idempotência da
+  conversa é `UNIQUE (rascunho_id)`. A chave antiga ficou como estava, porque NULL não colide nela.
+
+**O caminho de envio é o mesmo.** `enfileirar_resposta` cria a mensagem como o agendador cria: o
+gatilho de supressão, o do pool, `reservar_envio`, e `simulado` em shadow mode. Antes de criar, ela
+devolve a uma pessoa nestes casos:
+- a pessoa respondeu de novo;
+- está suprimida;
+- a campanha está desligada;
+- a inscrição foi encerrada por outro motivo que não resposta;
+- passou a janela;
+- não há conta, ou a conta está fora do pool ou sem quota.
+
+No despacho, `reivindicar_pendentes` confere de novo a supressão, a última resposta e a janela.
+
+**Uma regra que o §8 não tinha: a resposta sai pela conta que conversa.** Trocar de chip no meio da
+conversa é outro número escrevendo para a pessoa; no WhatsApp oficial, é escrever fora da sessão. A
+conta é a que recebeu a resposta: os dois caminhos do webhook passaram a gravar `chip` no evento.
+Na falta dele, vale a conta que mandou a mensagem respondida.
+
+Por isso a mensagem do agente **nunca é rebalanceada** (D37). Com a conta fora do ar, a mensagem
+espera, e a janela de 24h decide quando ela deixa de valer.
+
+**"Não mandou" nunca é silêncio.** `rascunhos.envio` diz para onde foi o texto pronto:
+- `fila`: virou mensagem;
+- `pessoa`: o agente não é autônomo;
+- `devolvido`: o motor não mandou, com o motivo em `envio_motivo`.
+
+A tela de Respostas lê o status da mensagem, porque "foi para a fila" não é "saiu":
+- na fila, enviada ou simulada;
+- devolvida, com o texto para copiar.
+
+**Nome novo, sem DROP.** A fila do worker ganhou três colunas (`autonomo`, `composicoes_hoje`,
+`teto`). Mudar o tipo de retorno exige DROP, e o DROP pelo MCP não passa da trava numa sessão remota
+(D63). Por isso nasceu `respostas_para_o_agente`, e `respostas_para_rascunhar` ficou sem chamador. A
+migration que a apaga vai separada, pelo SQL Editor.
+
+**A ordem no worker.** Os rascunhos rodam depois do despacho. Compor chama modelo e demora, e a
+cadência não pode esperar por isso. A resposta do agente sai no despacho da passada seguinte: até 5
+minutos, que numa conversa por WhatsApp é natural.
+
+**As telas que afirmavam o contrário.** Agentes, Campanha, Respostas e o assistente diziam "quem manda
+é uma pessoa" e "nada sai sozinho". Ficou falso no dia, que é o "reler o que as telas afirmam" do D58.
+A tela do agente ganhou "Responde sozinho", com o que impede o envio dito antes do botão. A da
+campanha mostra "agente" no lugar do passo.
+
+**Testes.** `tests/agente_responde.sql` tem 33 asserções. A primeira é o teste que o §8 exigia: na
+mesma inscrição e na mesma passada, o segundo toque da cadência é cancelado e a mensagem do agente
+sai. Cinco sabotagens:
+
+| Sabotagem | Asserções que caem |
+|---|---|
+| Sem o critério positivo | 4 |
+| Critério sem `rascunho_id` (a sabotagem que o §8 pedia) | 5 |
+| Rebalancear a mensagem do agente | 1 |
+| Sem a janela na saída | 1 |
+| Sem a quota | 2 |
+
+`tests/agente.test.ts` ganhou oito testes:
+- o pronto vai para a fila no modo da passada, com simulado por padrão;
+- o não autônomo não enfileira;
+- o barrado e o escalar nunca enfileiram;
+- o devolvido é contado;
+- a falha de enfileirar é contada e deixa o texto com uma pessoa;
+- o teto não chama o modelo;
+- o lote soma por cima da fotografia do banco, por cliente.
+
+**O D68 que ficou por dizer.** O motivo `sem_credencial` agora fala da "conta de IA escolhida" e de
+"nem a campanha nem o agente". Entrou na mesma republicação do worker.
+
+**Aplicado no projeto, nesta ordem.**
+
+1. A migration entrou primeiro. O v6 continuava funcionando sobre as funções antigas, e o v7 chama as
+   novas. Antes de aplicar, conferi por md5 que os cinco corpos regenerados batiam com o projeto (D59).
+   Depois, os oito corpos novos ou trocados batem com o banco de teste. São 67 registros.
+2. A grade no projeto ficou assim: a tela escreve `agents.autonomo`; não escreve `messages` nem
+   `rascunhos`; não chama `enfileirar_resposta`. `anon` não chama a fila. O `get_advisors` não achou
+   nada novo.
+3. O `motor-worker` v7 entrou depois. Foi lido de volta e comparado sem transcrição: 26/26.
+
+O motor segue em `simulado`. A resposta do agente nasce simulada até alguém ligar o envio real.

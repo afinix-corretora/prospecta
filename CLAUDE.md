@@ -419,6 +419,15 @@ e elas têm teste automatizado obrigatório.**
 - **Nunca** deixar "sem rascunho" ser silêncio. Recusa, limite de trocas, falta de credencial,
   freio, escalar e erro do provedor são situações com nome, gravadas e mostradas na tela — e erro
   transitório não vira linha, para a próxima passada tentar de novo (D66).
+- **Nunca** deixar a mensagem do agente passar pelo gate do D40 por ser "do agente". O critério é
+  positivo e é um só: `rascunho_id` E resposta à ÚLTIMA mensagem da pessoa. Tirar o `rascunho_id` do
+  critério deixa a cadência voltar a falar com quem respondeu, e o teste do §8 existe para pegar
+  exatamente isso (D69).
+- **Nunca** rebalancear a mensagem do agente. Outro chip escrevendo no meio da conversa é outra
+  conversa; conta fora do ar segura a mensagem, e a janela de 24h decide quando ela deixa de valer
+  (D69).
+- **Nunca** deixar "foi para a fila" passar por "saiu". A tela lê o status da mensagem, e o que o
+  motor não mandou volta para uma pessoa com o motivo e o texto (D69).
 
 - **Nunca** deixar o assistente executar o que a pessoa não autorizou. Cada passo é um cartão que
   diz o que vai acontecer ANTES do botão, e a escrita sai com o JWT de quem clicou — o RLS decide,
@@ -564,15 +573,21 @@ e elas têm teste automatizado obrigatório.**
 > (quem abre a caixa pode estar prestes a ligar para quem acabou de pedir para sair). É leitura:
 > não há "lida" nem atribuição, porque seriam colunas sem quem as escreva.
 >
-> Os **agentes** compõem desde o **D66**, e só compõem. Quando o contato responde, o agente do
-> canal da campanha escreve um rascunho com a credencial de IA escolhida nele (`adapters/ia.ts`:
-> Claude e a família "chat completions"; o Gemini fica sem adapter, dito em `tem_adapter`). Os
-> freios em `motor/agente.ts` conferem o texto composto: proibido, tamanho, pedido de CPF ou cartão,
-> e a marca de escalar. A tela de Respostas mostra o rascunho para uma pessoa copiar e mandar.
-> **Nada sai pelo motor**: as três travas que o laço autônomo encontra (invariante 4, gate do D40,
-> chave `(enrollment_id, step_id)`) continuam intocadas. Quem está suprimido nem chega ao agente.
-> A opção B, o agente mandar sozinho, está **desenhada e não decidida** em
-> `PROPOSTA-CONVERSA.md` §8, e começar sem a decisão é o jeito de furar uma invariante por dentro.
+> Os **agentes** compõem desde o **D66** e **respondem sozinhos desde o D69**, por decisão do
+> usuário. Quando o contato responde, o agente do canal da campanha compõe com a conta de IA escolhida
+> (`adapters/ia.ts`: Claude e a família "chat completions"; o Gemini fica sem adapter, dito em
+> `tem_adapter`). Os freios em `motor/agente.ts` conferem o texto composto: proibido, tamanho, pedido
+> de CPF ou cartão, e a marca de escalar. O texto que passa vira mensagem por `enfileirar_resposta`,
+> pelo MESMO caminho de envio da cadência — supressão no gatilho e no despacho, pool, quota — e pela
+> conta que conversa com a pessoa, que nunca é trocada (D37 não vale para conversa). A invariante 4
+> continua absoluta: a cadência não volta. O gate do D40 ganhou um critério positivo e só um — passa a
+> mensagem com `rascunho_id` que responde à ÚLTIMA resposta. A idempotência da conversa é
+> `UNIQUE (rascunho_id)`; `messages.step_id` é nulo só nela. A autonomia é por agente
+> (`agents.autonomo`, ligada por padrão), a janela de 24h vale no WhatsApp e no Instagram, e há teto
+> diário de composições por cliente (`tenants.teto_agente_dia`). O que o motor não manda volta a uma
+> pessoa com o motivo em `rascunhos.envio_motivo`, e a tela de Respostas diz o que aconteceu com cada
+> texto. `respostas_para_rascunhar` ficou sem chamador (a fila nova é `respostas_para_o_agente`) e sai
+> numa migration própria, pelo SQL Editor (D63).
 >
 > O **Início** é o assistente de configuração desde o **D67**: pergunta canais, tipo de lista,
 > volume por dia, provedor, IA, CRM e primeira campanha, e devolve um plano de cartões que só roda
@@ -622,7 +637,7 @@ e elas têm teste automatizado obrigatório.**
 > **derivados do schema** cobram `tenant_id`, RLS e FK composta de toda tabela nova — lista escrita
 > à mão envelhece sem avisar, e essa já tinha perdido a `provider_servers` (D31).
 >
-> O schema está **aplicado no projeto `hucuwjvihqgftdjpnych`** (59 migrations no repositório, 66
+> O schema está **aplicado no projeto `hucuwjvihqgftdjpnych`** (60 migrations no repositório, 67
 > registros no projeto — a 55ª, que só apaga os dois classificadores sem chamador do D63, entrou em
 > 05/10 pelo SQL Editor, porque o DROP pelo MCP espera uma confirmação que não chega à sessão remota
 > (D63) — duas corretivas de texto, uma separação, duas do D46 (superfície e
@@ -643,8 +658,10 @@ e elas têm teste automatizado obrigatório.**
 > linha discordar. O do projeto não dá para conferir do suite (precisa de rede), então quem mexer
 > no schema confere pelo `list_migrations` junto com o `get_advisors` que já é obrigatório.
 >
-> As edge functions são cinco desde o D64. `motor-worker` está na **versão 6** desde 02/10, com o
-> dreno da outbox e a leitura das fontes de CRM (D64) e os rascunhos do agente (D66). A migration
+> As edge functions são cinco desde o D64. `motor-worker` está na **versão 7** desde 06/10, com o
+> dreno da outbox e a leitura das fontes de CRM (D64), os rascunhos do agente (D66) e o envio da
+> resposta pelo agente autônomo (D69) — a migration do D69 entrou antes dele, porque o v7 chama as
+> funções novas e o v6 seguia funcionando sobre as antigas. A migration
 > do D66 entrou antes dele, e aqui a ordem do D31 não se inverte: o `tem_adapter` de IA promete
 > RASCUNHO, que só o worker novo produz e que não sai para ninguém — antes dele, a promessa só
 > não era cumprida, sem efeito errado. A migration que liga o `tem_adapter` do
@@ -656,7 +673,7 @@ e elas têm teste automatizado obrigatório.**
 > justamente para as três não mudarem de bundle — e a do agente (`motor/porta-agente.ts`,
 > `_shared/banco-agente.ts`) pelo mesmo motivo. O `motor-worker` v6 foi lido de volta pela
 > resposta que a MCP salvou em arquivo, e comparado SEM transcrição (26/26); o `crm-descobrir`,
-> 6/6. Quem responde pela pergunta daqui para frente são os dois
+> 6/6; o `motor-worker` v7, 26/26. Quem responde pela pergunta daqui para frente são os dois
 > verificadores — `conferir-publicado.py`, no suite, pelo digest do que cada function empacota, e
 > `conferir-contra-projeto.py`, fora do suite porque precisa de rede, pela comparação com o que o
 > projeto tem. `LIGAR.md` é o procedimento de ligar o motor, com a conferência do D44 entre guardar

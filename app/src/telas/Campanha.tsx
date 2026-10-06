@@ -506,9 +506,10 @@ function EmailDaCampanha({ campanha, contas, podeOperar, aoMudar, aoFalhar }: {
  * `(campaign_id, canal)` garante um agente por canal.
  *
  * Desde o D66 o motor LÊ `campaign_agents`: quando o contato responde, o agente
- * do canal compõe um rascunho, que aparece na tela de Respostas. E é só isso:
- * nada sai sozinho. Resposta encerra a cadência (invariante 4), e quem continua
- * a conversa é uma pessoa, com o rascunho na mão.
+ * do canal compõe a resposta. Desde o D69, se o agente responde sozinho, ela
+ * sai pelo motor; se não, fica de rascunho na tela de Respostas. Resposta
+ * encerra a cadência (invariante 4) — o que continua é a conversa, nunca a
+ * cadência.
  *
  * A tela diz isso em voz alta de propósito. Oferecer a escolha e deixar a
  * pessoa supor que ela produz efeito é a decoração do D31 com cara de
@@ -623,13 +624,16 @@ function Agentes({ campanha, agentes, atribuidos, contasIA, provedoresIA, podeOp
         })}
 
         <Aviso tipo="neutro">
-          <b>O agente escreve o rascunho; quem manda é uma pessoa.</b> Quando o contato
-          responde, a cadência encerra (é a invariante 4) e o agente deste canal deixa um
-          rascunho na tela de Respostas, para ser lido, ajustado e mandado pelo aplicativo do
-          canal. Nada sai sozinho. Sem conta de IA — nem na campanha, nem no agente —, ele diz
-          que não tem com que compor.
+          <b>Quando o contato responde, a cadência encerra e o agente do canal conversa.</b>{' '}
+          {agentes.some((a) => atribuidos.some((x) => x.agent_id === a.id) && a.autonomo)
+            ? <>Agente que responde sozinho manda pelo motor, pela conta que conversa com a pessoa — e devolve
+                para uma pessoa, com o motivo, o que não puder mandar (opt-out, janela de 24h, conta fora do ar).
+                Com o motor em simulado, nada sai.</>
+            : <>Os agentes desta campanha deixam rascunho na tela de Respostas, para uma pessoa mandar.</>}
+          {' '}Sem conta de IA — nem na campanha, nem no agente —, ele diz que não tem com que compor.
+          A escolha de responder sozinho é do agente, em Configurações ▸ Agentes.
           {semAgente.length > 0 && (
-            <> Sem agente em {semAgente.map((c) => NOME_CANAL[c] ?? c).join(', ')}: ali não há rascunho.</>
+            <> Sem agente em {semAgente.map((c) => NOME_CANAL[c] ?? c).join(', ')}: ali ninguém responde.</>
           )}
         </Aviso>
       </div>
@@ -680,7 +684,7 @@ function Mensagens({ lista }: { lista: MensagemComposta[] }) {
               {lista.map((m) => (
                 <tr key={m.message_id}>
                   <td style={{ color: 'var(--ink)' }}>{m.contato}</td>
-                  <td>{m.passo}</td>
+                  <td>{m.passo ?? 'agente'}</td>
                   <td className="mono">{m.destino}</td>
                   <td style={{ whiteSpace: 'pre-wrap', color: 'var(--ink)' }}>
                     {m.conteudo}

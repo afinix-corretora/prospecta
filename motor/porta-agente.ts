@@ -1,4 +1,4 @@
-// A porta do agente (D66), irmã de `porta.ts` e `porta-crm.ts`.
+// A porta do agente (D66, D69), irmã de `porta.ts` e `porta-crm.ts`.
 //
 // Arquivo próprio pelo motivo do D64: só a function que rascunha empacota
 // isto, e as outras não mudam de bundle por causa dele.
@@ -30,9 +30,20 @@ export interface RespostaParaRascunhar {
   readonly campanha: string;
   readonly historico: { de: 'nos' | 'pessoa'; texto: string }[];
   readonly rascunhos_anteriores: number;
+  /** D69: o agente manda sozinho o rascunho pronto. */
+  readonly autonomo: boolean;
+  /** D69: composições do cliente nas últimas 24h, e o teto dele. */
+  readonly composicoes_hoje: number;
+  readonly teto: number;
 }
 
 export type Situacao = 'pronto' | 'recusa' | 'escalar' | 'bloqueado' | 'limite' | 'sem_credencial' | 'erro';
+
+/**
+ * Para onde foi o texto pronto (D69): para a fila do motor, para uma pessoa
+ * (agente não autônomo), ou devolvido a uma pessoa com o motivo gravado.
+ */
+export type Envio = 'fila' | 'pessoa' | 'devolvido';
 
 export interface BancoAgente {
   respostasParaRascunhar(limite: number): Promise<RespostaParaRascunhar[]>;
@@ -42,4 +53,10 @@ export interface BancoAgente {
     messageEventId: string, agentId: string, situacao: Situacao,
     texto: string | null, motivo: string | null, modelo: string | null,
   ): Promise<void>;
+  /**
+   * D69: o rascunho pronto vira mensagem, pelo caminho de envio do motor. O
+   * banco decide — autonomia, supressão, janela, conta, quota — e grava o
+   * motivo quando devolve. Repetir não cria outra mensagem.
+   */
+  enfileirarResposta(messageEventId: string, modo: 'simulado' | 'real'): Promise<Envio>;
 }

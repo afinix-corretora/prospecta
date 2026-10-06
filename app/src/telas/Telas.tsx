@@ -466,7 +466,7 @@ export function Config() {
      'As contas de IA deste cliente — várias por provedor, se quiser. Toda chave entra aqui e mora no Vault; campanha e assistente só escolhem.',
      `${dados?.ia.length ?? 0} provedores`],
     ['/config/agentes', 'agente', 'Agentes',
-     'A persona de cada canal: quando a pessoa responde, ela escreve o rascunho que alguém manda.',
+     'A persona de cada canal: quando a pessoa responde, ela escreve a resposta — e manda sozinha, se você deixar.',
      `${dados?.agentes.length ?? 0} agentes`],
     ['/config/modelos', 'modelo', 'Modelos de conversa',
      'As receitas de cadência: canais, atrasos e texto de cada passo.',
@@ -559,7 +559,7 @@ export function ConfigIA() {
         <section className="indice">
           <div className="item" style={{ cursor: 'default' }}><span className="txt">
             <b>Nenhuma conta conectada</b>
-            <p>Sem conta, agente nenhum escreve rascunho. O motor segue tocando a cadência — só não compõe.</p>
+            <p>Sem conta, agente nenhum compõe nem responde. O motor segue tocando a cadência — só não conversa.</p>
           </span></div>
         </section>
       )}
@@ -716,7 +716,7 @@ export function ConfigAgentes() {
 
   return (
     <Moldura titulo="Agentes" voltar={() => nav('/config')}
-             sub="Uma persona por canal, escolhida na campanha. Quando o contato responde, o agente escreve um rascunho; quem manda é uma pessoa.">
+             sub="Uma persona por canal, escolhida na campanha. Quando o contato responde, o agente escreve a resposta. Se ele responde sozinho, ela sai pelo motor; se não, fica de rascunho para uma pessoa mandar.">
       {erro && <Aviso tipo="erro">{erro}</Aviso>}
       <section className="indice">
         {agentes.map((a) => {
@@ -724,7 +724,8 @@ export function ConfigAgentes() {
           return (
             <LinhaIndice key={a.id} icone={a.canal} cor={corCanal(a.canal)} titulo={a.nome}
                          descricao={`${a.descricao} · ${a.papel} · ${a.tenant_id
-                           ? (c ? `compõe com ${c.nome}` : 'sem credencial: não compõe') : 'modelo'}`}
+                           ? (c ? `compõe com ${c.nome} · ${a.autonomo ? 'responde sozinho' : 'rascunho para uma pessoa'}`
+                                : 'sem credencial: não compõe') : 'modelo'}`}
                          contagem={a.tenant_id ? 'seu' : 'catálogo'}
                          aoClicar={() => setAbertoId(abertoId === a.id ? null : a.id)} />
           );
@@ -751,7 +752,8 @@ export function ConfigAgentes() {
 }
 
 /** O agente do cliente, editável pelo que a grade deixa (D66): o que ele diz,
- *  quando passa para uma pessoa, o que nunca escreve, e com que credencial.
+ *  quando passa para uma pessoa, o que nunca escreve, com que credencial — e,
+ *  desde o D69, se ele responde sozinho.
  *
  *  O freio é do motor, não desta tela: aqui se diz o que é proibido; quem
  *  confere o texto composto é `motor/agente.ts`, depois do modelo responder. */
@@ -765,6 +767,7 @@ function EditorDeAgente({ agente, credenciais, provedores, aoSalvar }: {
   const [proibido, setProibido] = useState(agente.proibido.join('\n'));
   const [cred, setCred] = useState(agente.ai_credential_id ?? '');
   const [ativo, setAtivo] = useState(agente.ativo);
+  const [autonomo, setAutonomo] = useState(agente.autonomo);
   const [msg, setMsg] = useState<{ tipo: 'erro' | 'ok'; texto: string } | null>(null);
   const escolhida = credenciais.find((c) => c.id === cred);
   const compoe = escolhida ? provedores.find((p) => p.slug === escolhida.provedor)?.tem_adapter ?? false : false;
@@ -778,7 +781,7 @@ function EditorDeAgente({ agente, credenciais, provedores, aoSalvar }: {
         limite_trocas: Number(limite) || agente.limite_trocas,
         tamanho_maximo: Number(tamanho) || agente.tamanho_maximo,
         proibido: proibido.split('\n').map((x) => x.trim()).filter(Boolean),
-        ai_credential_id: cred || null, ativo,
+        ai_credential_id: cred || null, ativo, autonomo,
       });
       setMsg({ tipo: 'ok', texto: 'Agente salvo. Vale para a próxima resposta que chegar.' });
       await aoSalvar();
@@ -797,18 +800,18 @@ function EditorDeAgente({ agente, credenciais, provedores, aoSalvar }: {
             pessoa no caso abaixo.</span>
         </div>
         <Campo id="ag-escalar" rotulo="Passa para uma pessoa quando" valor={escalar} aoMudar={setEscalar}
-               ajuda="Nesses casos o agente não escreve rascunho: a resposta aparece marcada para uma pessoa." />
+               ajuda="Nesses casos o agente não escreve nem manda nada: a resposta aparece marcada para uma pessoa." />
         <div className="campo">
           <label htmlFor="ag-proib">Nunca escrever</label>
           <textarea id="ag-proib" rows={4} value={proibido} onChange={(e) => setProibido(e.target.value)}
                     placeholder={'garantimos\nsem carência\no menor preço'} />
           <span className="ajuda">Uma expressão por linha. Não é só pedido ao modelo: o motor confere o texto
-            composto (sem acento e sem caixa) e barra o rascunho que contiver uma delas.</span>
+            composto (sem acento e sem caixa) e barra — não manda — o que contiver uma delas.</span>
         </div>
         <Campo id="ag-tam" rotulo="Tamanho máximo (caracteres)" valor={tamanho} aoMudar={setTamanho}
                ajuda="Entre 80 e 4000. Texto maior é barrado, não cortado." />
         <Campo id="ag-lim" rotulo="Limite de trocas" valor={limite} aoMudar={setLimite}
-               ajuda="Depois de tantos rascunhos na mesma conversa, o agente para e diz que é hora de uma pessoa." />
+               ajuda="Depois de tantas respostas na mesma conversa, o agente para e diz que é hora de uma pessoa." />
         <div className="campo">
           <label htmlFor="ag-cred">Compõe com</label>
           <select id="ag-cred" value={cred} onChange={(e) => setCred(e.target.value)}>
@@ -826,6 +829,19 @@ function EditorDeAgente({ agente, credenciais, provedores, aoSalvar }: {
         {escolhida && !escolhida.ativo && (
           <Aviso tipo="neutro">Esta credencial está desligada: o agente não compõe enquanto ela estiver assim.</Aviso>
         )}
+        <label style={{ display: 'flex', gap: 8, alignItems: 'center', margin: '4px 0 4px' }}>
+          <input type="checkbox" checked={autonomo} onChange={(e) => setAutonomo(e.target.checked)} /> Responde sozinho
+        </label>
+        <p className="ajuda" style={{ margin: '0 0 8px' }}>
+          {autonomo
+            ? <>A resposta que passa pelos freios sai pelo motor, pela mesma conta que conversa com a pessoa, e paga
+                quota como qualquer mensagem. Ela <b>não sai</b> se a pessoa pediu para sair, se respondeu de novo antes,
+                se passou a janela de 24h do WhatsApp, ou se a conta está fora do ar ou sem quota — aí o texto volta
+                para uma pessoa em Respostas, com o motivo. Com o motor em simulado, nada sai: a resposta aparece como
+                simulada.</>
+            : <>A resposta fica de rascunho na tela de Respostas, para uma pessoa ler, ajustar e mandar pelo
+                aplicativo do canal.</>}
+        </p>
         <label style={{ display: 'flex', gap: 8, alignItems: 'center', margin: '4px 0 12px' }}>
           <input type="checkbox" checked={ativo} onChange={(e) => setAtivo(e.target.checked)} /> Agente ativo
         </label>

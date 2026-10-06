@@ -1,9 +1,9 @@
-// Implementação da porta `BancoAgente` sobre o supabase-js (D66).
+// Implementação da porta `BancoAgente` sobre o supabase-js (D66, D69).
 //
 // Arquivo próprio pelo motivo de `banco-crm.ts`: só o worker empacota isto.
 
 import type { SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2';
-import type { BancoAgente, RespostaParaRascunhar } from '../../../motor/porta-agente.ts';
+import type { BancoAgente, Envio, RespostaParaRascunhar } from '../../../motor/porta-agente.ts';
 
 export function bancoAgenteSupabase(sb: SupabaseClient): BancoAgente {
   const rpc = async (nome: string, args: Record<string, unknown>) => {
@@ -14,7 +14,9 @@ export function bancoAgenteSupabase(sb: SupabaseClient): BancoAgente {
 
   return {
     async respostasParaRascunhar(limite) {
-      return ((await rpc('respostas_para_rascunhar', { p_limite: limite })) ?? []) as RespostaParaRascunhar[];
+      // D69: a fila com autonomia e teto. `respostas_para_rascunhar` ficou sem
+      // chamador e sai numa migration própria (D63).
+      return ((await rpc('respostas_para_o_agente', { p_limite: limite })) ?? []) as RespostaParaRascunhar[];
     },
 
     async credenciaisDaIa(credencialId) {
@@ -34,6 +36,10 @@ export function bancoAgenteSupabase(sb: SupabaseClient): BancoAgente {
         p_message_event_id: eventoId, p_agent_id: agenteId, p_situacao: situacao,
         p_texto: texto, p_motivo: motivo, p_modelo: modelo,
       });
+    },
+
+    async enfileirarResposta(eventoId, modo) {
+      return (await rpc('enfileirar_resposta', { p_message_event_id: eventoId, p_modo: modo })) as Envio;
     },
   };
 }

@@ -287,8 +287,8 @@ function contasIA(f: Foto, provedor: string) {
 function perguntaIA(f: Foto): Pergunta {
   return {
     chave: 'ia', forma: 'unica',
-    texto: 'Quer que um agente escreva rascunhos de resposta? Com qual IA?',
-    ajuda: 'O agente só escreve: quem manda é uma pessoa, na tela de Respostas. Aqui você escolhe a IA; a conta, logo depois, entre as que já estão conectadas.',
+    texto: 'Quer que um agente responda os contatos? Com qual IA?',
+    ajuda: 'O agente responde sozinho pelo motor, com freios em código, e devolve para uma pessoa o que não puder mandar. Dá para deixá-lo só escrevendo rascunhos, em Configurações ▸ Agentes. Aqui você escolhe a IA; a conta, logo depois, entre as que já estão conectadas.',
     opcoes: [
       ...f.provedoresIA.map((p) => {
         const n = contasIA(f, p.slug).length;
@@ -637,7 +637,7 @@ export function montarPlano(f: Foto, bruto: Respostas): Plano {
           efeitos: [
             ...agentes.map((a) => `${NOME[a.canal]}: ${a.nome}`),
             conta ? `a campanha compõe com a conta "${conta.nome}"` : 'a campanha compõe com a conta de IA que você conectar',
-            'o agente escreve o rascunho; quem manda é uma pessoa, na tela de Respostas',
+            'o agente responde sozinho pelo motor (em simulado, nada sai); o que ele não puder mandar volta para uma pessoa, na tela de Respostas',
           ],
           exige: 'opera',
           dependeDe: ['campanha', ...(credencial === null ? ['config:ia'] : [])],

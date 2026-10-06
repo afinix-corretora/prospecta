@@ -14,8 +14,11 @@
 // de propósito — shadow mode é decidido onde o fato nasce (D45), e ler um CRM
 // não é efeito externo.
 //
-// Desde o D66, uma quarta: os rascunhos do agente. Também com o seu `try`, e
-// também sem modo: rascunho não sai para ninguém — quem manda é uma pessoa.
+// Desde o D66, uma quarta: os rascunhos do agente, com o seu `try`. Desde o
+// D69 ela leva o modo: o rascunho pronto de agente autônomo vira mensagem, e
+// em shadow mode ela nasce simulada como a cadência. Ela roda DEPOIS do
+// despacho de propósito — compor chama modelo e demora, e a cadência não pode
+// esperar por isso. A resposta do agente sai no despacho da passada seguinte.
 
 import { bancoSupabase, clienteAdmin } from '../_shared/banco-supabase.ts';
 import { bancoCrmSupabase } from '../_shared/banco-crm.ts';
@@ -59,7 +62,7 @@ Deno.serve(async (req) => {
 
   let rascunhos: unknown = null;
   try {
-    rascunhos = await rascunharRespostas(bancoAgenteSupabase(sb), 20);
+    rascunhos = await rascunharRespostas(bancoAgenteSupabase(sb), 20, { modo });
   } catch (e) {
     console.error('[motor-worker] rascunhos', e);
     falhas.push(`rascunhos: ${erro(e)}`);
