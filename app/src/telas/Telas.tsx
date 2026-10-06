@@ -475,7 +475,7 @@ export function Config() {
      'Catálogo de provedores por canal — WhatsApp, e-mail, SMS e Instagram.',
      `${dados?.canal.length ?? 0} provedores`],
     ['/config/vinculadas', 'plataforma', 'Plataformas vinculadas',
-     'O CRM deste cliente: Softcare, Pipefy, HubSpot, Pipedrive, RD Station, Ploomes, Salesforce ou Zoho. A credencial é deste cliente e mora no Vault.',
+     'O CRM deste cliente: ProfitCare, Pipefy, HubSpot, Pipedrive, RD Station, Ploomes, Salesforce ou Zoho. A credencial é deste cliente e mora no Vault.',
      `${dados?.crm.length ?? 0} plataformas`],
   ];
 

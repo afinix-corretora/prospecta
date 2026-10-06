@@ -51,7 +51,7 @@ const IDENTIDADE = new Set(['telefone', 'whatsapp', 'sms', 'email', 'instagram']
 /** Todos os campos de um pipe: formulário inicial e campos de cada fase. */
 function camposDoPipe(p: PipeCRM): (CampoCRM & { onde: string })[] {
   return [
-    ...p.camposIniciais.map((c) => ({ ...c, onde: 'formulário inicial' })),
+    ...p.camposIniciais.map((c) => ({ ...c, onde: c.somenteLeitura ? 'contato do card' : 'formulário inicial' })),
     ...p.fases.flatMap((f) => f.campos.map((c) => ({ ...c, onde: f.nome }))),
   ];
 }
@@ -191,7 +191,8 @@ function AcoesDoFato(props: {
   const [valor, setValor] = useState('');
   const [abrir, setAbrir] = useState(false);
   const [msg, setMsg] = useState('');
-  const campos = camposDoPipe(pipe);
+  // Campo só de leitura (o contato do ProfitCare) serve à fonte, não à ação.
+  const campos = camposDoPipe(pipe).filter((c) => !c.somenteLeitura);
   const temMover = props.acoes.some((a) => a.tipo === 'mover_fase' && a.ativo);
 
   async function fazer(f: () => Promise<void>) {

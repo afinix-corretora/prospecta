@@ -2660,3 +2660,60 @@ sai. Cinco sabotagens:
 3. O `motor-worker` v7 entrou depois. Foi lido de volta e comparado sem transcrição: 26/26.
 
 O motor segue em `simulado`. A resposta do agente nasce simulada até alguém ligar o envio real.
+
+### D70 — O Softcare era o ProfitCare, e o ProfitCare ganhou porta
+
+**O que se descobriu.** A linha "Softcare (CRM da casa)" do D59 era o ProfitCare. Os campos
+(`base_url` e `token`) eram suposição, e a suposição estava errada por um motivo mais simples do que
+o nome: **o ProfitCare não tinha porta para sistema de fora.** Recebia lead pela própria tela e por
+formulário, e nada mais. Não havia chave para colar.
+
+**A porta, do lado de lá** (repositório `project-cb5d08`, sem publicar em produção):
+- `crm_integration_keys`: chave por cliente, guardada só como SHA-256. A chave aparece uma vez,
+  ao gerar, em Configurações ▸ Integrações, e pode ser revogada.
+- A edge function `crm-integracao` recebe `Authorization: Bearer pc_...` e tem quatro ações:
+  `estrutura`, `cards` (paginado por `proximo`), `mover` e `preencher`. Toda leitura e escrita é
+  filtrada pelo tenant da chave.
+- Mover e preencher fazem o que a tela do ProfitCare faz: histórico de fase e o evento das
+  automações. Mover para a fase em que o card já está devolve `ja_estava` e não muda nada.
+  Preencher é upsert. As duas aguentam repetição, que é o que o dreno exige (D64).
+
+**A ponta de cá.** `adapters/profitcare.ts` implementa `CrmAdapter` só com `fetch` (D30). A linha do
+catálogo virou `profitcare`, com os campos que a API pede: `base_url` (o endereço do projeto, que
+a tela do ProfitCare mostra acima das chaves) e `chave` (Vault).
+
+**O contato é de leitura.** No ProfitCare o contato é um registro à parte do card. O adapter o
+transforma em três campos do card: "Nome do contato", "WhatsApp do contato" e "E-mail do contato".
+Assim a MESMA leitura da planilha reconhece telefone e e-mail (D64). Eles entram na estrutura
+marcados `somenteLeitura`: a tela da fonte os oferece para mapear, a da ação não. Do contrário,
+"preencher WhatsApp do contato" seria uma ação que a API recusa sempre, e o dreno queimaria as oito
+tentativas nela. O adapter também recusa antes de chamar.
+
+**`tem_adapter` continua falso.** O adapter existe e tem teste, mas:
+- a API não está publicada no ProfitCare de produção;
+- o adapter não está registrado em `criarCrm`;
+- o worker e o `crm-descobrir` que o carregariam não foram republicados.
+
+Prometer antes seria o D31. A ordem, quando for a hora, é:
+1. publicar a API no ProfitCare;
+2. registrar o adapter, subir a marca `somenteLeitura` para `CampoCrm` e republicar as duas
+   functions;
+3. por último, a migration que liga `tem_adapter`.
+
+A marca mora em `profitcare.ts` até lá. Pôr em `crm.ts` agora mudaria o bundle de duas functions
+publicadas sem mudar o que elas fazem, e o `conferir-publicado.py` pegou isso na primeira tentativa.
+
+**Testes.** `tests/profitcare.test.ts` tem dez testes, e `tests/plataformas.sql` ganhou uma
+asserção: a linha pede `base_url` em config e `chave` no Vault, com os nomes que o adapter lê. Nome
+diferente seria a credencial certa no Vault e "credencial incompleta" para sempre. Duas sabotagens
+derrubam os testes:
+
+| Sabotagem | Testes que caem |
+|---|---|
+| Aceitar `http://` | 1 |
+| Deixar preencher campo do contato | 1 |
+
+**Aplicado no projeto.** Antes de aplicar, o projeto tinha 0 conexões na linha `softcare`. Os md5 de
+`campos` e `descricao` batiam com o banco de teste antes da migration, ou seja, com o que o down
+restaura. Depois, os dois batem com o banco de teste depois dela. São 68 registros. O `get_advisors`
+não achou nada novo.

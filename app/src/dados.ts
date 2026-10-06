@@ -1275,7 +1275,7 @@ export async function lerMensagensDaCampanha(
 // CRM: o que cada fato faz e de onde vêm contatos (D64)
 // ---------------------------------------------------------------------------
 
-export interface CampoCRM { id: string; rotulo: string; tipo: string; opcoes: string[] }
+export interface CampoCRM { id: string; rotulo: string; tipo: string; opcoes: string[]; somenteLeitura?: boolean }
 export interface FaseCRM { id: string; nome: string; campos: CampoCRM[] }
 export interface PipeCRM { id: string; nome: string; fases: FaseCRM[]; camposIniciais: CampoCRM[] }
 

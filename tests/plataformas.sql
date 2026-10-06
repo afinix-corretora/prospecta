@@ -76,6 +76,17 @@ SELECT pl.confere('catálogo de CRM tem as oito plataformas',
   (SELECT count(*)::text || ': ' || string_agg(slug, ', ' ORDER BY ordem)
      FROM crm_provider_catalog));
 
+-- D70: o "Softcare" era o ProfitCare, e os campos deixaram de ser suposição.
+-- O adapter lê `base_url` e `chave`; um nome diferente aqui seria a conexão
+-- salva com um campo que o adapter nunca encontra — "credencial incompleta"
+-- para sempre, com a credencial certa no Vault.
+SELECT pl.confere('ProfitCare pede endereço (config) e chave (Vault), nos nomes que o adapter lê',
+  (SELECT jsonb_agg(jsonb_build_array(c ->> 'chave', (c ->> 'segredo')::boolean) ORDER BY c ->> 'chave')
+     FROM crm_provider_catalog p, jsonb_array_elements(p.campos) c WHERE p.slug = 'profitcare')
+    = '[["base_url", false], ["chave", true]]'::jsonb
+  AND NOT EXISTS (SELECT 1 FROM crm_provider_catalog WHERE slug = 'softcare'),
+  (SELECT string_agg(slug, ', ' ORDER BY ordem) FROM crm_provider_catalog));
+
 -- Até o D64 esta asserção era "nenhuma declara adapter", e estava certa: o
 -- teste codificava o mundo de antes. O D64 escreveu o do Pipefy, e quem cobra
 -- a concordância de verdade passou a ser `tests/registro_para_sql.ts`, que

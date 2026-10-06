@@ -410,6 +410,9 @@ e elas têm teste automatizado obrigatório.**
 - **Nunca** ler card com uma regra que a planilha não usa. `adapters/leitura.ts` saiu de dentro de
   `planilha.ts` quando a segunda fonte chegou: o mesmo celular entrando como WhatsApp por uma porta e
   sumindo pela outra seria a segunda normalização do D32 (D64).
+- **Nunca** oferecer como alvo de ação um campo que a plataforma só deixa ler. O contato do
+  ProfitCare entra na estrutura para a fonte mapear; como ação, a API recusaria sempre e o dreno
+  queimaria as oito tentativas num fato que nunca chega. A marca é `somenteLeitura` (D70).
 
 - **Nunca** confiar só na instrução para frear o agente. O modelo pode desobedecer o que a
   instrução pede; o freio em código confere o texto composto (proibido, tamanho, dado sensível,
@@ -520,10 +523,10 @@ e elas têm teste automatizado obrigatório.**
 > `crm_connections` são o TERCEIRO uso do padrão que já valia para chip (`salvar_credencial_remetente`)
 > e chave de modelo (`salvar_credencial_ia`) — catálogo declara os campos, a função separa Vault de
 > `config`, e a tela não conhece CRM nenhum (D28). Oito plataformas, com o esquema de autenticação de
-> cada uma lido da documentação e a página registrada em `docs_url`: Softcare, Pipefy, HubSpot,
-> Pipedrive, RD Station CRM, Ploomes, Salesforce e Zoho CRM. **Os campos do Softcare são uma
-> suposição** (`base_url` + `token`) — não há documentação dele no repositório nem na base da casa, e
-> a linha precisa de confirmação antes de valer como contrato.
+> cada uma lido da documentação e a página registrada em `docs_url`: ProfitCare, Pipefy, HubSpot,
+> Pipedrive, RD Station CRM, Ploomes, Salesforce e Zoho CRM. A linha do ProfitCare se chamava
+> "Softcare" e tinha campos supostos até o **D70**, quando se descobriu que o CRM da casa não tinha
+> porta para fora — e ela foi construída do lado de lá (`crm-integracao`, chave por cliente).
 >
 > **Desde o D64 o Pipefy escreve; as outras sete guardam a credencial e nada mais**, e a tela diz
 > qual é qual antes da lista (D55). O meio entre o fato e o CRM é configuração do cliente, em
@@ -532,8 +535,9 @@ e elas têm teste automatizado obrigatório.**
 > (mover de fase, preencher campo — só ações que aguentam repetição), `crm_vinculos` liga pessoa a
 > card, e `crm_fontes` traz cards como contatos pela MESMA leitura da planilha
 > (`adapters/leitura.ts`), inscrevendo pela prévia do D35. O dreno só pega fato de quem tem destino;
-> sem card, o fato sai com o motivo em `outbox.resultado`. ProfitCare vem depois, e a linha do
-> Softcare continua suposição. Sem Vault no Postgres de teste, `tests/plataformas.sql` vai até a
+> sem card, o fato sai com o motivo em `outbox.resultado`. O ProfitCare tem adapter
+> (`adapters/profitcare.ts`, D70) e ainda não escreve: a API dele não está publicada em produção,
+> então o adapter não está em `criarCrm` e `tem_adapter` segue falso. Sem Vault no Postgres de teste, `tests/plataformas.sql` vai até a
 > borda e para lá — `feature_not_supported` é a prova de que o destino do segredo é o Vault e não uma
 > coluna, e o arquivo diz em voz alta o que não cobre.
 >
@@ -637,7 +641,7 @@ e elas têm teste automatizado obrigatório.**
 > **derivados do schema** cobram `tenant_id`, RLS e FK composta de toda tabela nova — lista escrita
 > à mão envelhece sem avisar, e essa já tinha perdido a `provider_servers` (D31).
 >
-> O schema está **aplicado no projeto `hucuwjvihqgftdjpnych`** (60 migrations no repositório, 67
+> O schema está **aplicado no projeto `hucuwjvihqgftdjpnych`** (61 migrations no repositório, 68
 > registros no projeto — a 55ª, que só apaga os dois classificadores sem chamador do D63, entrou em
 > 05/10 pelo SQL Editor, porque o DROP pelo MCP espera uma confirmação que não chega à sessão remota
 > (D63) — duas corretivas de texto, uma separação, duas do D46 (superfície e
