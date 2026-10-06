@@ -25,7 +25,7 @@ import type {
 import { situacao } from '../assistente';
 import type { Item as ItemDaSituacao } from '../assistente';
 import { lerFoto } from './Inicio';
-import { Aviso, NOME_CANAL, corCanal } from '../componentes/base';
+import { Aviso, NOME_CANAL, corCanal, tinta } from '../componentes/base';
 import { iniciais } from '../componentes/Rail';
 import { Ico } from '../componentes/icones';
 import { Anel, Barras, GraficoNoTempo, Tendencia, numero } from '../componentes/graficos';
@@ -331,8 +331,7 @@ function Conteudo({ tudo, dias, aoNavegar }: { tudo: Tudo; dias: number; aoNaveg
             <div className="respostas-lista">
               {respostas.map((r, i) => (
                 <button key={`${r.contact_id}-${r.ocorrido_em}-${i}`} className="resp" onClick={() => aoNavegar('/respostas')}>
-                  <span className="avatar" aria-hidden="true"
-                        style={{ background: `color-mix(in oklab, ${corCanal(r.canal)} 18%, transparent)`, color: corCanal(r.canal) }}>
+                  <span className="avatar" aria-hidden="true" style={tinta(corCanal(r.canal))}>
                     {iniciais(r.contato)}
                   </span>
                   <span style={{ minWidth: 0 }}>

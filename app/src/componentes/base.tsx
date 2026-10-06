@@ -15,10 +15,15 @@ export const IC: Record<string, ReactNode> = {
   campanha: <><path d="M4 10v4a1 1 0 0 0 1 1h3l6 4V5L8 9H5a1 1 0 0 0-1 1z" /><path d="M17.5 9a4 4 0 0 1 0 6" /></>,
 };
 
-/** Fundo do ícone na cor do canal, mas diluída: o ícone fica na cor cheia,
- *  e o cartão não vira um bloco de cor ao lado do texto. */
+/** Fundo do ícone na cor do canal, mas diluída, e o ícone (ou as iniciais)
+ *  na cor do canal puxada para a tinta do texto. A cor pura sobre a própria
+ *  diluição não passa de 4,5:1 no tema claro — conferido —, e puxar para
+ *  `--ink` resolve nos dois temas sem uma segunda tabela de cores. */
 export function tinta(cor: string): CSSProperties {
-  return { background: `color-mix(in oklab, ${cor} 16%, transparent)`, color: cor };
+  return {
+    background: `color-mix(in oklab, ${cor} 16%, transparent)`,
+    color: `color-mix(in oklab, ${cor} 72%, var(--ink))`,
+  };
 }
 
 export function Icone({ nome, cor }: { nome: string; cor?: string }) {
