@@ -11,6 +11,7 @@
  * antes de gravar.
  */
 import { useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useSessao } from '../sessao';
 import { Aviso, Kpi, NOME_CANAL, Secao, corCanal } from '../componentes/base';
 import {
@@ -22,7 +23,12 @@ import { mensagemDeErro } from '../supabase';
 export function Contatos() {
   const { tenant, opera } = useSessao();
 
-  const [busca, setBusca] = useState('');
+  // A busca do topo chega como `?busca=`: o termo entra no campo e a lista
+  // já vem filtrada, sem a pessoa digitar duas vezes.
+  const [params] = useSearchParams();
+  const termoDaUrl = params.get('busca') ?? '';
+  const [busca, setBusca] = useState(termoDaUrl);
+  useEffect(() => { setBusca(termoDaUrl); }, [termoDaUrl]);
   const [contatos, setContatos] = useState<Contato[]>([]);
   const [carregando, setCarregando] = useState(true);
   const [escolhidos, setEscolhidos] = useState<Set<string>>(new Set());

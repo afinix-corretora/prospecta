@@ -4,6 +4,7 @@ import { ehLocal, urlDeRetorno } from '../retorno';
 import { mensagemDeAcesso, problemaDaSenha, SENHA_MINIMA } from '../acesso';
 import { useSessao } from '../sessao';
 import { Aviso, Campo } from '../componentes/base';
+import { Marca } from '../componentes/icones';
 import { carimboLegivel } from '../carimbo';
 
 /**
@@ -49,7 +50,8 @@ export function Entrar() {
   return (
     <div className="entrar">
       <form onSubmit={modo === 'senha' ? entrar : pedirLink}>
-        <h1>Prospecta</h1>
+        <div className="selo"><Marca /><b>Prospecta</b></div>
+        <h1>{modo === 'senha' ? 'Entrar' : 'Receber link de acesso'}</h1>
         <p>{modo === 'senha' ? 'Motor de cadência multicanal.' : 'Definir ou redefinir a senha.'}</p>
 
         {modo === 'senha' ? (
@@ -151,6 +153,7 @@ export function DefinirSenha() {
   return (
     <div className="entrar">
       <form onSubmit={gravar}>
+        <div className="selo"><Marca /><b>Prospecta</b></div>
         <h1>Nova senha</h1>
         <p>Para <b>{sessao?.user.email}</b>. Nas próximas vezes, é com ela que você entra.</p>
         {/* O campo de usuário oculto é o que faz o gerenciador de senhas

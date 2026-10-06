@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import type { ReactNode } from 'react';
+import type { CSSProperties, ReactNode } from 'react';
 
 export const IC: Record<string, ReactNode> = {
   whatsapp: <path d="M4 20l1.3-4A8 8 0 1 1 8 18.7z" />,
@@ -15,9 +15,15 @@ export const IC: Record<string, ReactNode> = {
   campanha: <><path d="M4 10v4a1 1 0 0 0 1 1h3l6 4V5L8 9H5a1 1 0 0 0-1 1z" /><path d="M17.5 9a4 4 0 0 1 0 6" /></>,
 };
 
+/** Fundo do ícone na cor do canal, mas diluída: o ícone fica na cor cheia,
+ *  e o cartão não vira um bloco de cor ao lado do texto. */
+export function tinta(cor: string): CSSProperties {
+  return { background: `color-mix(in oklab, ${cor} 16%, transparent)`, color: cor };
+}
+
 export function Icone({ nome, cor }: { nome: string; cor?: string }) {
   return (
-    <span className="ico" style={cor ? { background: cor, color: '#fff' } : undefined}>
+    <span className="ico" style={cor ? tinta(cor) : undefined}>
       <svg viewBox="0 0 24 24" strokeLinejoin="round" strokeLinecap="round">{IC[nome] ?? IC.plataforma}</svg>
     </span>
   );

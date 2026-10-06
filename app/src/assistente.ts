@@ -703,7 +703,7 @@ export function situacao(f: Foto): Item[] {
       detalhe: ia.length
         ? f.provedoresIA.map((p) => ({ p, n: ia.filter((c) => c.provedor === p.slug).length }))
             .filter((x) => x.n).map((x) => `${x.p.nome}: ${x.n} conta${x.n > 1 ? 's' : ''}`).join(' · ')
-        : 'opcional: sem ela, não há rascunho de resposta — as contas se conectam em Configurações' },
+        : 'opcional: sem ela, o agente não responde quem escreve de volta — as contas se conectam em Configurações' },
     { id: 'crm', titulo: 'CRM', feito: crm.length > 0,
       detalhe: crm.length ? crm.map((c) => c.nome).join(', ') : 'opcional: sem ele, os fatos ficam só aqui' },
     { id: 'campanha', titulo: 'Campanha', feito: camps.length > 0,

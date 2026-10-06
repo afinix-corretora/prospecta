@@ -1,6 +1,7 @@
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useSessao } from '../sessao';
 import { NOME_CANAL } from './base';
+import { Ico, Marca } from './icones';
 import { sb } from '../supabase';
 import type { ProvedorCanal } from '../dados';
 
@@ -30,7 +31,19 @@ export function familiasDoCanal(provs: ProvedorCanal[]): Familia[] {
   return f.length > 1 ? (['oficial', 'nao'] as Familia[]).filter((x) => f.includes(x)) : [];
 }
 
-export function Rail({ provedores }: { provedores: ProvedorCanal[] }) {
+/** Iniciais para o avatar: "Afinix Corretora" → "AC". */
+export function iniciais(texto: string | null | undefined): string {
+  const partes = (texto ?? '').trim().split(/\s+/).filter(Boolean);
+  return ((partes[0]?.[0] ?? '') + (partes[1]?.[0] ?? '')).toUpperCase() || '·';
+}
+
+export function Rail({ provedores, respostasHoje, tema, aoTrocarTema }: {
+  provedores: ProvedorCanal[];
+  /** Respostas das últimas 24h: o número que faz alguém abrir a caixa. */
+  respostasHoje: number;
+  tema: 'dark' | 'light';
+  aoTrocarTema(): void;
+}) {
   const nav = useNavigate();
   const { pathname } = useLocation();
   const { tenant, tenants, trocarTenant, sessao } = useSessao();
@@ -43,67 +56,45 @@ export function Rail({ provedores }: { provedores: ProvedorCanal[] }) {
   const emConfig = pathname.startsWith('/config');
   const atual = (rota: string) => pathname === rota;
 
+  const Item = ({ rota, icone, rotulo, ativo, conta }: {
+    rota: string; icone: string; rotulo: string; ativo?: boolean; conta?: number;
+  }) => (
+    <button aria-current={ativo ?? atual(rota)} onClick={() => nav(rota)}>
+      <Ico nome={icone} /><span>{rotulo}</span>
+      {conta ? <span className="conta" aria-label={`${conta} nas últimas 24 horas`}>{conta > 99 ? '99+' : conta}</span> : null}
+    </button>
+  );
+
   return (
-    <aside className="rail">
-      <div className="brand"><b>Prospecta</b><span>Motor de cadência</span></div>
+    <aside className="rail" aria-label="Navegação">
+      <button className="brand" onClick={() => nav('/')} aria-label="Prospecta — início">
+        <Marca /><span><b>Prospecta</b><span>Motor de cadência</span></span>
+      </button>
 
+      {/* A operação do dia primeiro: o que voltou, onde cada lead está, o que
+          está rodando. A base e a saída para o CRM logo abaixo. */}
       <nav className="nav">
-        <button aria-current={atual('/')} onClick={() => nav('/')}>Início</button>
-        <button aria-current={atual('/campanhas') || pathname.startsWith('/campanhas/')}
-                onClick={() => nav('/campanhas')}>Campanhas</button>
+        <Item rota="/" icone="inicio" rotulo="Início" />
+        <Item rota="/respostas" icone="respostas" rotulo="Respostas" conta={respostasHoje} />
+        <Item rota="/funil" icone="funil" rotulo="Funil" />
+        <Item rota="/campanhas" icone="campanhas" rotulo="Campanhas"
+              ativo={atual('/campanhas') || pathname.startsWith('/campanhas/')} />
+        <Item rota="/cadencias" icone="cadencias" rotulo="Cadências" ativo={pathname.startsWith('/cadencias')} />
+        <Item rota="/contatos" icone="contatos" rotulo="Contatos" />
+        <Item rota="/contatos/importar" icone="importar" rotulo="Importar" />
+        <Item rota="/supressao" icone="supressao" rotulo="Supressão" />
+        <Item rota="/writeback" icone="writeback" rotulo="Writeback" />
+      </nav>
 
-        {/* Primeiro nível, ao lado das campanhas: é a outra metade da mesma
-            pergunta. A campanha diz PARA QUEM e por quais canais; a cadência
-            diz O QUE se manda e quando. */}
-        <button aria-current={pathname.startsWith('/cadencias')}
-                onClick={() => nav('/cadencias')}>
-          Cadências
-        </button>
-
-        {/* Entrada de contato. Primeiro nível porque é o primeiro quadro do
-            diagrama: sem ela o motor não tem sobre o que rodar. */}
-        <button aria-current={atual('/contatos')} onClick={() => nav('/contatos')}>
-          Contatos
-        </button>
-        <button
-          aria-current={atual('/contatos/importar')}
-          onClick={() => nav('/contatos/importar')}
-        >
-          Importar
-        </button>
-        {/* Primeiro nível junto dos contatos: é a outra metade da base — quem
-            está dentro e quem nunca pode ser tocado. */}
-        <button aria-current={atual('/supressao')} onClick={() => nav('/supressao')}>
-          Supressão
-        </button>
-
-        {/* A seta que volta. O texto da resposta era gravado e ilegível —
-            pessoa interessada esperando resposta que ninguém sabia que
-            existia. Primeiro nível porque é a pergunta mais urgente do dia. */}
-        <button aria-current={atual('/respostas')} onClick={() => nav('/respostas')}>
-          Respostas
-        </button>
-
-        {/* Onde cada lead está. Primeiro nível porque é a pergunta que o dono
-            da operação faz primeiro — e a que o produto não sabia responder. */}
-        <button aria-current={atual('/funil')} onClick={() => nav('/funil')}>
-          Funil
-        </button>
-
-        {/* A última seta do diagrama, e a única que sai do motor para fora.
-            Primeiro nível porque a pergunta que ela responde — "o CRM já sabe?"
-            — é operacional diária, não configuração. */}
-        <button aria-current={atual('/writeback')} onClick={() => nav('/writeback')}>
-          Writeback
-        </button>
-
+      {/* Grupos fechados por padrão: abrem índice, não conteúdo (D21). */}
+      <nav className="nav" aria-label="Integrações e configurações">
         <button
           className="grupo"
           aria-current={atual('/canais')}
           aria-expanded={emCanais}
           onClick={() => (emCanais && atual('/canais') ? nav('/') : nav('/canais'))}
         >
-          <span>Canais</span><Chevron />
+          <Ico nome="canais" /><span>Canais</span><Chevron />
         </button>
         <div className="sub" data-aberto={emCanais}>
           <div>
@@ -150,13 +141,14 @@ export function Rail({ provedores }: { provedores: ProvedorCanal[] }) {
         <button
           className="grupo"
           aria-current={atual('/config')}
-          aria-expanded={emConfig}
+          aria-expanded={emConfig || atual('/configurar')}
           onClick={() => (emConfig && atual('/config') ? nav('/') : nav('/config'))}
         >
-          <span>Configurações</span><Chevron />
+          <Ico nome="config" /><span>Configurações</span><Chevron />
         </button>
-        <div className="sub" data-aberto={emConfig}>
+        <div className="sub" data-aberto={emConfig || atual('/configurar')}>
           <div>
+            <button aria-current={atual('/configurar')} onClick={() => nav('/configurar')}>Assistente</button>
             <button aria-current={atual('/config/email')} onClick={() => nav('/config/email')}>E-mail</button>
             <button aria-current={atual('/config/blacklist')} onClick={() => nav('/config/blacklist')}>Blacklist</button>
             <button aria-current={atual('/config/ia')} onClick={() => nav('/config/ia')}>Provedores de IA</button>
@@ -170,17 +162,24 @@ export function Rail({ provedores }: { provedores: ProvedorCanal[] }) {
 
       <div className="railfoot">
         {tenants.length > 1 ? (
-          <div className="campo" style={{ margin: 0 }}>
+          <div className="campo">
             <label htmlFor="tenant">Cliente</label>
             <select id="tenant" value={tenant?.tenant_id ?? ''} onChange={(e) => trocarTenant(e.target.value)}>
               {tenants.map((t) => <option key={t.tenant_id} value={t.tenant_id}>{t.nome}</option>)}
             </select>
           </div>
         ) : (
-          <div><b>{tenant?.nome ?? '—'}</b><br />{tenant?.papel ?? ''}</div>
+          <div className="quem">
+            <span className="avatar" aria-hidden="true">{iniciais(tenant?.nome)}</span>
+            <div><b>{tenant?.nome ?? '—'}</b><small>{sessao?.user.email ?? ''}</small></div>
+          </div>
         )}
-        <div>{sessao?.user.email}</div>
-        <button onClick={() => void sb.auth.signOut()}>Sair</button>
+        <div className="acoes-rail">
+          <button onClick={aoTrocarTema} aria-label={tema === 'dark' ? 'Usar tema claro' : 'Usar tema escuro'}>
+            <Ico nome={tema === 'dark' ? 'sol' : 'lua'} />{tema === 'dark' ? 'Claro' : 'Escuro'}
+          </button>
+          <button onClick={() => void sb.auth.signOut()}><Ico nome="sair" />Sair</button>
+        </div>
       </div>
     </aside>
   );

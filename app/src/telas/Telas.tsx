@@ -14,7 +14,9 @@ import type {
 } from '../dados';
 import {
   Aviso, Campo, Kpi, LinhaIndice, NOME_CANAL, Secao, corCanal,
+  tinta,
 } from '../componentes/base';
+import { Ico } from '../componentes/icones';
 import { familiaDe, familiasDoCanal } from '../componentes/Rail';
 
 /** Carrega uma vez e devolve estado de tela — erro visível, não engolido. */
@@ -38,7 +40,7 @@ export function Moldura({ titulo, sub, voltar, children }: {
   return (
     <div className="wrap">
       <div className="cabeca"><div>
-        {voltar && <button className="voltar" onClick={voltar}>← Configurações</button>}
+        {voltar && <button className="voltar" onClick={voltar}><Ico nome="voltar" className="" />Configurações</button>}
         <h1>{titulo}</h1><p>{sub}</p>
       </div></div>
       {children}
@@ -892,7 +894,7 @@ export function ConfigPlataformas() {
             <section className="indice">
               {ps.map((p) => (
                 <div key={p.slug} className="item" style={{ cursor: 'default' }}>
-                  <span className="ico" style={{ background: corCanal(c), color: '#fff' }}>
+                  <span className="ico" style={tinta(corCanal(c))}>
                     <svg viewBox="0 0 24 24" strokeLinejoin="round" strokeLinecap="round" />
                   </span>
                   <span className="txt">

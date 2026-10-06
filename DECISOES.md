@@ -2717,3 +2717,67 @@ derrubam os testes:
 `campos` e `descricao` batiam com o banco de teste antes da migration, ou seja, com o que o down
 restaura. Depois, os dois batem com o banco de teste depois dela. São 68 registros. O `get_advisors`
 não achou nada novo.
+
+### D71 — A identidade da referência, e o Início vira painel de resultados
+
+**O pedido.** Ajustar o front-end inteiro e a identidade visual, aplicando a referência do Behance
+que o usuário trouxe no começo ("Dashboard", de Anya Masher). Três decisões foram dele:
+- o produto atende gestor e operador com o mesmo peso;
+- a primeira tela é um painel de resultados;
+- o tema padrão é o escuro, e a pessoa pode escolher o claro.
+
+**A identidade.**
+- **Tipografia.** Anek Latin (títulos e números, levemente condensada) e Roboto (interface), as
+  duas empacotadas no build por `@fontsource-variable`. O app não depende do Google para ter a
+  própria cara.
+- **Cores.** Neutros carvão e lavanda, índigo e periwinkle como acento, menta para o que deu certo.
+- **Menu.** O item ativo é uma pílula preenchida: índigo no escuro, menta no claro, como nas duas
+  versões da referência.
+- **Fundo e ícones.** Blobs desfocados atrás dos cartões. Ícones desenhados em
+  `componentes/icones.tsx`, num traço só, sem emoji nem glifo.
+- **Tema.** Decidido no `index.html` antes da primeira pintura, para a tela não piscar, e guardado
+  em `prospecta:tema`.
+
+**As cores de gráfico foram conferidas, não escolhidas no olho.** O validador de paleta mediu as
+quatro cores (`--g-1..4`) nos dois temas: faixa de luminosidade, croma, separação para daltonismo e
+contraste contra o cartão. A menta da marca (#3DF5A8) é clara demais para preencher área no escuro.
+Por isso ela mora na interface e o gráfico usa a menta conferida (#16A873). No claro, a cor de
+canal também vira texto, e foi escurecida até passar de 4,5:1.
+
+**O painel** (`telas/Painel.tsx`) mostra, nesta ordem:
+1. O que o motor **não** fez: a faixa de modo simulado (D36) e o cartão de configuração pendente,
+   que é o assistente do D67 resumido. O assistente mudou para `/configurar`.
+2. Quatro números do período (7, 14 ou 30 dias), cada um comparado ao período anterior.
+3. O ritmo dia a dia.
+4. Funil, quem respondeu, campanhas ligadas, divisão por canal e a fila do CRM.
+
+Duas regras do método de gráfico entram em código:
+- **Um eixo só.** Mensagens e respostas têm escalas diferentes, então são dois painéis empilhados
+  com o mesmo tempo, e nunca um segundo eixo Y.
+- **Hoje é parcial.** O último dia sai tracejado, para a queda do dia em curso não parecer queda
+  de verdade.
+
+Em modo simulado nada "saiu". O cartão diz "Mensagens simuladas", e a taxa de resposta vira "—":
+taxa sobre envio que não houve seria um número sem sentido com cara de resultado.
+
+**Sem função nova no banco.** O painel lê `messages` e `message_events` com o JWT de quem olha.
+O RLS já deixa ler; o filtro por cliente é explícito em cada leitura, porque o RLS deixa ver todos
+os clientes da pessoa. A série diária é montada no navegador. Há um teto de 20 mil linhas, e acima
+dele a tela diz que as curvas são amostra. As comparações vêm contadas no banco
+(`count: exact`). Uma agregação em SQL é o passo seguinte quando o volume pedir, e ficou fora de
+propósito: o usuário pediu a tela antes de mexer em função.
+
+**Conferido no navegador** com dados sintéticos, em desktop (1440) e celular (390), escuro e claro,
+mais o modo simulado. Uma revisão independente, num contexto novo, achou oito pontos materiais, e
+os oito foram corrigidos:
+- o modo simulado se contradizia;
+- glifos ✓ e ← no lugar de ícone;
+- contraste abaixo de 4,5:1 no claro;
+- os dois painéis do gráfico liam como um eixo;
+- barras chapadas;
+- o cartão do funil ficava vazio embaixo;
+- os KPIs ficavam um por linha no celular;
+- o nome do cliente aparecia três vezes.
+
+O detector mecânico de design rodou em modo degradado (sem o parser de HTML), e o vazio dele não
+prova nada.

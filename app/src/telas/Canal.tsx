@@ -10,6 +10,7 @@ import type { ProvedorCanal, Remetente, Servidor } from '../dados';
 import {
   Aviso, Campo, Copiar, Icone, Kpi, LinhaIndice, NOME_CANAL, Secao, corCanal,
 } from '../componentes/base';
+import { Ico } from '../componentes/icones';
 import { FAMILIAS, familiaDe, familiasDoCanal } from '../componentes/Rail';
 import type { Familia } from '../componentes/Rail';
 
@@ -57,7 +58,7 @@ export function Canal() {
     <div className="wrap">
       <div className="cabeca"><div>
         <button className="voltar" onClick={() => nav(familia ? `/canais/${canal}` : '/canais')}>
-          ← {familia ? NOME_CANAL[canal] : 'Canais'}
+          <Ico nome="voltar" className="" />{familia ? NOME_CANAL[canal] : 'Canais'}
         </button>
         <h1>{familia ? `${NOME_CANAL[canal]} · ${FAMILIAS[familia].nome}` : NOME_CANAL[canal]}</h1>
         <p>{familia ? FAMILIAS[familia].desc : DESC_CANAL[canal]}</p>

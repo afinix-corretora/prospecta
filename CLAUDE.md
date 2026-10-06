@@ -441,6 +441,12 @@ e elas têm teste automatizado obrigatório.**
 - **Nunca** pôr na pessoa compartilhada o que é decisão de cada campanha. O agente é uma persona que
   várias campanhas dividem; a conta de IA mora em `campaigns.ai_credential_id` e vale sobre a do
   agente — trocar a dele numa campanha trocaria em todas (D68).
+- **Nunca** dizer "saiu" do que foi simulado. No painel, simulado vira "Mensagens simuladas" e a
+  taxa de resposta vira "—": taxa sobre envio que não houve é número com cara de resultado (D71).
+- **Nunca** pôr duas grandezas de escala diferente no mesmo eixo Y, nem dar a um gráfico um segundo
+  eixo. Mensagens e respostas são dois painéis com o mesmo tempo (D71).
+- **Nunca** escolher cor de gráfico no olho. `--g-*` passaram pelo validador de paleta nos dois
+  temas; cor nova entra pelo mesmo validador (D71).
 - **Nunca** guardar o progresso do assistente numa tabela. "O que está pronto" é lido do banco a cada
   vez; uma coluna "configurado" mentiria no dia em que alguém configurasse pela tela (D67).
 - **Nunca** aceitar uma resposta que nenhuma pergunta seguinte lê. Foi o laço infinito que a
@@ -593,7 +599,15 @@ e elas têm teste automatizado obrigatório.**
 > texto. `respostas_para_rascunhar` ficou sem chamador (a fila nova é `respostas_para_o_agente`) e sai
 > numa migration própria, pelo SQL Editor (D63).
 >
-> O **Início** é o assistente de configuração desde o **D67**: pergunta canais, tipo de lista,
+> A **identidade visual** é a da referência escolhida pelo usuário desde o **D71**: Anek Latin e
+> Roboto empacotadas no build, escuro por padrão com o claro guardado por pessoa, item ativo em
+> pílula, cores de gráfico conferidas pelo validador nos dois temas. O **Início** virou painel de
+> resultados (`telas/Painel.tsx`): primeiro o que o motor não fez (modo simulado, configuração
+> pendente), depois os números do período contra o anterior, o ritmo dia a dia em dois painéis com o
+> mesmo tempo e escalas próprias (nunca dois eixos Y), funil, quem respondeu e campanhas. Lê
+> `messages` e `message_events` pelo RLS, com o cliente explícito em cada leitura, sem função nova.
+>
+> O **assistente de configuração** existe desde o **D67** e mora em `/configurar` desde o D71: pergunta canais, tipo de lista,
 > volume por dia, provedor, IA, CRM e primeira campanha, e devolve um plano de cartões que só roda
 > com "Autorizar". É um roteiro, não um modelo de linguagem — no primeiro acesso não há chave de IA, e
 > ela é do cliente (D59). A lógica é pura (`app/src/assistente.ts`, `tests/assistente.test.ts`) e o

@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react';
-import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
+import { BrowserRouter, Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 import { ProvedorSessao, useSessao } from './sessao';
-import { Rail } from './componentes/Rail';
+import { Rail, iniciais } from './componentes/Rail';
+import { Ico, Marca } from './componentes/icones';
+import { useTema } from './componentes/tema';
 import { Aviso, Campo } from './componentes/base';
 import { DefinirSenha, Entrar } from './telas/Entrar';
 import { Canal } from './telas/Canal';
@@ -17,11 +19,12 @@ import { Respostas } from './telas/Respostas';
 import { Supressao } from './telas/Supressao';
 import { Writeback } from './telas/Writeback';
 import { Inicio } from './telas/Inicio';
+import { Painel } from './telas/Painel';
 import {
   Canais, Config, ConfigAgentes, ConfigIA, ConfigModelos, ConfigPlataformas,
   ConfigVinculadas, Hub,
 } from './telas/Telas';
-import { lerProvedoresCanal, criarTenant } from './dados';
+import { lerProvedoresCanal, lerRespostas, criarTenant } from './dados';
 import type { ProvedorCanal } from './dados';
 import { configurado, faltando, mensagemDeErro } from './supabase';
 import { carimboLegivel } from './carimbo';
@@ -97,18 +100,42 @@ function Portao() {
 }
 
 function Casca() {
+  const { tenant, sessao } = useSessao();
+  const { pathname } = useLocation();
   const [provedores, setProvedores] = useState<ProvedorCanal[]>([]);
+  const [respostasHoje, setRespostasHoje] = useState(0);
+  const [gaveta, setGaveta] = useState(false);
+  const [tema, alternarTema] = useTema();
+
   useEffect(() => { lerProvedoresCanal().then(setProvedores).catch(() => setProvedores([])); }, []);
 
+  // O número ao lado de "Respostas" no menu. Lido a cada troca de tela, que
+  // é quando a pessoa está olhando para o menu; erro aqui não derruba nada.
+  useEffect(() => {
+    if (!tenant) return;
+    const desde = Date.now() - 24 * 3600 * 1000;
+    lerRespostas(tenant.tenant_id, undefined, 100)
+      .then((rs) => setRespostasHoje(rs.filter((r) => Date.parse(r.ocorrido_em) >= desde).length))
+      .catch(() => setRespostasHoje(0));
+  }, [tenant, pathname]);
+
+  // Mudou de tela no celular: a gaveta fecha sozinha.
+  useEffect(() => { setGaveta(false); }, [pathname]);
+
   return (
-    <div className="shell">
-      <Rail provedores={provedores} />
+    <div className="shell" data-gaveta={gaveta}>
+      <Rail provedores={provedores} respostasHoje={respostasHoje} tema={tema} aoTrocarTema={alternarTema} />
+      <div className="veu" onClick={() => setGaveta(false)} aria-hidden="true" />
       <main>
+        <Topo aoAbrirMenu={() => setGaveta(true)} nomeCliente={tenant?.nome ?? ''}
+              papel={tenant?.papel ?? ''} email={sessao?.user.email ?? ''}
+              tema={tema} aoTrocarTema={alternarTema} />
         <Routes>
-          {/* O assistente é a porta de entrada (D67): quem chega pela primeira
-              vez não tem o que ver no Hub, e quem já configurou vê, no topo,
-              o que está pronto — lido do banco, não guardado. */}
-          <Route path="/" element={<Inicio />} />
+          {/* O painel é a porta de entrada: o que rendeu, quem respondeu, o que
+              pede ação. O assistente (D67) mora em /configurar e aparece no
+              painel como cartão de progresso enquanto houver passo pendente. */}
+          <Route path="/" element={<Painel />} />
+          <Route path="/configurar" element={<Inicio />} />
           <Route path="/campanhas" element={<Hub />} />
           <Route path="/campanhas/:id" element={<Campanha />} />
           <Route path="/cadencias" element={<Cadencias />} />
@@ -141,6 +168,42 @@ function Casca() {
   );
 }
 
+/** A barra do topo: buscar contato de qualquer tela, trocar o tema, e saber
+ *  em qual cliente se está. No celular, abre o menu. */
+function Topo(props: {
+  aoAbrirMenu(): void; nomeCliente: string; papel: string; email: string;
+  tema: 'dark' | 'light'; aoTrocarTema(): void;
+}) {
+  const nav = useNavigate();
+  const [termo, setTermo] = useState('');
+  return (
+    <header className="topo">
+      <button className="icobtn menu" onClick={props.aoAbrirMenu} aria-label="Abrir menu">
+        <Ico nome="menu" />
+      </button>
+      <span className="marca-topo"><Marca />Prospecta</span>
+      <form role="search" onSubmit={(e) => {
+        e.preventDefault();
+        nav(`/contatos?busca=${encodeURIComponent(termo.trim())}`);
+      }}>
+        <Ico nome="busca" />
+        <input type="search" value={termo} onChange={(e) => setTermo(e.target.value)}
+               placeholder="Buscar contato por nome ou número" aria-label="Buscar contato" />
+      </form>
+      <div className="dir">
+        <button className="icobtn" onClick={props.aoTrocarTema}
+                aria-label={props.tema === 'dark' ? 'Usar tema claro' : 'Usar tema escuro'}
+                title={props.tema === 'dark' ? 'Tema claro' : 'Tema escuro'}>
+          <Ico nome={props.tema === 'dark' ? 'sol' : 'lua'} />
+        </button>
+        {/* Só o avatar: o nome do cliente já está no menu e na saudação. */}
+        <span className="cliente avatar" title={`${props.nomeCliente} · ${props.papel} · ${props.email}`}
+              aria-label={`${props.nomeCliente}, ${props.papel}`}>{iniciais(props.nomeCliente)}</span>
+      </div>
+    </header>
+  );
+}
+
 function PrimeiroCliente() {
   const { recarregarTenants } = useSessao();
   const [nome, setNome] = useState('');
@@ -158,6 +221,7 @@ function PrimeiroCliente() {
   return (
     <div className="entrar">
       <form onSubmit={criar}>
+        <div className="selo"><Marca /><b>Prospecta</b></div>
         <h1>Seu cliente</h1>
         <p>Você ainda não pertence a nenhum. Criar um põe você como dono dele.</p>
         <Campo id="t-nome" rotulo="Nome" valor={nome}

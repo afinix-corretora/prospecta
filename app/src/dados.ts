@@ -1458,3 +1458,137 @@ export async function salvarAgente(id: string, campos: Pick<Agente,
   const { error } = await sb.from('agents').update(campos).eq('id', id);
   if (error) throw error;
 }
+
+// ---------------------------------------------------------------------------
+// Painel de resultados (Início)
+// ---------------------------------------------------------------------------
+
+/** Um dia do painel, na hora local de quem olha. */
+export type Dia = string; // 'AAAA-MM-DD'
+
+export interface DadosDoPainel {
+  dias: Dia[];
+  /** Saídas por dia: enviadas + simuladas. Simulado conta como saída do motor,
+   *  mas o painel diz em voz alta quando nada saiu de verdade (D36). */
+  saidas: number[];
+  enviadas: number[];
+  simuladas: number[];
+  respostas: number[];
+  porCanal: Record<string, number>;
+  totais: { saidas: number; enviadas: number; simuladas: number; falhas: number; respostas: number };
+  anterior: { saidas: number; respostas: number };
+  emCadencia: number;
+  /** Verdadeiro quando o período passou do teto de leitura e as séries são
+   *  uma amostra — dito na tela, nunca escondido. */
+  amostra: boolean;
+}
+
+const TETO_DE_LINHAS = 20000;
+const PAGINA = 1000;
+
+function chaveDoDia(d: Date): Dia {
+  const p = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+}
+
+/**
+ * O que o painel mostra, lido com o JWT de quem olha e filtrado pelo cliente
+ * escolhido — o RLS deixa ver todos os clientes da pessoa, e o painel é de um.
+ *
+ * A série diária é montada aqui, a partir das linhas: sem função nova no
+ * banco. O teto existe para a tela não travar numa operação grande; passou
+ * dele, o painel avisa que é amostra. A agregação no banco é o próximo passo
+ * quando o volume pedir.
+ */
+export async function lerPainel(tenant: string, dias: number): Promise<DadosDoPainel> {
+  const hoje = new Date();
+  const inicio = new Date(hoje.getFullYear(), hoje.getMonth(), hoje.getDate() - (dias - 1));
+  const antes = new Date(inicio.getTime() - dias * 24 * 3600 * 1000);
+  const listaDias: Dia[] = Array.from({ length: dias }, (_, i) =>
+    chaveDoDia(new Date(inicio.getFullYear(), inicio.getMonth(), inicio.getDate() + i)));
+  const idx = new Map(listaDias.map((d, i) => [d, i]));
+  const zeros = () => listaDias.map(() => 0);
+
+  async function paginar<T>(montar: (de: number, ate: number) => PromiseLike<{ data: T[] | null; error: unknown }>) {
+    const linhas: T[] = [];
+    for (let de = 0; de < TETO_DE_LINHAS; de += PAGINA) {
+      const { data, error } = await montar(de, de + PAGINA - 1);
+      if (error) throw error;
+      linhas.push(...(data ?? []));
+      if ((data ?? []).length < PAGINA) return { linhas, cortado: false };
+    }
+    return { linhas, cortado: true };
+  }
+
+  const contar = async (q: PromiseLike<{ count: number | null; error: unknown }>) => {
+    const { count, error } = await q;
+    if (error) throw error;
+    return count ?? 0;
+  };
+
+  const [msgs, resps, saidasAntes, respostasAntes, emCadencia] = await Promise.all([
+    paginar<{ criado_em: string; status: string; canal: string }>((de, ate) => sb
+      .from('messages').select('criado_em, status, canal')
+      .eq('tenant_id', tenant).gte('criado_em', inicio.toISOString())
+      .order('criado_em').range(de, ate)),
+    paginar<{ ocorrido_em: string }>((de, ate) => sb
+      .from('message_events').select('ocorrido_em')
+      .eq('tenant_id', tenant).eq('tipo', 'respondido').gte('ocorrido_em', inicio.toISOString())
+      .order('ocorrido_em').range(de, ate)),
+    contar(sb.from('messages').select('id', { count: 'exact', head: true })
+      .eq('tenant_id', tenant).in('status', ['enviado', 'simulado'])
+      .gte('criado_em', antes.toISOString()).lt('criado_em', inicio.toISOString())),
+    contar(sb.from('message_events').select('id', { count: 'exact', head: true })
+      .eq('tenant_id', tenant).eq('tipo', 'respondido')
+      .gte('ocorrido_em', antes.toISOString()).lt('ocorrido_em', inicio.toISOString())),
+    contar(sb.from('enrollments').select('id', { count: 'exact', head: true })
+      .eq('tenant_id', tenant).eq('status', 'ativo')),
+  ]);
+
+  const enviadas = zeros(), simuladas = zeros(), respostas = zeros();
+  const porCanal: Record<string, number> = {};
+  let falhas = 0;
+  for (const m of msgs.linhas) {
+    const i = idx.get(chaveDoDia(new Date(m.criado_em)));
+    if (i === undefined) continue;
+    if (m.status === 'enviado') enviadas[i]! += 1;
+    else if (m.status === 'simulado') simuladas[i]! += 1;
+    else { if (m.status === 'falha') falhas += 1; continue; }
+    porCanal[m.canal] = (porCanal[m.canal] ?? 0) + 1;
+  }
+  for (const r of resps.linhas) {
+    const i = idx.get(chaveDoDia(new Date(r.ocorrido_em)));
+    if (i !== undefined) respostas[i]! += 1;
+  }
+  const soma = (xs: number[]) => xs.reduce((a, b) => a + b, 0);
+  const saidas = listaDias.map((_, i) => enviadas[i]! + simuladas[i]!);
+
+  return {
+    dias: listaDias, saidas, enviadas, simuladas, respostas, porCanal,
+    totais: {
+      saidas: soma(saidas), enviadas: soma(enviadas), simuladas: soma(simuladas),
+      falhas, respostas: soma(respostas),
+    },
+    anterior: { saidas: saidasAntes, respostas: respostasAntes },
+    emCadencia,
+    amostra: msgs.cortado || resps.cortado,
+  };
+}
+
+export interface EstagioContado extends Estagio { total: number }
+
+/** Quantos leads em cada estágio do funil deste cliente. Conta no banco, um
+ *  estágio por vez — o painel não precisa dos cards, só do tamanho. */
+export async function contarFunil(tenant: string): Promise<EstagioContado[]> {
+  const { data, error } = await sb.from('pipeline_stages')
+    .select('id, nome, slug, posicao, cor, tipo').eq('tenant_id', tenant).order('posicao');
+  if (error) throw error;
+  const estagios = (data ?? []) as Estagio[];
+  const totais = await Promise.all(estagios.map(async (e) => {
+    const { count, error: e2 } = await sb.from('deals').select('id', { count: 'exact', head: true })
+      .eq('tenant_id', tenant).eq('stage_id', e.id);
+    if (e2) throw e2;
+    return count ?? 0;
+  }));
+  return estagios.map((e, i) => ({ ...e, total: totais[i]! }));
+}

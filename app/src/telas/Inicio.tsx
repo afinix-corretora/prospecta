@@ -31,8 +31,9 @@ import {
 } from '../assistente';
 import type { Acao, Foto, Pergunta, Resposta, Respostas } from '../assistente';
 import { Aviso, Campo, Secao } from '../componentes/base';
+import { Ico } from '../componentes/icones';
 
-async function lerFoto(administra: boolean, opera: boolean): Promise<Foto> {
+export async function lerFoto(administra: boolean, opera: boolean): Promise<Foto> {
   const [provedores, remetentes, provedoresIA, credenciaisIA, provedoresCRM, conexoesCRM,
          modelos, agentes, campanhas, contatos] = await Promise.all([
     lerProvedoresCanal(), lerRemetentes(), lerProvedoresIA(), lerCredenciaisIA(), lerProvedoresCRM(),
@@ -97,8 +98,8 @@ export function Inicio() {
     <div className="wrap">
       <div className="cabeca">
         <div>
-          <h1>Início</h1>
-          <p>O assistente pergunta como você quer trabalhar, monta um plano e só faz o que você
+          <h1>Assistente de configuração</h1>
+          <p>Ele pergunta como você quer trabalhar, monta um plano e só faz o que você
              autorizar, um passo de cada vez. Chave de API nenhuma é digitada aqui: as contas se
              conectam em Configurações, e o assistente só escolhe entre as que já existem.</p>
         </div>
@@ -110,7 +111,7 @@ export function Inicio() {
       <section className="indice">
         {itens.map((i) => (
           <div key={i.id} className="item" style={{ cursor: 'default' }}>
-            <span className={`marca ${i.feito ? 'ok' : ''}`} aria-hidden="true">{i.feito ? '✓' : ''}</span>
+            <span className={`marca ${i.feito ? 'ok' : ''}`} aria-hidden="true">{i.feito ? <Ico nome="check" className="" /> : null}</span>
             <span className="txt"><b>{i.titulo}</b><p>{i.detalhe}</p></span>
             <span className="cont">{i.feito ? 'pronto' : 'pendente'}</span>
           </div>
@@ -135,7 +136,7 @@ function Conversa({ foto, mem, aoMudar, aoRecarregar, aoNavegar }: {
 
   return (
     <>
-      <Secao titulo="Assistente de configuração"
+      <Secao titulo="Conversa"
              nota={Object.keys(mem.respostas).length
                ? <button className="link" onClick={() => aoMudar(VAZIA)}>recomeçar a conversa</button>
                : 'leva uns dois minutos'} />
@@ -306,7 +307,7 @@ function Cartao({ n, acao: a, foto, mem, plano, aoMudar, aoRecarregar, aoNavegar
   return (
     <div className={`painel cartao ${feito ? 'feito' : pulado ? 'pulado' : ''}`}>
       <div className="cartao-cabeca">
-        <span className="num">{feito ? '✓' : n}</span>
+        <span className="num">{feito ? <Ico nome="check" className="" /> : n}</span>
         <b>{a.titulo}</b>
         <span className="chip">
           {feito ? 'feito' : pulado ? 'pulado' : a.tipo === 'configurar' ? 'em outra tela'

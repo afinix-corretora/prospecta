@@ -21,6 +21,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useSessao } from '../sessao';
 import { Aviso, Campo, LinhaIndice, NOME_CANAL, Secao, corCanal } from '../componentes/base';
+import { Ico } from '../componentes/icones';
 import {
   definirFlowDaCampanha, lerCampanhas, lerCanaisEntregaveis, lerPassosDaVersao,
   lerVariaveisDisponiveis, lerVersoesDeFlow, publicarVersaoDeFlow,
@@ -246,7 +247,7 @@ export function Cadencia() {
   return (
     <div className="wrap">
       <div className="cabeca"><div>
-        <button className="voltar" onClick={() => nav('/cadencias')}>← Cadências</button>
+        <button className="voltar" onClick={() => nav('/cadencias')}><Ico nome="voltar" className="" />Cadências</button>
         <h1>{nova ? 'Cadência nova' : nome}</h1>
         <p>
           {nova
