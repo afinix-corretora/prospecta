@@ -201,7 +201,7 @@ export function LinhaConta({ conta, provedores, administra, aoMudar }: {
             tentar de novo o que ele acabou de ver falhar. */}
         {administra && conta.estado !== 'circuito_aberto' && (
           <p style={{ marginTop: 6 }}>
-            <button className="btn" style={{ fontSize: 11, padding: '3px 8px' }}
+            <button className="btn mini"
                     disabled={mexendo} onClick={() => void alternar()}>
               {mexendo ? 'um instante…' : ativo ? 'Tirar do pool' : 'Devolver ao pool'}
             </button>
@@ -217,12 +217,12 @@ export function LinhaConta({ conta, provedores, administra, aoMudar }: {
         </p>
         {administra && (
           <p style={{ marginTop: 6 }}>
-            <button className="btn" style={{ fontSize: 11, padding: '3px 8px' }}
+            <button className="btn mini"
                     disabled={verificando} onClick={() => void verificar()}>
               {verificando ? 'perguntando ao provedor…' : 'Verificar conexão'}
             </button>
             {!confirmando ? (
-              <button className="btn" style={{ fontSize: 11, padding: '3px 8px', marginLeft: 6 }}
+              <button className="btn mini" style={{ marginLeft: 6 }}
                       disabled={mexendo} onClick={() => setConfirmando(true)}>
                 Remover
               </button>
@@ -231,11 +231,11 @@ export function LinhaConta({ conta, provedores, administra, aoMudar }: {
                 <span className="ajuda" style={{ marginLeft: 8 }}>
                   Sai da lista e do pool para sempre; o histórico fica.
                 </span>
-                <button className="btn" style={{ fontSize: 11, padding: '3px 8px', marginLeft: 6, color: 'var(--crit)' }}
+                <button className="btn mini" style={{ marginLeft: 6, color: 'var(--crit)' }}
                         disabled={mexendo} onClick={() => void remover()}>
                   {mexendo ? 'removendo…' : 'Confirmar remoção'}
                 </button>
-                <button className="btn" style={{ fontSize: 11, padding: '3px 8px', marginLeft: 6 }}
+                <button className="btn mini" style={{ marginLeft: 6 }}
                         disabled={mexendo} onClick={() => setConfirmando(false)}>
                   Cancelar
                 </button>

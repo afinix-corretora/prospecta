@@ -57,13 +57,16 @@ export function Respostas() {
 
   return (
     <div className="wrap">
-      <div className="cabeca"><div>
+      <div className="cabeca">
+        <div>
         <h1>Respostas</h1>
         <p>O que voltou dos contatos, e o que o agente fez com cada resposta. Agente que
            responde sozinho manda pelo motor; o que ele não pôde mandar volta para você, com o
            motivo e o texto. Agente que não responde sozinho deixa o rascunho para você ler,
            ajustar e mandar pelo aplicativo do canal.</p>
-      </div></div>
+        </div>
+        <div className="cta"><button className="btn" onClick={() => void recarregar()}>Atualizar</button></div>
+      </div>
 
       {erro && <Aviso tipo="erro">{erro}</Aviso>}
 
@@ -78,7 +81,6 @@ export function Respostas() {
 
       <ListaDeRespostas lista={lista} rascunhos={rascunhos} />
 
-      <button className="btn" onClick={() => void recarregar()}>Atualizar</button>
     </div>
   );
 }
@@ -224,7 +226,7 @@ function RascunhoDaResposta({ r }: { r?: Rascunho }) {
         <span style={{ fontSize: 11, color: r.envio === 'devolvido' ? 'var(--warn)' : 'var(--ink-3)' }}>
           {rotulo}
         </span>
-        {!foiPelaFila && <button className="btn" style={{ fontSize: 11, padding: '2px 8px' }}
+        {!foiPelaFila && <button className="btn mini"
                 onClick={async () => {
                   try { await navigator.clipboard.writeText(texto); } catch { /* o texto segue à vista */ }
                   setCopiado(true); setTimeout(() => setCopiado(false), 1200);

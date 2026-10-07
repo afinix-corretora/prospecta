@@ -151,7 +151,7 @@ export function Painel() {
   const nomePessoa = String(meta.nome ?? meta.full_name ?? meta.name ?? '').split(' ')[0];
 
   return (
-    <div className="wrap">
+    <div className="wrap larga">
       <div className="ola">
         <div>
           <h1>{saudacao()}{nomePessoa ? `, ${nomePessoa}` : ''}</h1>
@@ -215,7 +215,7 @@ function Conteudo({ tudo, dias, aoNavegar }: { tudo: Tudo; dias: number; aoNaveg
       )}
 
       {tudo.situacao && pendentes.length > 0 && (
-        <section className="painel progresso" style={{ marginBottom: 16 }} aria-label="Configuração">
+        <section className="painel progresso" aria-label="Configuração">
           <Anel feito={tudo.situacao.length - pendentes.length} total={tudo.situacao.length} />
           <div className="txt">
             <h2>{pendentes.length === 1 ? 'Falta um passo para o motor rodar inteiro'

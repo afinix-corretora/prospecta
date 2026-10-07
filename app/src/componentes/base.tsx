@@ -57,7 +57,8 @@ export function LinhaIndice(props: {
       <Icone nome={props.icone} cor={props.cor} />
       <span className="txt"><b>{props.titulo}</b><p>{props.descricao}</p></span>
       {props.contagem != null && <span className="cont">{props.contagem}</span>}
-      {props.aoClicar && <Seta />}
+      {/* Sem clique, o lugar da seta fica: a coluna da direita não pula. */}
+      {props.aoClicar ? <Seta /> : <span className="seta" aria-hidden="true" />}
     </>
   );
   return props.aoClicar
@@ -140,15 +141,18 @@ export function Secao({ titulo, nota }: { titulo: string; nota?: ReactNode }) {
  * principal. Tela que começava com uma `Secao` no lugar do título encostava
  * no menu e não tinha cabeçalho — é o que esta peça impede.
  */
-export function Pagina({ titulo, sub, voltar, acao, children }: {
+export function Pagina({ titulo, sub, voltar, acao, larga, children }: {
   titulo: ReactNode;
+  /** Quadro, tabela ou painel: usa a largura toda. O resto (formulário,
+   *  lista de configuração, leitura) fica numa coluna que o olho percorre. */
+  larga?: boolean;
   sub?: ReactNode;
   voltar?: { rotulo: string; aoClicar(): void };
   acao?: ReactNode;
   children?: ReactNode;
 }) {
   return (
-    <div className="wrap">
+    <div className={larga ? 'wrap larga' : 'wrap'}>
       <div className="cabeca">
         <div>
           {voltar && (

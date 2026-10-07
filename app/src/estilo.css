@@ -209,12 +209,25 @@ main { min-width: 0 }
 
 .veu { display: none }
 
-.wrap { max-width: 1240px; padding: 28px 30px 72px }
-.cabeca { display: flex; align-items: flex-end; gap: 18px; margin-bottom: 26px; flex-wrap: wrap }
+/* Largura pelo tipo de página: formulário, configuração e leitura ficam numa
+   coluna que o olho percorre; quadro, tabela e painel usam a largura toda. */
+.wrap { max-width: 1000px; padding: 28px 30px 72px }
+.wrap.larga { max-width: 1240px }
+
+/* Ritmo vertical numa regra só, em degraus de 4px: 16 entre blocos irmãos,
+   24 do cabeçalho ao conteúdo, 40 antes de uma seção e 12 dela ao que ela
+   abre. Antes era uma lista de pares vizinhos, e o par que faltava deixava
+   dois blocos colados. */
+/* `:not(:first-child)` dá peso à regra: classe sozinha declarada depois
+   (.indice, .aviso) não a desfaz em silêncio. */
+.wrap > :not(:first-child) { margin-top: 16px }
+.cabeca { display: flex; align-items: flex-end; gap: 18px; margin: 0 0 24px; flex-wrap: wrap }
+.wrap > .cabeca + *, .wrap > .ola + * { margin-top: 0 }
 .cabeca > div:first-child { min-width: 0; flex: 1 1 420px }
 .cabeca p { margin: 8px 0 0; color: var(--ink-2); max-width: 70ch; font-size: 14.5px }
-.cabeca .cta { margin-left: auto }
+.cabeca .cta { margin-left: auto; display: flex; gap: 8px }
 .voltar {
+  margin-left: -8px;
   display: inline-flex; align-items: center; gap: 6px; font-size: 13px;
   color: var(--ink-3); margin-bottom: 12px; padding: 6px 10px 6px 8px; border-radius: 10px; font-weight: 500;
   transition: background-color .16s var(--ease), color .16s var(--ease);
@@ -222,14 +235,17 @@ main { min-width: 0 }
 .voltar:hover { background: var(--surface-2); color: var(--ink) }
 .voltar svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round }
 
-.sec { display: flex; align-items: baseline; gap: 12px; margin: 34px 0 14px; flex-wrap: wrap }
+.sec { display: flex; align-items: baseline; gap: 12px; margin: 40px 0 12px; flex-wrap: wrap }
+.wrap > .sec { margin: 40px 0 12px }
+.wrap > .sec + * { margin-top: 0 }
+.wrap > .sec:first-child, .wrap > .cabeca + .sec { margin-top: 0 }
 .sec h2 { font-size: 19px; font-weight: 600 }
 .sec span { font-size: 13px; color: var(--ink-3) }
 
 /* ---------------------------------------------------------------------------
    Blocos
 --------------------------------------------------------------------------- */
-.kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 14px }
+.kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px }
 .kpi {
   background: var(--surface); border: 1px solid var(--line); border-radius: var(--r);
   padding: 18px 18px 16px; box-shadow: var(--shadow); min-width: 0;
@@ -243,7 +259,10 @@ main { min-width: 0 }
 }
 .kpi .s { font-size: 12.5px; color: var(--ink-3) }
 
-.indice { display: grid; gap: 10px; margin-top: 2px }
+.indice { display: grid; gap: 10px }
+/* Linha de "ainda não há nada": tracejada, sem sombra e sem fundo, para não
+   parecer um item que se clica. */
+div.item:not(:has(.ico)) { border-style: dashed; border-color: var(--line-strong); background: transparent; box-shadow: none }
 .item {
   display: flex; align-items: center; gap: 15px; width: 100%; text-align: left;
   background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-md);
@@ -291,18 +310,30 @@ button.item:hover .seta { color: var(--ink); translate: 2px 0 }
   background: var(--surface); border: 1px solid var(--line); border-radius: var(--r);
   padding: 20px; box-shadow: var(--shadow); min-width: 0;
 }
+.painel .aviso { margin: 12px 0 }
+.painel > :first-child { margin-top: 0 }
+.painel > :last-child { margin-bottom: 0 }
+.painel p { max-width: 80ch }
+.painel > .btn, .painel > .campo + .btn { margin-top: 4px }
+
+/* Busca de lista: uma ferramenta, não um cartão. */
+.ferramenta { display: grid; gap: 6px }
+.ferramenta .busca { max-width: 440px }
+.ferramenta p { margin: 0; font-size: 12.5px; color: var(--ink-3) }
 .opts { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px }
 .opt {
   border: 1px solid var(--line); border-radius: var(--r-sm); padding: 13px 14px;
-  text-align: left; background: var(--surface); position: relative;
+  text-align: left; background: var(--surface); position: relative; min-width: 0;
+  display: flex; flex-direction: column; justify-content: flex-start; align-items: stretch;
   transition: border-color .16s var(--ease), background-color .16s var(--ease);
 }
 .opt:hover { border-color: var(--line-strong); background: var(--surface-2) }
 .opt[aria-pressed="true"] { border-color: var(--accent-line); background: var(--accent-soft); box-shadow: 0 0 0 1px var(--accent-line) inset }
 .opt b { display: block; font-size: 14px; font-weight: 600 }
-.opt p { margin: 4px 0 0; font-size: 12.5px; color: var(--ink-3); line-height: 1.45 }
+.opt p { margin: 4px 0 0; font-size: 12.5px; color: var(--ink-3); line-height: 1.45; overflow-wrap: anywhere }
 
-.campo { display: flex; flex-direction: column; gap: 6px; margin-bottom: 16px }
+.campo { display: flex; flex-direction: column; gap: 6px; margin-bottom: 16px; max-width: 640px }
+.campo:has(textarea) { max-width: none }
 .campo label { font-size: 13px; font-weight: 600; color: var(--ink) }
 .campo input, .campo select, .campo textarea, .busca {
   border: 1px solid var(--line); border-radius: var(--r-sm); padding: 0 13px; height: 42px;
@@ -338,6 +369,8 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--accent); width
 .btn:active { transform: translateY(1px) }
 .btn.prim { background: var(--accent); border-color: transparent; color: var(--accent-ink) }
 .btn.prim:hover { filter: brightness(1.08); background: var(--accent) }
+.btn.mini { min-height: 32px; padding: 0 11px; font-size: 12.5px; border-radius: var(--r-xs); gap: 6px }
+.btn.mini + .btn.mini { margin-left: 6px }
 .btn[disabled] { opacity: .5; cursor: not-allowed; transform: none; filter: none }
 .btn svg { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round }
 .link { background: none; border: 0; padding: 0; color: var(--accent); cursor: pointer; text-decoration: underline; text-underline-offset: 3px; font: inherit }
@@ -352,7 +385,7 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--accent); width
 .copiar.ok { background: var(--ok-soft); color: var(--ok); border-color: transparent }
 
 .aviso {
-  border-radius: var(--r-sm); padding: 12px 14px; font-size: 13.5px; margin: 14px 0; line-height: 1.5;
+  border-radius: var(--r-sm); padding: 12px 14px; font-size: 13.5px; margin: 0; line-height: 1.5;
   border: 1px solid transparent;
 }
 .aviso.erro { background: var(--crit-soft); color: var(--crit); border-color: color-mix(in oklab, var(--crit) 25%, transparent) }
@@ -406,10 +439,10 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--accent); width
 .tab tr:last-child td { border-bottom: 0 }
 .tab td:first-child { color: var(--ink-3); white-space: nowrap; width: 1% }
 .tab td input[type="checkbox"] { margin: 2px 0 0 }
+.painel > .tab { width: calc(100% + 40px); margin-inline: -20px }
+.painel > .tab th:first-child, .painel > .tab td:first-child { padding-left: 20px }
+.painel > .tab th:last-child, .painel > .tab td:last-child { padding-right: 20px }
 
-/* Painéis empilhados: o espaço vertical entre vizinhos. */
-.painel + .painel, .kpis + .painel, .painel + .aviso, .aviso + .painel,
-.kpis + .aviso, .painel + .btn, .aviso + .btn, .painel + .kpis { margin-top: 14px }
 
 /* Cinco KPIs não cabem na largura mínima padrão — sobraria um sozinho. */
 .kpis.cinco { grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)) }
@@ -418,7 +451,6 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--accent); width
    Funil (D57) — colunas roláveis, cards arrastáveis, e um seletor de destino
    em todo card, que é o que funciona no celular e no teclado.
 --------------------------------------------------------------------------- */
-.kpis + .kanban, .aviso + .kanban { margin-top: 18px }
 .kanban { display: flex; gap: 14px; overflow-x: auto; padding-bottom: 12px; align-items: flex-start }
 .kanban .coluna {
   flex: 0 0 264px; background: color-mix(in oklab, var(--surface) 55%, transparent);
@@ -447,9 +479,15 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--accent); width
 }
 .kanban .card-rodape { display: block; font-size: 12px; color: var(--ink-3); margin-top: 6px }
 .kanban .card-mover {
-  width: 100%; margin-top: 9px; font: inherit; font-size: 12.5px; height: 32px; padding: 0 8px;
-  border: 1px solid var(--line); border-radius: 9px; background: var(--field); color: var(--ink-2);
+  width: 100%; margin-top: 9px; font: inherit; font-size: 12.5px; height: 32px; padding: 0 28px 0 9px;
+  border: 1px solid var(--line); border-radius: 9px; background-color: var(--field); color: var(--ink-2);
+  appearance: none; cursor: pointer;
+  background-image: linear-gradient(45deg, transparent 50%, currentColor 50%),
+                    linear-gradient(135deg, currentColor 50%, transparent 50%);
+  background-position: calc(100% - 15px) 52%, calc(100% - 10px) 52%;
+  background-size: 5px 5px, 5px 5px; background-repeat: no-repeat;
 }
+.kanban { mask-image: linear-gradient(90deg, #000 calc(100% - 40px), transparent) }
 
 /* ---------------------------------------------------------------------------
    Assistente de configuração (D67): balões à esquerda e à direita, e o plano
@@ -514,7 +552,7 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--accent); width
 
 .faixa-modo {
   display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
-  border-radius: var(--r-md); padding: 12px 16px; margin-bottom: 18px;
+  border-radius: var(--r-md); padding: 12px 16px;
   background: var(--warn-soft); color: var(--warn); font-size: 13.5px;
   border: 1px solid color-mix(in oklab, var(--warn) 28%, transparent);
 }
@@ -671,9 +709,14 @@ button.resp:hover { background: var(--surface-2) }
   .balao.pes { flex-direction: column; gap: 4px }
   .painel { padding: 16px }
   .tab { display: block; overflow-x: auto }
+  .painel > .tab { width: calc(100% + 32px); margin-inline: -16px }
+  .wrap > .sec { margin-top: 28px }
+  .cabeca .cta, .cabeca .cta .btn { width: 100% }
 }
 
 @media (max-width: 560px) {
+  .kpis, .kpis.cinco { grid-template-columns: 1fr 1fr; gap: 10px }
+  .kpis .kpi b { font-size: 24px }
   .grade > .kpis { grid-template-columns: 1fr 1fr; gap: 10px }
   .grade > .kpis .kpi { padding: 14px 14px 12px }
   .grade > .kpis .kpi.serie { padding-bottom: 0 }

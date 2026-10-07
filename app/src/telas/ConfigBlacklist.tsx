@@ -214,20 +214,20 @@ function LinhaTermo({ termo, administra, aoMudar }: {
                     onChange={(e) => void fazer(() => mudarTermoBlacklist(termo.id, { acao: e.target.value as AcaoBlacklist }))}>
               {ORDEM.map((a) => <option key={a} value={a}>{ACAO[a].nome}</option>)}
             </select>
-            <button className="btn" style={{ fontSize: 11, padding: '3px 8px' }} disabled={mexendo}
+            <button className="btn mini" disabled={mexendo}
                     onClick={() => void fazer(() => mudarTermoBlacklist(termo.id, { ativo: !termo.ativo }))}>
               {termo.ativo ? 'Desligar' : 'Ligar'}
             </button>
             {!confirmando ? (
-              <button className="btn" style={{ fontSize: 11, padding: '3px 8px' }} disabled={mexendo}
+              <button className="btn mini" disabled={mexendo}
                       onClick={() => setConfirmando(true)}>Apagar</button>
             ) : (
               <>
-                <button className="btn" style={{ fontSize: 11, padding: '3px 8px', color: 'var(--crit)' }}
+                <button className="btn mini" style={{ color: 'var(--crit)' }}
                         disabled={mexendo} onClick={() => void fazer(() => apagarTermoBlacklist(termo.id))}>
                   Confirmar
                 </button>
-                <button className="btn" style={{ fontSize: 11, padding: '3px 8px' }}
+                <button className="btn mini"
                         onClick={() => setConfirmando(false)}>Cancelar</button>
               </>
             )}
@@ -328,11 +328,11 @@ function LinhaDominio({ dominio, administra, aoMudar }: {
       </span>
       {administra && (
         <span style={{ display: 'flex', gap: 6 }}>
-          <button className="btn" style={{ fontSize: 11, padding: '3px 8px' }} disabled={mexendo}
+          <button className="btn mini" disabled={mexendo}
                   onClick={() => void fazer(() => alternarDominio(dominio.id, !dominio.ativo))}>
             {dominio.ativo ? 'Desligar' : 'Ligar'}
           </button>
-          <button className="btn" style={{ fontSize: 11, padding: '3px 8px' }} disabled={mexendo}
+          <button className="btn mini" disabled={mexendo}
                   onClick={() => void fazer(() => apagarDominio(dominio.id))}>
             Apagar
           </button>

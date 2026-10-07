@@ -11,7 +11,7 @@
  * antes de gravar.
  */
 import { useEffect, useMemo, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useSessao } from '../sessao';
 import { Aviso, Kpi, NOME_CANAL, Secao, corCanal, Pagina } from '../componentes/base';
 import {
@@ -21,6 +21,7 @@ import type { Campanha, Contato, ContatoPrevisto, VersaoDeFlow } from '../dados'
 import { mensagemDeErro } from '../supabase';
 
 export function Contatos() {
+  const nav = useNavigate();
   const { tenant, opera } = useSessao();
 
   // A busca do topo chega como `?busca=`: o termo entra no campo e a lista
@@ -59,27 +60,27 @@ export function Contatos() {
   }
 
   return (
-    <Pagina titulo="Contatos" sub={carregando ? 'carregando…' : `${contatos.length} na lista`}>
+    <Pagina larga titulo="Contatos" sub={carregando ? 'carregando…' : `${contatos.length} na lista`}>
 
-      <div className="painel">
+      <div className="ferramenta">
         <input
           className="busca" type="search" value={busca}
-          placeholder="Nome, telefone ou e-mail"
+          placeholder="Nome, telefone ou e-mail" aria-label="Buscar contato"
           onChange={(e) => setBusca(e.target.value)}
         />
-        <p style={{ color: 'var(--ink-3)', fontSize: 12, margin: '8px 0 0' }}>
-          O telefone pode ser digitado como está na planilha — a busca compara
-          só os dígitos.
-        </p>
+        <p>O telefone pode ser digitado como está na planilha — a busca compara só os dígitos.</p>
       </div>
 
       {erro && <Aviso tipo="erro">{erro}</Aviso>}
 
       {!carregando && contatos.length === 0 && (
-        <div className="painel">
-          <p className="vazio" style={{ margin: 0 }}>
-            {busca ? 'Nada com esse termo.' : 'Nenhum contato ainda — comece pela importação.'}
-          </p>
+        <div className="item">
+          <span className="txt">
+            <b>{busca ? 'Nada com esse termo' : 'Nenhum contato ainda'}</b>
+            <p>{busca ? 'A busca compara nome, os dígitos do telefone e o e-mail.'
+                      : 'A base começa por uma planilha: a importação mostra o que cada coluna virou antes de gravar.'}</p>
+          </span>
+          {!busca && <button className="btn" onClick={() => nav('/contatos/importar')}>Importar contatos</button>}
         </div>
       )}
 
@@ -165,7 +166,7 @@ function Suprimir({ tenant, contato, aoSuprimir }: {
 
   if (!confirmando) {
     return (
-      <button className="btn" style={{ fontSize: 11, padding: '3px 8px' }}
+      <button className="btn mini"
               onClick={() => setConfirmando(true)}>
         Suprimir
       </button>
@@ -175,11 +176,11 @@ function Suprimir({ tenant, contato, aoSuprimir }: {
   return (
     <span style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}>
       <span style={{ fontSize: 11, color: 'var(--ink-3)' }}>não tem volta:</span>
-      <button className="btn prim" style={{ fontSize: 11, padding: '3px 8px' }}
+      <button className="btn prim mini"
               onClick={() => void gravar()}>
         confirmar
       </button>
-      <button className="btn" style={{ fontSize: 11, padding: '3px 8px' }}
+      <button className="btn mini"
               onClick={() => setConfirmando(false)}>
         não
       </button>

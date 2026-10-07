@@ -228,11 +228,11 @@ function AcoesDoFato(props: {
           </span>
           {props.administra && (
             <span style={{ display: 'flex', gap: 6 }}>
-              <button className="btn" style={{ fontSize: 11, padding: '3px 8px' }}
+              <button className="btn mini"
                       onClick={() => void fazer(() => alternarAcaoCRM(a.id, !a.ativo))}>
                 {a.ativo ? 'Desligar' : 'Ligar'}
               </button>
-              <button className="btn" style={{ fontSize: 11, padding: '3px 8px' }}
+              <button className="btn mini"
                       onClick={() => void fazer(() => apagarAcaoCRM(a.id))}>Apagar</button>
             </span>
           )}
@@ -319,11 +319,11 @@ function LinhaFonte({ fonte, pipes, campanhas, administra, aoMudar }: {
       </span>
       {administra && (
         <span style={{ display: 'flex', gap: 6 }}>
-          <button className="btn" style={{ fontSize: 11, padding: '3px 8px' }}
+          <button className="btn mini"
                   onClick={() => void fazer(() => alternarFonteCRM(fonte.id, !fonte.ativa))}>
             {fonte.ativa ? 'Pausar' : 'Retomar'}
           </button>
-          <button className="btn" style={{ fontSize: 11, padding: '3px 8px' }}
+          <button className="btn mini"
                   onClick={() => void fazer(() => apagarFonteCRM(fonte.id))}>Apagar</button>
         </span>
       )}

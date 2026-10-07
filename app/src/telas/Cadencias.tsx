@@ -282,11 +282,11 @@ export function Cadencia() {
             <b style={{ color: corCanal(p.canal) }}>Passo {i + 1}</b>
             {opera && (
               <>
-                <button className="btn" style={{ fontSize: 11, padding: '2px 7px' }}
+                <button className="btn mini"
                         disabled={i === 0} onClick={() => mover(i, -1)}>subir</button>
-                <button className="btn" style={{ fontSize: 11, padding: '2px 7px' }}
+                <button className="btn mini"
                         disabled={i === passos.length - 1} onClick={() => mover(i, 1)}>descer</button>
-                <button className="btn" style={{ fontSize: 11, padding: '2px 7px' }}
+                <button className="btn mini"
                         disabled={passos.length === 1}
                         onClick={() => { setPassos((ps) => ps.filter((_, j) => j !== i)); setFeito(null); }}>
                   remover
@@ -483,7 +483,7 @@ function QuemRoda({ flowVersoes, campanhas, aoMudar, aoFalhar, podeOperar }: {
                     </td>
                     <td>
                       {!naUltima && podeOperar && (
-                        <button className="btn" style={{ fontSize: 11, padding: '3px 8px' }}
+                        <button className="btn mini"
                                 disabled={!!mexendo} onClick={() => void repontar(c.id)}>
                           {mexendo === c.id ? 'um instante…' : `Passar para a v${ultima.versao}`}
                         </button>

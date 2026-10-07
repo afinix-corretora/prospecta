@@ -13,8 +13,8 @@ import type {
   ProvedorCRM, ProvedorCanal, ProvedorIA, VersaoDeFlow,
 } from '../dados';
 import {
-  Aviso, Campo, Kpi, LinhaIndice, NOME_CANAL, Secao, corCanal,
-  tinta, Pagina,
+  Aviso, Campo, Icone, Kpi, LinhaIndice, NOME_CANAL, Secao, corCanal,
+  Pagina,
 } from '../componentes/base';
 import { familiaDe, familiasDoCanal } from '../componentes/Rail';
 
@@ -101,7 +101,9 @@ export function Hub() {
       <section className="kpis">
         <Kpi rotulo="Campanhas ativas" valor={ativas} sub={`${campanhas.length - ativas} pausada(s)`} />
         <Kpi rotulo="Modelos prontos" valor={modelos.length} sub="cadência e base legal já definidas" />
-        <Kpi rotulo="Cliente" valor={tenant?.nome ?? '—'} sub={tenant?.papel ?? ''} />
+        {/* Nome de cliente não é métrica: o lugar é de um número que muda. */}
+        <Kpi rotulo="Canais que entregam" valor={entregaveis.filter((e) => e.motivo === 'entrega').length}
+             sub="com conta conectada e provedor que sabe enviar" />
       </section>
 
       <Secao titulo="Campanhas" nota={campanhas.length ? `${campanhas.length} no total` : 'nenhuma ainda'} />
@@ -890,9 +892,7 @@ export function ConfigPlataformas() {
             <section className="indice">
               {ps.map((p) => (
                 <div key={p.slug} className="item" style={{ cursor: 'default' }}>
-                  <span className="ico" style={tinta(corCanal(c))}>
-                    <svg viewBox="0 0 24 24" strokeLinejoin="round" strokeLinecap="round" />
-                  </span>
+                  <Icone nome={c} cor={corCanal(c)} />
                   <span className="txt">
                     <b>{p.nome}</b><p>{p.descricao}</p>
                     <span className="chips" style={{ marginTop: 6 }}>

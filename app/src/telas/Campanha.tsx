@@ -115,6 +115,7 @@ export function Campanha() {
   return (
     <Pagina
       titulo={campanha.nome}
+      acao={<button className="btn" onClick={() => void recarregar()}>Atualizar</button>}
       voltar={{ rotulo: 'Campanhas', aoClicar: () => nav('/campanhas') }}
       sub={`${campanha.tipo} · ${campanha.canais_habilitados.map((c) => NOME_CANAL[c] ?? c).join(', ')}`
            + (campanha.ativa ? '' : ' · DESLIGADA')}
@@ -228,7 +229,6 @@ export function Campanha() {
         </div>
       )}
 
-      <button className="btn" onClick={() => void recarregar()}>Atualizar</button>
     </Pagina>
   );
 }

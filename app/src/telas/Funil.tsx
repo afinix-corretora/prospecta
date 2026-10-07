@@ -96,12 +96,15 @@ export function Funil() {
   const abertos = cards.filter((c) => estagios.find((e) => e.id === c.stage_id)?.tipo === 'aberto').length;
 
   return (
-    <div className="wrap">
-      <div className="cabeca"><div>
-        <h1>Funil</h1>
-        <p>Onde cada lead está. O motor move sozinho conforme os fatos acontecem;
-           você move arrastando quando souber algo que ele não sabe.</p>
-      </div></div>
+    <div className="wrap larga">
+      <div className="cabeca">
+        <div>
+          <h1>Funil</h1>
+          <p>Onde cada lead está. O motor move sozinho conforme os fatos acontecem;
+             você move arrastando quando souber algo que ele não sabe.</p>
+        </div>
+        <div className="cta"><button className="btn" onClick={() => void recarregar()}>Atualizar</button></div>
+      </div>
 
       {erro && <Aviso tipo="erro">{erro}</Aviso>}
 
@@ -212,7 +215,6 @@ export function Funil() {
         </p>
       </div>
 
-      <button className="btn" onClick={() => void recarregar()}>Atualizar</button>
     </div>
   );
 }

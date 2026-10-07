@@ -108,7 +108,7 @@ export function Writeback() {
   useEffect(() => { void recarregar(); }, [tenant?.tenant_id]);
 
   return (
-    <Pagina titulo="Writeback" sub="O que o motor descobriu e tem para contar ao CRM.">
+    <Pagina larga titulo="Writeback" sub="O que o motor descobriu e tem para contar ao CRM.">
 
       {erro && <Aviso tipo="erro">{erro}</Aviso>}
       {carregando && <Aviso tipo="neutro">Lendo…</Aviso>}
@@ -117,7 +117,7 @@ export function Writeback() {
         <>
           <Situacao e={situacaoDoWriteback(resumo)} />
 
-          <div className="kpis">
+          <div className="kpis cinco">
             <Kpi rotulo="Na fila" valor={resumo.pendentes} sub="ainda não contados ao CRM" />
             <Kpi rotulo="Vencidos agora" valor={resumo.vencidos_agora}
                  sub="prontos para a próxima passada" />
