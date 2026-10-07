@@ -6,7 +6,7 @@ import {
   alternarConexaoCRM, alternarCredencialIA, criarCampanha, criarCampanhaDeModelo, lerAgentes, lerCampanhas,
   lerCanaisEntregaveis, lerConexoesCRM, lerCredenciaisIA, lerModelos, lerProvedoresCRM,
   lerProvedoresCanal, lerProvedoresIA, lerRemetentes, lerVersoesDeFlow, salvarAgente, salvarCredencialCRM,
-  salvarCredencialIA,
+  salvarCredencialIA, buscarModelosIA,
 } from '../dados';
 import type {
   Agente, CanalEntregavel, Campanha, ConexaoCRM, CredencialIA, Modelo, MotivoDoCanal,
@@ -579,30 +579,66 @@ export function ConfigIA() {
  * `salvar_credencial_ia` e é o banco, lendo o catálogo, que separa Vault de
  * config — a mesma razão por que a tela sobrevive a um provedor novo.
  */
-function FormularioIA(props: {
+export function FormularioIA(props: PropsFormularioIA) {
+  // Sem catálogo não há formulário. O retorno mora aqui, fora do componente
+  // que usa hooks: hook depois de return condicional muda a ordem entre renders.
+  return props.provedores.length ? <FormularioDeIA {...props} /> : null;
+}
+
+interface PropsFormularioIA {
   provedores: ProvedorIA[]; credenciais: CredencialIA[]; tenant: string;
   aoSalvar(): Promise<void>;
-}) {
-  const [slug, setSlug] = useState('');
+  /** O Setup rápido abre já no provedor escolhido lá (D72). */
+  provedorInicial?: string;
+}
+
+function FormularioDeIA(props: PropsFormularioIA) {
+  const [slug, setSlug] = useState(props.provedorInicial ?? '');
   const [nome, setNome] = useState('');
   const [modelo, setModelo] = useState('');
   const [valores, setValores] = useState<Record<string, string>>({});
   const [estado, setEstado] = useState<'parado' | 'salvando'>('parado');
   const [msg, setMsg] = useState<{ tipo: 'erro' | 'ok'; texto: string } | null>(null);
 
-  const escolhido = props.provedores.find((x) => x.slug === slug) ?? props.provedores[0];
-  if (!escolhido) return null;
-  // A anotação não é decorativa: sem ela o narrowing do guard acima não chega
-  // dentro de `salvar`, que é uma closure.
-  const provedor: ProvedorIA = escolhido;
+  const provedor: ProvedorIA = props.provedores.find((x) => x.slug === slug) ?? props.provedores[0]!;
 
   // Reenviar o mesmo nome edita, como em `salvar_servidor_provedor`. Dizer isso
   // antes de salvar evita a descoberta pelo caminho ruim: duas credenciais
   // quase iguais e nenhuma pista de qual o agente está usando.
   const existente = props.credenciais.find((c) => c.nome === nome.trim());
 
+  // D72: a lista de modelos vem do provedor, com a chave recém-colada — ou,
+  // editando conta salva do mesmo provedor sem redigitar, com a do Vault.
+  // Espera a pessoa parar de digitar, e uma resposta antiga não pisa na nova.
+  const chaveDigitada = (valores.api_key ?? '').trim();
+  const contaSalva = existente && existente.provedor === provedor.slug ? existente.id : null;
+  const pedidoDeModelos = chaveDigitada.length >= 20
+    ? JSON.stringify({ provedor: provedor.slug, campos: valores })
+    : contaSalva ? JSON.stringify({ credencial_id: contaSalva, campos: valores }) : null;
+  const [modelos, setModelos] = useState<
+    { estado: 'parado' } | { estado: 'buscando' } | { estado: 'pronto'; lista: string[] }
+    | { estado: 'erro'; erro: string; semListagem?: boolean }
+  >({ estado: 'parado' });
+  const [digitarOutro, setDigitarOutro] = useState(false);
+  const [tentativa, setTentativa] = useState(0);
+  useEffect(() => {
+    if (!pedidoDeModelos) { setModelos({ estado: 'parado' }); return; }
+    let vale = true;
+    const t = setTimeout(async () => {
+      setModelos({ estado: 'buscando' });
+      const r = await buscarModelosIA(JSON.parse(pedidoDeModelos));
+      if (!vale) return;
+      setModelos(r.ok ? { estado: 'pronto', lista: r.modelos } : { estado: 'erro', erro: r.erro, semListagem: r.semListagem });
+    }, 700);
+    return () => { vale = false; clearTimeout(t); };
+  }, [pedidoDeModelos, tentativa]);
+  const lista = modelos.estado === 'pronto' ? modelos.lista : [];
+  const usarLista = lista.length > 0 && !digitarOutro;
+
   function trocarProvedor(novo: string) {
     setSlug(novo);
+    setModelo('');
+    setDigitarOutro(false);
     // Campo de provedor anterior não sobrevive à troca: o banco recusaria a
     // chave que o provedor novo não declara, e o erro sairia sem explicação.
     setValores({});
@@ -664,16 +700,42 @@ function FormularioIA(props: {
 
       <div className="campo">
         <label htmlFor="ia-modelo">Modelo</label>
-        <input id="ia-modelo" list="modelos-ia" value={modelo}
-               onChange={(e) => setModelo(e.target.value)}
-               placeholder={provedor.modelos_sugeridos[0] ?? 'nome do modelo'} />
-        <datalist id="modelos-ia">
-          {provedor.modelos_sugeridos.map((m) => <option key={m} value={m} />)}
-        </datalist>
-        <span className="ajuda">
-          {provedor.modelos_sugeridos.length
-            ? 'Sugestões verificadas; aceita qualquer nome.'
+        {usarLista ? (
+          <select id="ia-modelo" value={lista.includes(modelo) ? modelo : ''}
+                  onChange={(e) => {
+                    if (e.target.value === '__outro') { setDigitarOutro(true); return; }
+                    setModelo(e.target.value);
+                  }}>
+            <option value="" disabled>Escolha entre {lista.length} modelos da sua conta</option>
+            {lista.map((m) => <option key={m} value={m}>{m}</option>)}
+            <option value="__outro">Digitar outro nome…</option>
+          </select>
+        ) : (
+          <>
+            <input id="ia-modelo" list="modelos-ia" value={modelo}
+                   onChange={(e) => setModelo(e.target.value)}
+                   placeholder={provedor.modelos_sugeridos[0] ?? 'nome do modelo'} />
+            <datalist id="modelos-ia">
+              {[...new Set([...lista, ...provedor.modelos_sugeridos])].map((m) => <option key={m} value={m} />)}
+            </datalist>
+          </>
+        )}
+        <span className="ajuda" aria-live="polite">
+          {modelos.estado === 'buscando' ? 'Buscando os modelos que esta chave alcança…'
+            : modelos.estado === 'pronto' && usarLista ? 'Lista lida agora do provedor, mais novos primeiro.'
+            : modelos.estado === 'pronto' && !lista.length ? 'O provedor não devolveu nenhum modelo de conversa para esta chave.'
+            : modelos.estado === 'erro' && !modelos.semListagem ? `Não deu para buscar a lista: ${modelos.erro}`
+            : modelos.estado === 'parado' && provedor.campos.some((c) => c.chave === 'api_key')
+              ? 'Cole a chave acima e a lista de modelos carrega sozinha.'
+            : provedor.modelos_sugeridos.length ? 'Sugestões verificadas; aceita qualquer nome.'
             : 'Catálogo de modelo muda toda semana — o campo é livre de propósito.'}
+          {' '}
+          {digitarOutro && lista.length > 0 && (
+            <button type="button" className="btn mini" onClick={() => setDigitarOutro(false)}>Voltar à lista</button>
+          )}
+          {modelos.estado === 'erro' && !modelos.semListagem && (
+            <button type="button" className="btn mini" onClick={() => setTentativa((n) => n + 1)}>Tentar de novo</button>
+          )}
         </span>
       </div>
 

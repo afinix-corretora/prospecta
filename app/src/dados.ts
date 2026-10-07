@@ -630,6 +630,28 @@ export async function verificarRemetente(id: string): Promise<Verificacao> {
   return data as Verificacao;
 }
 
+export type ListaDeModelos =
+  | { ok: true; modelos: string[] }
+  | { ok: false; erro: string; semListagem?: boolean };
+
+/**
+ * "Buscar modelos" (D72): a lista vem do provedor, com a chave que a pessoa
+ * acabou de colar — ou, numa conta já salva, com a do Vault, que a edge
+ * function lê depois de o RLS dizer que quem pediu alcança a conta. A chave
+ * não volta: o que volta são nomes.
+ */
+export async function buscarModelosIA(pedido:
+  | { provedor: string; campos: Record<string, string> }
+  | { credencial_id: string; campos?: Record<string, string> },
+): Promise<ListaDeModelos> {
+  const { data, error } = await sb.functions.invoke('ia-modelos', { body: pedido });
+  if (error) {
+    const corpo = await (error as { context?: Response }).context?.json?.().catch(() => null);
+    return { ok: false, erro: corpo?.erro ?? error.message, semListagem: corpo?.semListagem };
+  }
+  return data as ListaDeModelos;
+}
+
 /**
  * Remover não apaga: arquiva. As mensagens antigas apontam para a conta, e
  * apagar a linha levaria o histórico junto. A função recusa — dizendo quais —

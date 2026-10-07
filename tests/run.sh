@@ -204,6 +204,11 @@ node --experimental-strip-types --test "$RAIZ/tests/assistente.test.ts" \
   | grep -E "^# (tests|pass|fail)|^not ok"
 
 echo ""
+echo "→ buscar modelos: a chave vira cabeçalho, e o RLS decide a conta salva (TypeScript)"
+node --experimental-strip-types --test "$RAIZ/tests/ia_modelos.test.ts" \
+  | grep -E "^# (tests|pass|fail)|^not ok"
+
+echo ""
 echo "→ o que a tela lê como variável de template (TypeScript)"
 node --experimental-strip-types --test "$RAIZ/tests/variaveis.test.ts" \
   | grep -E "^# (tests|pass|fail)|^not ok"
