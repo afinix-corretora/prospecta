@@ -27,6 +27,13 @@
  *   chave é quem administra, na tela de Configurações ou do canal — num lugar
  *   só, e não em cada fluxo que precise dela.
  *
+ * - **O agente propõe, o roteiro decide (D72).** Desde o Setup rápido há um
+ *   agente de IA na conversa — com a chave da PLATAFORMA, porque ele existe
+ *   antes de o cliente ter qualquer conta. Ele lê o que a pessoa escreveu e
+ *   devolve respostas sugeridas; `aplicarSugestao` as passa pelo mesmo
+ *   `valida` de quem clica, na mesma ordem, e o que não passa não entra. O
+ *   agente não escreve no banco e não autoriza cartão nenhum.
+ *
  * Puro de propósito: nada de supabase aqui, para `tests/assistente.test.ts`
  * rodar no Node.
  */
@@ -429,6 +436,90 @@ export function legenda(p: Pergunta, resp: Resposta): string {
   }
   const vs = Array.isArray(resp) ? resp : [resp as string];
   return vs.map((v) => p.opcoes.find((o) => o.valor === v)?.rotulo ?? v).join(', ');
+}
+
+// ---------------------------------------------------------------------------
+// O agente de configuração (D72)
+// ---------------------------------------------------------------------------
+
+/** O que o agente pode responder em cada chave, lido da foto e das respostas
+ *  de agora. É o vocabulário que ele recebe; quem confere de verdade é
+ *  `aplicarSugestao`, porque a lista que sai daqui passa pela rede e volta. */
+export interface EntradaDoMapa {
+  readonly forma: Pergunta['forma'];
+  readonly pergunta: string;
+  readonly valores: readonly { valor: string; rotulo: string; detalhe?: string }[];
+}
+
+export function mapaDeRespostas(f: Foto, r: Respostas): Record<string, EntradaDoMapa> {
+  const entrada = (p: Pergunta): EntradaDoMapa => ({
+    forma: p.forma, pergunta: p.texto,
+    valores: p.forma === 'numeros'
+      ? (p.numeros ?? []).map((n) => ({ valor: n.chave, rotulo: n.rotulo, detalhe: `sugestão: ${n.sugestao} por dia` }))
+      : p.opcoes.filter((o) => !o.indisponivel)
+          .map((o) => ({ valor: o.valor, rotulo: o.rotulo, ...(o.detalhe ? { detalhe: o.detalhe } : {}) })),
+  });
+  // As perguntas que dependem de respostas anteriores são feitas como se a
+  // pessoa já tivesse escolhido tudo — inclusive o que o agente vai sugerir
+  // agora. Sem pool escolhido, a de quantidade vale para "base própria".
+  const comCanais: Respostas = canaisEscolhidos(r).length ? r : { ...r, canais: [...CANAIS_DE_ENVIO] };
+  const m: Record<string, EntradaDoMapa> = {
+    canais: entrada(perguntaCanais(f)),
+    pool: entrada(perguntaPool()),
+    porDia: entrada(perguntaPorDia(comCanais)),
+  };
+  if (familiasEntregaveis(f, 'whatsapp').length > 1) m['familia:whatsapp'] = entrada(perguntaFamilia(r));
+  for (const c of canaisEscolhidos(comCanais)) m[`provedor:${c}`] = entrada(perguntaProvedor(f, r, c));
+  m.ia = entrada(perguntaIA(f));
+  const contas = f.credenciaisIA.filter((c) => c.ativo && f.provedoresIA.some((p) => p.slug === c.provedor && p.tem_adapter));
+  if (contas.length) {
+    m['ia:conta'] = {
+      forma: 'unica', pergunta: 'Qual conta de IA a campanha usa?',
+      valores: contas.map((c) => ({ valor: c.id, rotulo: c.nome, detalhe: `${c.provedor} · ${c.modelo}` })),
+    };
+  }
+  m.crm = entrada(perguntaCRM(f));
+  m.campanha = poolEscolhido(r)
+    ? entrada(perguntaCampanha(f, comCanais))
+    : { forma: 'unica', pergunta: 'Quer já criar a primeira campanha?',
+        valores: [...f.modelos.map((x) => ({ valor: x.slug, rotulo: x.nome, detalhe: `${x.tipo} · ${x.canais.join(', ')}` })),
+                  { valor: NAO, rotulo: 'Agora não' }] };
+  return m;
+}
+
+/**
+ * Junta as respostas que o agente sugeriu às que a pessoa já deu, e diz quais
+ * entraram. Entrar = o roteiro chegou até a pergunta e `valida` aceitou —
+ * exatamente o que vale para um clique. Sugestão para pergunta que ainda não
+ * chegou fica guardada e só conta quando a conversa chegar lá; sugestão
+ * inválida é descartada aqui, e nunca chega à memória.
+ *
+ * Resposta que a PESSOA já deu não é trocada pelo agente: ela muda clicando
+ * em "mudar". Sem esta regra, uma frase ambígua desfaria uma escolha feita.
+ */
+export function aplicarSugestao(
+  f: Foto, r: Respostas, sugestao: Readonly<Record<string, unknown>>,
+): { respostas: Respostas; aceitas: string[]; recusadas: string[] } {
+  const novas: Record<string, Resposta> = {};
+  for (const [k, v] of Object.entries(sugestao)) {
+    if (k in r) continue;
+    if (typeof v === 'string') novas[k] = v;
+    else if (Array.isArray(v) && v.every((x) => typeof x === 'string')) novas[k] = [...new Set(v as string[])];
+    else if (v && typeof v === 'object' && !Array.isArray(v)
+      && Object.values(v).every((x) => Number.isInteger(x) && (x as number) > 0 && (x as number) <= 100000)) {
+      novas[k] = { ...(v as Record<string, number>) };
+    }
+  }
+  const juntas: Respostas = { ...r, ...novas };
+  const { respostas: aceitasNoRoteiro, atual } = roteiro(f, juntas);
+  const aceitas = Object.keys(novas).filter((k) => k in aceitasNoRoteiro);
+  // O que espera: chave que nenhuma pergunta até agora leu, e que o mapa
+  // conhece. A que a pergunta de agora recusou sai.
+  const mapa = mapaDeRespostas(f, aceitasNoRoteiro);
+  const espera = Object.keys(novas).filter((k) => !aceitas.includes(k) && k in mapa && atual?.chave !== k);
+  const recusadas = Object.keys(sugestao).filter((k) => !(k in r) && !aceitas.includes(k) && !espera.includes(k));
+  const guardar = Object.fromEntries([...aceitas, ...espera].map((k) => [k, novas[k]!]));
+  return { respostas: { ...r, ...guardar }, aceitas, recusadas };
 }
 
 // ---------------------------------------------------------------------------

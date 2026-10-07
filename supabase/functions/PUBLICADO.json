@@ -1,4 +1,9 @@
 {
+  "agente-setup": {
+    "digest": "e281b7343533cb0d",
+    "em": "2026-10-07 (v2, D72; a v1 descartava a chave porDia do vocabulário, achado no teste ao vivo. Os 4 arquivos que o bundle devolve lidos de volta pela MCP e conferidos; porta.ts e tipos.ts são import type, D52. Ao vivo pelo pg_net: chave anon → 401 do código; o pedido que corpoDoPedido monta, enviado com a chave do Vault, voltou 200 no esquema estrito com seis respostas)",
+    "versao": 2
+  },
   "canal-webhook": {
     "digest": "4dd1efb33ca3f860",
     "em": "2026-10-02 (v4, D61; cada arquivo do bundle lido de volta do projeto e comparado byte a byte, 15/15)",

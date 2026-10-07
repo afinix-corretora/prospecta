@@ -10,7 +10,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
-  cumprida, impedimento, montarPlano, NAO, roteiro, situacao, USAR, voltarPara,
+  aplicarSugestao, cumprida, impedimento, mapaDeRespostas, montarPlano, NAO, roteiro, situacao, USAR, voltarPara,
 } from '../app/src/assistente.ts';
 import type { Acao, Foto, Respostas } from '../app/src/assistente.ts';
 
@@ -265,4 +265,62 @@ test('situação é lida da foto, e conta desligada não conta', () => {
   assert.match(s.canais!.detalhe, /WhatsApp: 1 conta, até 40\/dia/);
   assert.equal(s.ia!.feito, false);
   assert.equal(s.contatos!.detalhe, '3 na base');
+});
+
+// ---------------------------------------------------------------------------
+// O agente de configuração (D72): propõe, e o roteiro decide
+// ---------------------------------------------------------------------------
+
+test('agente: uma frase pode responder várias perguntas de uma vez, na ordem do roteiro', () => {
+  const r = aplicarSugestao(FOTO, {}, {
+    canais: ['whatsapp'], pool: 'fria', porDia: { whatsapp: 80 }, 'familia:whatsapp': 'nao',
+  });
+  assert.deepEqual(r.aceitas.sort(), ['canais', 'familia:whatsapp', 'pool', 'porDia']);
+  assert.deepEqual(r.recusadas, []);
+  assert.equal(atual(FOTO, r.respostas)!.chave, 'provedor:whatsapp');
+});
+
+test('agente: o que um clique não poderia escolher não entra', () => {
+  const r = aplicarSugestao(FOTO, {}, {
+    canais: ['instagram'],            // sem adapter
+    pool: 'morna',
+    ia: 'google',                     // provedor sem adapter: indisponível
+    inventada: 'x',                   // chave que nenhuma pergunta lê
+    porDia: { whatsapp: -5 },         // número inválido
+  });
+  assert.ok(!r.aceitas.includes('canais'));
+  assert.ok(r.recusadas.includes('canais'));
+  assert.ok(r.recusadas.includes('inventada'));
+  assert.ok(r.recusadas.includes('porDia'));
+  assert.ok(!('canais' in r.respostas) && !('inventada' in r.respostas) && !('porDia' in r.respostas));
+  // A pergunta de agora continua sendo a primeira: nada foi "respondido" por engano.
+  assert.equal(atual(FOTO, r.respostas)!.chave, 'canais');
+});
+
+test('agente: não troca o que a pessoa já respondeu', () => {
+  const ja: Respostas = { canais: ['email'], pool: 'morna' };
+  const r = aplicarSugestao(FOTO, ja, { canais: ['whatsapp'], pool: 'fria', porDia: { email: 50 } });
+  assert.deepEqual(r.respostas.canais, ['email']);
+  assert.equal(r.respostas.pool, 'morna');
+  assert.deepEqual(r.aceitas, ['porDia']);
+});
+
+test('agente: sugestão para pergunta futura espera a vez, e vale quando chega lá', () => {
+  const r = aplicarSugestao(FOTO, {}, { canais: ['email'], crm: 'pipefy' });
+  assert.deepEqual(r.aceitas, ['canais']);
+  assert.equal(r.respostas.crm, 'pipefy', 'guardada');
+  const resto = { ...r.respostas, pool: 'fria', porDia: { email: 100 }, 'provedor:email': 'resend', ia: NAO };
+  assert.ok(chaves(FOTO, resto).includes('crm'), 'quando a conversa chega ao CRM, a sugestão já responde');
+});
+
+test('mapa: só oferece ao agente o que é escolhível, com as contas de IA ligadas', () => {
+  const f = { ...FOTO, credenciaisIA: [
+    { id: 'c1', nome: 'Claude prod', provedor: 'anthropic', modelo: 'claude-sonnet-5', ativo: true },
+    { id: 'c2', nome: 'desligada', provedor: 'anthropic', modelo: 'x', ativo: false },
+  ] };
+  const m = mapaDeRespostas(f, {});
+  assert.ok(!m.canais!.valores.some((v) => v.valor === 'instagram'));
+  assert.ok(!m.ia!.valores.some((v) => v.valor === 'google'));
+  assert.deepEqual(m['ia:conta']!.valores.map((v) => v.valor), ['c1']);
+  assert.ok(m['provedor:sms'], 'sem canal escolhido, todos os canais de envio entram no mapa');
 });
