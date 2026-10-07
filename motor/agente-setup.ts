@@ -6,8 +6,9 @@
 //   - não escreve no banco e não autoriza cartão nenhum: o que sai daqui é
 //     texto e sugestão, e a tela passa a sugestão pelo `valida` do roteiro
 //     (`aplicarSugestao`), o mesmo de quem clica;
-//   - não vê nem pede chave: a conversa não tem campo de segredo, e o prompt
-//     manda recusar e apontar a tela quando a pessoa colar uma;
+//   - não vê nem pede chave: chave colada na conversa é barrada aqui, antes
+//     do modelo, pela MESMA regra que a tela usa antes de enviar
+//     (`adapters/segredo.ts`), e o prompt manda apontar a tela certa;
 //   - não escolhe fora do vocabulário: o mapa que a tela manda diz, chave por
 //     chave, o que é escolhível agora, e `lerSaida` descarta o resto antes de
 //     a sugestão voltar à rede.
@@ -19,6 +20,9 @@
 // Só `fetch`, injetável: o arquivo roda no Deno da function e no Node do teste.
 
 import type { Buscador } from '../adapters/tipos.ts';
+import { AVISO_DE_CHAVE, lugarDaChave, pareceSegredo } from '../adapters/segredo.ts';
+
+export { pareceSegredo };
 
 export interface ValorDoMapa { valor: string; rotulo: string; detalhe?: string }
 export interface EntradaDoMapa { forma: 'multipla' | 'unica' | 'numeros'; pergunta: string; valores: ValorDoMapa[] }
@@ -91,29 +95,6 @@ export function lerPedido(x: unknown): PedidoSetup | string {
     mensagem, historico, mapa, situacao, respostas,
     perguntaAtual: typeof o.perguntaAtual === 'string' ? curto(o.perguntaAtual, 60) : null,
   };
-}
-
-/**
- * A conversa não é lugar de chave: ela iria para a OpenAI no meio do texto e
- * ficaria no histórico do navegador. Detectar aqui é o que impede a chave do
- * CLIENTE de sair pela chave da PLATAFORMA. Erra para o lado de recusar —
- * qualquer sequência longa sem espaço, do jeito que chave e token são.
- */
-export function pareceSegredo(texto: string): boolean {
-  return /\b(sk-[A-Za-z0-9_-]{16,}|sk_[A-Za-z0-9_-]{16,}|AIza[0-9A-Za-z_-]{30,}|eyJ[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]+)/.test(texto)
-    || /[A-Za-z0-9_\-.+/=]{40,}/.test(texto.replace(/https?:\/\/\S+/g, ''));
-}
-
-/** Para onde levar quem colou chave: o lugar dela, pelo que o texto sugere. */
-function atalhoDaChave(texto: string): Atalho {
-  const t = texto.toLowerCase();
-  if (/openai|anthropic|claude|gemini|deepseek|openrouter|\bia\b|sk-/.test(t)) return 'ia';
-  if (/pipefy|hubspot|pipedrive|crm|salesforce|zoho|ploomes|rd station/.test(t)) return 'crm';
-  if (/uazapi|evolution|chip|qr/.test(t)) return 'whatsapp_nao_oficial';
-  if (/meta|gupshup|whatsapp/.test(t)) return 'whatsapp_oficial';
-  if (/resend|locaweb|smtp|e-?mail/.test(t)) return 'email';
-  if (/comtele|sms/.test(t)) return 'sms';
-  return 'ia';
 }
 
 /** Dos modelos que a chave alcança, o primeiro desta ordem. Barato e rápido
@@ -260,8 +241,7 @@ export async function conversar(
     return {
       ok: true, modelo: '',
       saida: {
-        mensagem: 'Isso parece uma chave ou um token, e eu não leio chave na conversa: ela não saiu daqui. Por segurança, considere trocá-la no provedor. Cole-a no formulário que acabei de abrir — de lá ela vai direto para o cofre.',
-        respostas: {}, abrir: atalhoDaChave(pedido.mensagem),
+        mensagem: AVISO_DE_CHAVE, respostas: {}, abrir: lugarDaChave(pedido.mensagem),
       },
     };
   }

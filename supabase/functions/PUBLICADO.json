@@ -1,8 +1,8 @@
 {
   "agente-setup": {
-    "digest": "e281b7343533cb0d",
-    "em": "2026-10-07 (v2, D72; a v1 descartava a chave porDia do vocabulário, achado no teste ao vivo. Os 4 arquivos que o bundle devolve lidos de volta pela MCP e conferidos; porta.ts e tipos.ts são import type, D52. Ao vivo pelo pg_net: chave anon → 401 do código; o pedido que corpoDoPedido monta, enviado com a chave do Vault, voltou 200 no esquema estrito com seis respostas)",
-    "versao": 2
+    "digest": "fb2553666f54187f",
+    "em": "2026-10-07 (v3, D72; a regra de chave na conversa passou para adapters/segredo.ts, a mesma que a tela usa. Os 5 arquivos que o bundle devolve lidos de volta pela MCP e conferidos; porta.ts e tipos.ts são import type, D52. A v1 descartava porDia, achado no teste ao vivo. Ao vivo pelo pg_net: chave anon → 401 do código; o pedido de corpoDoPedido, com a chave do Vault, voltou 200 no esquema estrito com seis respostas)",
+    "versao": 3
   },
   "canal-webhook": {
     "digest": "4dd1efb33ca3f860",

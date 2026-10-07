@@ -271,11 +271,11 @@ div.item:not(:has(.ico)) { border-style: dashed; border-color: var(--line-strong
 }
 button.item:hover { border-color: var(--line-strong); background: color-mix(in oklab, var(--surface) 70%, var(--surface-2)) }
 button.item:hover .seta { color: var(--ink); translate: 2px 0 }
-.item .ico {
+.item .ico, .atalho-topo .ico {
   width: 42px; height: 42px; flex: none; border-radius: 13px; display: grid; place-items: center;
   background: var(--surface-2); color: var(--ink-2);
 }
-.item .ico svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.7 }
+.item .ico svg, .atalho-topo .ico svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.7 }
 .item .txt { min-width: 0; flex: 1 }
 .item .txt b {
   display: block; font-family: var(--display); font-stretch: 96%;
@@ -683,6 +683,65 @@ button.resp:hover { background: var(--surface-2) }
 /* ---------------------------------------------------------------------------
    Telas estreitas: o rail vira gaveta e o topo ganha o botão de menu.
 --------------------------------------------------------------------------- */
+/* ---------------------------------------------------------------------------
+   Setup rápido (D72)
+--------------------------------------------------------------------------- */
+.agente-setup { display: grid; gap: 14px; border-color: var(--accent-line); background:
+  linear-gradient(180deg, color-mix(in oklab, var(--accent) 7%, var(--surface)) 0%, var(--surface) 70%) }
+.agente-cabeca { display: flex; align-items: flex-start; gap: 12px }
+.agente-cabeca > div { flex: 1; min-width: 0 }
+.agente-cabeca b { font-family: var(--display); font-size: 16px; font-weight: 600; font-stretch: 96% }
+.agente-cabeca p { margin: 3px 0 0; font-size: 13.5px; color: var(--ink-2); line-height: 1.5 }
+.agente-cabeca .link { font-size: 13px; color: var(--ink-3) }
+.agente-ico {
+  width: 36px; height: 36px; flex: none; border-radius: 11px; display: grid; place-items: center;
+  background: var(--accent-soft); color: var(--accent); border: 1px solid var(--accent-line);
+}
+.agente-ico svg { width: 19px; height: 19px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linejoin: round }
+.agente-falas { display: grid; gap: 10px; max-height: 380px; overflow-y: auto; padding: 2px 2px 4px; overscroll-behavior: contain }
+.agente-falas .balao { white-space: pre-wrap }
+.preencheu { list-style: none; margin: 10px 0 0; padding: 0; display: grid; gap: 4px; font-size: 12.5px; color: var(--ink-2) }
+.preencheu li { display: flex; gap: 6px; align-items: baseline }
+.preencheu svg { width: 12px; height: 12px; flex: none; translate: 0 1px; fill: none; stroke: var(--ok); stroke-width: 2.6; stroke-linecap: round; stroke-linejoin: round }
+.guardou { margin: 8px 0 0; font-size: 12.5px; color: var(--ink-3) }
+.digitando { display: inline-flex; gap: 5px; padding: 14px 16px }
+.digitando i { width: 6px; height: 6px; border-radius: 999px; background: var(--ink-3); animation: pisca 1.1s var(--ease) infinite }
+.digitando i:nth-child(2) { animation-delay: .15s }
+.digitando i:nth-child(3) { animation-delay: .3s }
+@keyframes pisca { 0%, 80%, 100% { opacity: .25 } 40% { opacity: 1 } }
+.exemplos { display: flex; flex-wrap: wrap; gap: 8px }
+.exemplo {
+  border: 1px solid var(--line); border-radius: 999px; padding: 7px 13px; font-size: 13px; color: var(--ink-2);
+  background: var(--surface); transition: border-color .16s var(--ease), color .16s var(--ease);
+}
+.exemplo:hover { border-color: var(--accent-line); color: var(--ink) }
+.exemplo[disabled] { opacity: .55; cursor: wait }
+.agente-entrada { display: flex; gap: 10px; align-items: flex-end }
+.agente-entrada textarea {
+  flex: 1; min-width: 0; resize: vertical; min-height: 48px; max-height: 200px; font: inherit; font-size: 14px;
+  line-height: 1.5; color: var(--ink); background: var(--field); border: 1px solid var(--line); border-radius: var(--r-sm);
+  padding: 11px 13px;
+}
+.agente-entrada textarea:hover { border-color: var(--line-strong) }
+.agente-entrada textarea:focus { outline: none; border-color: var(--accent-line); box-shadow: 0 0 0 4px var(--accent-soft) }
+.agente-entrada textarea::placeholder { color: var(--ink-3) }
+.agente-entrada .btn { height: 48px }
+.agente-nota { margin: -4px 0 0; font-size: 12px; color: var(--ink-3) }
+
+.atalhos { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 12px }
+.atalho { display: grid; grid-template-rows: auto auto 1fr auto; gap: 6px; padding: 16px; transition: border-color .2s var(--ease), box-shadow .2s var(--ease) }
+.atalho[data-aberto="true"] { border-color: var(--accent-line); box-shadow: 0 0 0 1px var(--accent-line) inset, 0 0 0 4px var(--accent-soft) }
+.atalho-topo { display: flex; align-items: center; gap: 12px }
+.atalho-topo .ico { width: 38px; height: 38px; border-radius: 12px }
+.atalho-topo b { flex: 1; min-width: 0; font-size: 14.5px; font-weight: 600 }
+.atalho-topo .chip svg { width: 11px; height: 11px; margin-right: 4px; fill: none; stroke: currentColor; stroke-width: 2.6; stroke-linecap: round; stroke-linejoin: round; vertical-align: -1px }
+.atalho-feito { margin: 4px 0 0; font-size: 13px; color: var(--ink); overflow-wrap: anywhere }
+.atalho:not(.pronto) .atalho-feito { color: var(--ink-3) }
+.atalho-detalhe { margin: 0; font-size: 12.5px; color: var(--ink-3); line-height: 1.45 }
+.atalho-acao { margin-top: 8px }
+.atalho-acao .btn svg { width: 14px; height: 14px }
+.setup-rapido svg { width: 15px; height: 15px }
+
 @media (max-width: 1100px) {
   .c8, .c4, .c6, .c3, .c5, .c7 { grid-column: span 12 !important }
 }
@@ -715,6 +774,9 @@ button.resp:hover { background: var(--surface-2) }
 }
 
 @media (max-width: 560px) {
+  .setup-rapido span { display: none }
+  .agente-entrada { flex-direction: column; align-items: stretch }
+  .agente-entrada .btn { height: 44px }
   .kpis, .kpis.cinco { grid-template-columns: 1fr 1fr; gap: 10px }
   .kpis .kpi b { font-size: 24px }
   .grade > .kpis { grid-template-columns: 1fr 1fr; gap: 10px }

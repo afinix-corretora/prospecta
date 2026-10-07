@@ -2781,3 +2781,80 @@ os oito foram corrigidos:
 
 O detector mecânico de design rodou em modo degradado (sem o parser de HTML), e o vazio dele não
 prova nada.
+
+### D72 — Setup rápido: um agente que propõe, e a primeira chave que é do produto
+
+**O pedido.** Um botão de setup rápido que leve a uma tela com os canais, os provedores de IA e o
+resto; um agente de IA que orquestre e agilize essas configurações; ao colar a chave da OpenAI, os
+modelos buscados e postos numa lista; e uma chave OpenAI "definitiva" para o agente usar, que só se
+altera, remove ou revoga pela conversa de desenvolvimento ou pelo backend.
+
+**Revisa o D67 e o D68 em dois pontos, e mantém o resto.**
+- O D67 dizia "roteiro, não modelo de linguagem", porque no primeiro acesso o cliente não tem chave
+  de IA e a chave é dele (D59). Continua verdade para a chave do CLIENTE. O agente de configuração
+  usa outra: a da PLATAFORMA, que existe antes de qualquer cliente. O roteiro continua decidindo — o
+  agente só sugere respostas.
+- O D68 dizia "chave só em Configurações". O atalho de IA do Setup abre o MESMO `FormularioIA` de
+  Configurações, que manda para `salvar_credencial_ia` e daí para o Vault. Não nasceu campo novo de
+  chave; o formulário ganhou um segundo lugar onde aparece.
+
+**A chave da plataforma.** Guardada no Vault como `openai_agente_setup`, direto no projeto, fora de
+qualquer arquivo. A migration `20261007100000_agente_de_setup` não cria porta de escrita nenhuma:
+- `segredo_do_agente_setup()` devolve o valor, e só o `service_role` executa;
+- `agente_de_setup_disponivel()` devolve um boolean, e é a única coisa que `authenticated` alcança.
+  O tipo de retorno tem teste, para uma edição futura não "aproveitar" a função e mandar a chave à
+  tela (D44).
+Conferido no projeto por fatos: 164 caracteres, prefixo `sk-proj-`, sem espaço nas pontas;
+`authenticated` e `anon` não chamam a função do valor. O `get_advisors` trouxe um WARN novo, o de
+`agente_de_setup_disponivel` ser SECURITY DEFINER chamável por `authenticated` — a mesma família
+das funções de tela que já existem, e de propósito. **A chave passou pelo histórico da conversa ao
+ser entregue.** Trocá-la é trocar o valor do segredo no Vault, com o mesmo nome; nada mais muda.
+
+**Buscar modelos (`ia-modelos`, v1).** `adapters/ia-modelos.ts` pergunta ao provedor o que a chave
+alcança: OpenAI e compatíveis em `/models`, Anthropic em `/v1/models`, Gemini em `models`. A chave vai
+em cabeçalho, nunca na URL — URL acaba em log —, e só por https. Da OpenAI saem só as famílias que
+conversam (`gpt-`, `o<n>`, `chatgpt-`), mais novas primeiro. O Perplexity não publica lista e a tela
+volta ao campo livre. Numa conta já salva, a função lê a conta com o JWT de quem pediu (o RLS
+decide) antes de a chave do serviço ler o Vault. O formulário busca sozinho 0,7 s depois que a
+pessoa para de digitar, e mostra um select com "digitar outro nome" de saída.
+
+**O agente (`agente-setup`, v3).** `motor/agente-setup.ts` monta um pedido de chat completions com
+esquema JSON estrito: mensagem, respostas como pares chave/valores e um atalho para abrir. O
+vocabulário vem da tela (`mapaDeRespostas`), e `lerSaida` descarta tudo o que estiver fora dele antes
+de a resposta voltar. Na tela, `aplicarSugestao` passa a sugestão pelo `valida` do roteiro:
+- o que um clique não poderia escolher não entra;
+- o que a pessoa já respondeu não é trocado;
+- o que é de pergunta futura fica guardado e só vale quando a conversa chegar lá. A bolha do agente
+  diz isso ("guardado para quando a conversa chegar lá: IA, CRM").
+O modelo é o mini mais novo que a chave alcança; hoje, `gpt-5.4-mini`.
+
+Três portões antes de gastar a chave:
+1. uma pessoa logada (a chave anon também é JWT);
+2. que pertença a algum cliente, lido pelo RLS de `tenant_users`;
+3. 30 mensagens a cada 10 minutos por pessoa. O contador é por instância da function: freio de
+   abuso, não de cobrança — instância nova começa do zero.
+
+**Chave colada na conversa.** É o risco que este desenho cria: a pessoa cola a chave do cliente na
+conversa, e ela vai para a OpenAI pela chave da plataforma. `adapters/segredo.ts` é uma regra só:
+- a tela a aplica antes de enviar e antes de guardar — a fala nem entra na conversa;
+- o agente a aplica de novo antes do modelo, e tira do histórico o que parecer chave.
+A pessoa é levada ao formulário certo. A regra erra para o lado de recusar: qualquer sequência
+longa sem espaço, menos URL.
+
+**O que o teste ao vivo achou.** O pedido que `corpoDoPedido` monta foi mandado à OpenAI com a chave
+do Vault, de dentro do banco (`pg_net`), sem a chave passar pela sessão. Voltou 200 no esquema
+estrito, e uma frase virou seis respostas. Mas o vocabulário mandado não tinha `porDia`: o filtro de
+chave de `lerPedido` aceitava só minúsculas, e a chave sumia em silêncio. Os testes unitários
+passavam, porque o mapa deles também era minúsculo. O conserto tem teste que falha sem ele; a v2 da
+function já saiu corrigida.
+
+**A tela.** `/setup` substitui `/configurar`, que redireciona. Nela ficam:
+- o agente no topo, com exemplos;
+- os atalhos, cada um com o que está conectado lido do banco;
+- o formulário de IA, que abre ali mesmo;
+- as perguntas e o plano de cartões de antes.
+Quando o agente aponta um atalho, ele é destacado e a tela não navega, para a pessoa não perder o
+que o agente acabou de dizer. O botão "Setup rápido" fica no topo de toda tela, e só com o ícone no
+celular. Conferido no navegador com dados sintéticos, em escuro, claro e 390 px, em três cenários:
+vazio, a frase do agente e a chave colada. A captura achou os ícones dos atalhos sem estilo e um
+token de CSS inexistente (`--bg`, o D50 de novo).

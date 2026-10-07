@@ -447,6 +447,18 @@ e elas têm teste automatizado obrigatório.**
   eixo. Mensagens e respostas são dois painéis com o mesmo tempo (D71).
 - **Nunca** escolher cor de gráfico no olho. `--g-*` passaram pelo validador de paleta nos dois
   temas; cor nova entra pelo mesmo validador (D71).
+- **Nunca** deixar a chave da plataforma ter porta na tela. Ela é do produto, não do cliente, e por
+  decisão do usuário só se troca, revoga ou apaga pelo backend: a tela pergunta se ela EXISTE
+  (`agente_de_setup_disponivel`, que devolve boolean de propósito) e nada mais (D72).
+- **Nunca** deixar o agente de configuração responder pela pessoa. O que ele devolve é sugestão: entra
+  pelo `valida` do roteiro, não troca resposta que a pessoa já deu, e nenhum cartão anda sem
+  "Autorizar". Agente que escreve no banco é o D67 furado por quem devia agilizá-lo (D72).
+- **Nunca** deixar chave colada na conversa sair do navegador. A tela barra antes de enviar e de
+  guardar, o agente barra de novo antes do modelo, e as duas usam `adapters/segredo.ts` — a chave do
+  CLIENTE indo para a OpenAI pela chave da PLATAFORMA é o pior jeito de vazar, porque parece ajuda (D72).
+- **Nunca** filtrar chave de um pedido por um padrão que não foi posto contra as chaves reais. O
+  filtro de `lerPedido` era só minúsculas e jogava fora `porDia` em silêncio; quem achou foi mandar o
+  pedido montado pelo código ao modelo de verdade, não o teste (D72).
 - **Nunca** guardar o progresso do assistente numa tabela. "O que está pronto" é lido do banco a cada
   vez; uma coluna "configurado" mentiria no dia em que alguém configurasse pela tela (D67).
 - **Nunca** aceitar uma resposta que nenhuma pergunta seguinte lê. Foi o laço infinito que a
@@ -615,6 +627,18 @@ e elas têm teste automatizado obrigatório.**
 > depois qual das contas conectadas; para canal e CRM, o mesmo. Sem conta, o cartão leva à tela onde
 > conectar, e a conversa continua quando a conta aparece. O Hub de campanhas mudou para `/campanhas`.
 >
+> Desde o **D72** o assistente é o **Setup rápido**, em `/setup` (o botão com o raio fica no topo de
+> toda tela). Ganhou atalhos por peça — WhatsApp oficial e não oficial, e-mail, SMS, IA e CRM, cada
+> um com o que está conectado lido do banco — e um **agente de configuração**: a pessoa escreve do
+> jeito dela e ele devolve respostas SUGERIDAS, que entram pelo mesmo `valida` de um clique
+> (`aplicarSugestao`). O agente roda na edge function `agente-setup` com a **chave OpenAI da
+> plataforma**, a primeira chave que é do produto e não do cliente: ela existe antes de o cliente ter
+> conta nenhuma. Mora só no Vault (`openai_agente_setup`), sai só para o service_role
+> (`segredo_do_agente_setup`), e a tela só pergunta se ela existe (`agente_de_setup_disponivel`).
+> Trocar, revogar ou apagar é pelo backend, nunca pela tela. O atalho de IA abre ali o MESMO
+> formulário de Configurações, que desde o D72 **busca os modelos** que a chave alcança
+> (`ia-modelos`) e os mostra numa lista.
+>
 > As **contas de IA** são várias por provedor desde sempre (`ai_credentials` é única por nome, não por
 > provedor), e desde o **D68** a tela de Provedores de IA as mostra agrupadas, com ligar e desligar. A
 > campanha escolhe uma em `campaigns.ai_credential_id`, que vale sobre a do agente em
@@ -676,7 +700,8 @@ e elas têm teste automatizado obrigatório.**
 > linha discordar. O do projeto não dá para conferir do suite (precisa de rede), então quem mexer
 > no schema confere pelo `list_migrations` junto com o `get_advisors` que já é obrigatório.
 >
-> As edge functions são cinco desde o D64. `motor-worker` está na **versão 7** desde 06/10, com o
+> As edge functions são sete desde o D72 (`ia-modelos` v1 e `agente-setup` v3, chamadas pela TELA
+> como `verificar-remetente`). Eram cinco desde o D64. `motor-worker` está na **versão 7** desde 06/10, com o
 > dreno da outbox e a leitura das fontes de CRM (D64), os rascunhos do agente (D66) e o envio da
 > resposta pelo agente autônomo (D69) — a migration do D69 entrou antes dele, porque o v7 chama as
 > funções novas e o v6 seguia funcionando sobre as antigas. A migration

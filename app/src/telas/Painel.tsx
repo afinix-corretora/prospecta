@@ -229,7 +229,7 @@ function Conteudo({ tudo, dias, aoNavegar }: { tudo: Tudo; dias: number; aoNaveg
               ))}
             </div>
           </div>
-          <button className="btn prim" onClick={() => aoNavegar('/configurar')}>Continuar configuração</button>
+          <button className="btn prim" onClick={() => aoNavegar('/setup')}><Ico nome="raio" />Setup rápido</button>
         </section>
       )}
 

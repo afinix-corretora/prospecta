@@ -29,6 +29,11 @@ const P: Record<string, ReactNode> = {
   seta: <path d="M9 6l6 6-6 6" />,
   check: <path d="M5 12.5l4.2 4.2L19 7" />,
   voltar: <path d="M15 6l-6 6 6 6" />,
+  // Setup rápido (D72): o raio diz "atalho", não "configuração" genérica.
+  raio: <path d="M13 3.5L5.5 13.5H12l-1 7 7.5-10H12z" />,
+  // O agente de configuração: faísca, para não confundir com o agente de canal.
+  faisca: <><path d="M12 4l1.6 4.4L18 10l-4.4 1.6L12 16l-1.6-4.4L6 10l4.4-1.6z" /><path d="M18.5 15.5l.7 1.8 1.8.7-1.8.7-.7 1.8-.7-1.8-1.8-.7 1.8-.7z" /></>,
+  enviar: <><path d="M4.5 12L19.5 4.5l-4 15-3.5-6z" /><path d="M12 13.5l7.5-9" /></>,
 };
 
 export function Ico({ nome, className = 'i' }: { nome: keyof typeof P | string; className?: string }) {

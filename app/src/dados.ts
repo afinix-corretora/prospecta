@@ -652,6 +652,33 @@ export async function buscarModelosIA(pedido:
   return data as ListaDeModelos;
 }
 
+/** Se a chave da plataforma está no cofre. Fato, nunca o valor (D44, D72). */
+export async function agenteDeSetupDisponivel(): Promise<boolean> {
+  const { data, error } = await sb.rpc('agente_de_setup_disponivel');
+  if (error) return false;
+  return data === true;
+}
+
+export type RespostaDoAgente =
+  | { ok: true; mensagem: string; respostas: Record<string, unknown>; abrir: string }
+  | { ok: false; erro: string };
+
+/**
+ * Uma mensagem ao agente do Setup rápido (D72). O que volta são SUGESTÕES:
+ * quem decide se entram é o roteiro, na tela (`aplicarSugestao`).
+ */
+export async function conversarComAgente(pedido: {
+  mensagem: string; historico: { papel: 'pessoa' | 'agente'; texto: string }[];
+  perguntaAtual: string | null; situacao: string[]; respostas: unknown; mapa: unknown;
+}): Promise<RespostaDoAgente> {
+  const { data, error } = await sb.functions.invoke('agente-setup', { body: pedido });
+  if (error) {
+    const corpo = await (error as { context?: Response }).context?.json?.().catch(() => null);
+    return { ok: false, erro: corpo?.erro ?? error.message };
+  }
+  return data as RespostaDoAgente;
+}
+
 /**
  * Remover não apaga: arquiva. As mensagens antigas apontam para a conta, e
  * apagar a linha levaria o histórico junto. A função recusa — dizendo quais —

@@ -141,14 +141,14 @@ export function Rail({ provedores, respostasHoje, tema, aoTrocarTema }: {
         <button
           className="grupo"
           aria-current={atual('/config')}
-          aria-expanded={emConfig || atual('/configurar')}
+          aria-expanded={emConfig || atual('/setup')}
           onClick={() => (emConfig && atual('/config') ? nav('/') : nav('/config'))}
         >
           <Ico nome="config" /><span>Configurações</span><Chevron />
         </button>
-        <div className="sub" data-aberto={emConfig || atual('/configurar')}>
+        <div className="sub" data-aberto={emConfig || atual('/setup')}>
           <div>
-            <button aria-current={atual('/configurar')} onClick={() => nav('/configurar')}>Assistente</button>
+            <button aria-current={atual('/setup')} onClick={() => nav('/setup')}>Setup rápido</button>
             <button aria-current={atual('/config/email')} onClick={() => nav('/config/email')}>E-mail</button>
             <button aria-current={atual('/config/blacklist')} onClick={() => nav('/config/blacklist')}>Blacklist</button>
             <button aria-current={atual('/config/ia')} onClick={() => nav('/config/ia')}>Provedores de IA</button>

@@ -18,7 +18,7 @@ import { Funil } from './telas/Funil';
 import { Respostas } from './telas/Respostas';
 import { Supressao } from './telas/Supressao';
 import { Writeback } from './telas/Writeback';
-import { Inicio } from './telas/Inicio';
+import { Setup } from './telas/Inicio';
 import { Painel } from './telas/Painel';
 import {
   Canais, Config, ConfigAgentes, ConfigIA, ConfigModelos, ConfigPlataformas,
@@ -132,10 +132,11 @@ function Casca() {
               tema={tema} aoTrocarTema={alternarTema} />
         <Routes>
           {/* O painel é a porta de entrada: o que rendeu, quem respondeu, o que
-              pede ação. O assistente (D67) mora em /configurar e aparece no
+              pede ação. O Setup rápido (D72) mora em /setup e aparece no
               painel como cartão de progresso enquanto houver passo pendente. */}
           <Route path="/" element={<Painel />} />
-          <Route path="/configurar" element={<Inicio />} />
+          <Route path="/setup" element={<Setup />} />
+          <Route path="/configurar" element={<Navigate to="/setup" replace />} />
           <Route path="/campanhas" element={<Hub />} />
           <Route path="/campanhas/:id" element={<Campanha />} />
           <Route path="/cadencias" element={<Cadencias />} />
@@ -191,6 +192,10 @@ function Topo(props: {
                placeholder="Buscar contato por nome ou número" aria-label="Buscar contato" />
       </form>
       <div className="dir">
+        {/* D72: o atalho para conectar canal, IA e CRM fica à vista em toda tela. */}
+        <button className="btn mini prim setup-rapido" onClick={() => nav('/setup')}>
+          <Ico nome="raio" /><span>Setup rápido</span>
+        </button>
         <button className="icobtn" onClick={props.aoTrocarTema}
                 aria-label={props.tema === 'dark' ? 'Usar tema claro' : 'Usar tema escuro'}
                 title={props.tema === 'dark' ? 'Tema claro' : 'Tema escuro'}>
