@@ -660,16 +660,19 @@ export async function agenteDeSetupDisponivel(): Promise<boolean> {
 }
 
 export type RespostaDoAgente =
-  | { ok: true; mensagem: string; respostas: Record<string, unknown>; abrir: string }
+  | { ok: true; mensagem: string; respostas: Record<string, unknown>; campos: Record<string, string> }
   | { ok: false; erro: string };
 
 /**
- * Uma mensagem ao agente do Setup rápido (D72). O que volta são SUGESTÕES:
- * quem decide se entram é o roteiro, na tela (`aplicarSugestao`).
+ * Uma mensagem ao agente do Setup rápido (D72, por chat desde o D73). O que
+ * volta são SUGESTÕES: quem decide se entram é o roteiro (`aplicarSugestao`)
+ * e o condutor (`aceitarValor`), na tela.
  */
 export async function conversarComAgente(pedido: {
   mensagem: string; historico: { papel: 'pessoa' | 'agente'; texto: string }[];
-  perguntaAtual: string | null; situacao: string[]; respostas: unknown; mapa: unknown;
+  /** O passo da conversa (D73). `campos` nunca traz segredo: o condutor não lista. */
+  passo: { tipo: string; descricao: string; campos: { chave: string; rotulo: string }[] };
+  situacao: string[]; respostas: unknown; mapa: unknown;
 }): Promise<RespostaDoAgente> {
   const { data, error } = await sb.functions.invoke('agente-setup', { body: pedido });
   if (error) {

@@ -432,12 +432,13 @@ e elas têm teste automatizado obrigatório.**
 - **Nunca** deixar "foi para a fila" passar por "saiu". A tela lê o status da mensagem, e o que o
   motor não mandou volta para uma pessoa com o motivo e o texto (D69).
 
-- **Nunca** deixar o assistente executar o que a pessoa não autorizou. Cada passo é um cartão que
-  diz o que vai acontecer ANTES do botão, e a escrita sai com o JWT de quem clicou — o RLS decide,
-  o assistente só avisa antes (D67).
-- **Nunca** pedir chave de API fora de Configurações (ou da tela do canal). O assistente e a campanha
-  só ESCOLHEM entre as contas conectadas; sem conta, apontam a tela onde conectar e seguem quando ela
-  aparece no banco. Chave digitada em cada fluxo que precise dela é o segredo em N lugares (D68).
+- **Nunca** deixar o assistente executar o que a pessoa não autorizou. Desde o D73, por decisão do
+  usuário, no setup por chat DAR a informação é o pedido: cada peça é feita quando a conversa chega
+  nela, e a conversa diz o que fez e o resultado. O que não muda: a escrita sai com o JWT de quem
+  conversa (o RLS decide), e fora do chat o plano continua esperando o clique (D67, D73).
+- **Nunca** pedir chave de API fora de Configurações, da tela do canal ou do campo protegido do setup
+  por chat (D73) — e os três chamam a MESMA função de banco, que é quem separa Vault de `config`.
+  Uma quarta porta com a sua própria regra seria o segredo em N lugares (D68).
 - **Nunca** pôr na pessoa compartilhada o que é decisão de cada campanha. O agente é uma persona que
   várias campanhas dividem; a conta de IA mora em `campaigns.ai_credential_id` e vale sobre a do
   agente — trocar a dele numa campanha trocaria em todas (D68).
@@ -450,12 +451,21 @@ e elas têm teste automatizado obrigatório.**
 - **Nunca** deixar a chave da plataforma ter porta na tela. Ela é do produto, não do cliente, e por
   decisão do usuário só se troca, revoga ou apaga pelo backend: a tela pergunta se ela EXISTE
   (`agente_de_setup_disponivel`, que devolve boolean de propósito) e nada mais (D72).
-- **Nunca** deixar o agente de configuração responder pela pessoa. O que ele devolve é sugestão: entra
-  pelo `valida` do roteiro, não troca resposta que a pessoa já deu, e nenhum cartão anda sem
-  "Autorizar". Agente que escreve no banco é o D67 furado por quem devia agilizá-lo (D72).
-- **Nunca** deixar chave colada na conversa sair do navegador. A tela barra antes de enviar e de
-  guardar, o agente barra de novo antes do modelo, e as duas usam `adapters/segredo.ts` — a chave do
-  CLIENTE indo para a OpenAI pela chave da PLATAFORMA é o pior jeito de vazar, porque parece ajuda (D72).
+- **Nunca** deixar o agente de configuração responder pela pessoa nem escolher o próximo passo. O que
+  ele devolve é sugestão: entra pelo `valida` do roteiro e pelo `aceitarValor` do condutor, não troca
+  resposta que a pessoa já deu, e quem decide a ordem e executa é código (`setupChat.ts` e a tela).
+  Modelo que escolhe o passo esquece campo obrigatório sem erro (D72, D73).
+- **Nunca** deixar chave colada no TEXTO LIVRE da conversa sair do navegador. Chave entra pelo campo
+  protegido que o passo mostra; fora dele, a tela barra antes de enviar e de guardar, o agente barra
+  de novo antes do modelo, e as duas usam `adapters/segredo.ts` — a chave do CLIENTE indo para a
+  OpenAI pela chave da PLATAFORMA é o pior jeito de vazar, porque parece ajuda (D72, D73).
+- **Nunca** deixar segredo entrar no estado da conversa. `aceitarValor` recusa campo marcado como
+  segredo, o condutor só sabe QUE ele foi digitado, e o valor mora num ref que vai direto para a
+  função de banco e morre com a página — nem memória do navegador, nem histórico, nem modelo. Erro
+  ao conectar esquece a chave e a pede de novo (D73).
+- **Nunca** confiar em estado do React para não executar duas vezes. Em desenvolvimento o efeito roda
+  duas vezes seguidas, antes de `ocupado` mudar: a conta seria conectada duas vezes. A trava do setup
+  por chat é um ref (D73).
 - **Nunca** filtrar chave de um pedido por um padrão que não foi posto contra as chaves reais. O
   filtro de `lerPedido` era só minúsculas e jogava fora `porDia` em silêncio; quem achou foi mandar o
   pedido montado pelo código ao modelo de verdade, não o teste (D72).
@@ -628,10 +638,14 @@ e elas têm teste automatizado obrigatório.**
 > conectar, e a conversa continua quando a conta aparece. O Hub de campanhas mudou para `/campanhas`.
 >
 > Desde o **D72** o assistente é o **Setup rápido**, em `/setup` (o botão com o raio fica no topo de
-> toda tela). Ganhou atalhos por peça — WhatsApp oficial e não oficial, e-mail, SMS, IA e CRM, cada
-> um com o que está conectado lido do banco — e um **agente de configuração**: a pessoa escreve do
-> jeito dela e ele devolve respostas SUGERIDAS, que entram pelo mesmo `valida` de um clique
-> (`aplicarSugestao`). O agente roda na edge function `agente-setup` com a **chave OpenAI da
+> toda tela), e desde o **D73** ele é **uma conversa**: o condutor (`app/src/setupChat.ts`, puro e
+> testado) decide o próximo passo — pergunta do roteiro, campo a pedir, conta a conectar, ação do
+> plano —, e a tela executa cada peça assim que a informação chega, dizendo o resultado na conversa
+> (inclusive a verificação da conta com o provedor, o QR do chip criado e o modelo escolhido da lista
+> que a chave alcança). Chave entra por um campo protegido, vai do navegador direto para a função de
+> banco e nunca passa pelo modelo nem pela memória. O **agente de configuração** entende o texto
+> livre e devolve respostas e valores SUGERIDOS, que entram pelo mesmo `valida` de um clique
+> (`aplicarSugestao`) e pelo mesmo `aceitarValor` de quem digita. O agente roda na edge function `agente-setup` com a **chave OpenAI da
 > plataforma**, a primeira chave que é do produto e não do cliente: ela existe antes de o cliente ter
 > conta nenhuma. Mora só no Vault (`openai_agente_setup`), sai só para o service_role
 > (`segredo_do_agente_setup`), e a tela só pergunta se ela existe (`agente_de_setup_disponivel`).
@@ -700,7 +714,7 @@ e elas têm teste automatizado obrigatório.**
 > linha discordar. O do projeto não dá para conferir do suite (precisa de rede), então quem mexer
 > no schema confere pelo `list_migrations` junto com o `get_advisors` que já é obrigatório.
 >
-> As edge functions são sete desde o D72 (`ia-modelos` v1 e `agente-setup` v3, chamadas pela TELA
+> As edge functions são sete desde o D72 (`ia-modelos` v1 e `agente-setup` v4, chamadas pela TELA
 > como `verificar-remetente`). Eram cinco desde o D64. `motor-worker` está na **versão 7** desde 06/10, com o
 > dreno da outbox e a leitura das fontes de CRM (D64), os rascunhos do agente (D66) e o envio da
 > resposta pelo agente autônomo (D69) — a migration do D69 entrou antes dele, porque o v7 chama as

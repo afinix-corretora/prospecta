@@ -2858,3 +2858,75 @@ que o agente acabou de dizer. O botão "Setup rápido" fica no topo de toda tela
 celular. Conferido no navegador com dados sintéticos, em escuro, claro e 390 px, em três cenários:
 vazio, a frase do agente e a chave colada. A captura achou os ícones dos atalhos sem estilo e um
 token de CSS inexistente (`--bg`, o D50 de novo).
+
+### D73 — O setup é a conversa: o agente pede, e cada peça é feita quando a informação chega
+
+**O pedido.** "O schema de configuração rápida deve ser via chat. O agente deve pedir tudo que for
+necessário no chat e configurar os itens automaticamente à medida que as informações são fornecidas."
+
+**Revisa três regras, por decisão do usuário, e mantém a segurança de cada uma.**
+- **D67, "nada sem Autorizar".** No chat, dar a informação é o pedido. Cada peça é feita quando a
+  conversa chega nela, e a conversa diz o que foi feito e o resultado. A escrita continua saindo com o
+  JWT de quem conversa, e o RLS continua decidindo. Fora do chat nada mudou.
+- **D68, "chave só em Configurações".** A chave agora também entra pelo campo protegido do chat. Esse
+  campo chama as MESMAS funções de banco das telas: `salvar_credencial_ia`,
+  `salvar_credencial_remetente` (por `conectarConta`) e `salvar_credencial_crm`. Continua sendo o
+  catálogo, dentro da função, quem separa Vault de `config` (D28). Não nasceu uma quarta regra.
+- **D72, "chave nunca na conversa".** Agora vale para o texto LIVRE. A chave pedida pelo passo vai
+  num `input type=password` que substitui a caixa de mensagem. O valor vai para um ref, e do ref
+  direto para a função. Nunca passa pelo modelo, pela memória do navegador ou pelo histórico.
+
+**Quem faz o quê.**
+- **O condutor decide o próximo passo** (`app/src/setupChat.ts`, puro, `tests/setup_chat.test.ts`).
+  Ele lê a foto do banco e o estado, e devolve um passo só:
+  - uma pergunta do roteiro;
+  - um campo a pedir;
+  - uma conta a conectar;
+  - uma ação do plano;
+  - ou o fim.
+  Cada peça vem logo depois da resposta que a pediu, antes da pergunta seguinte. Os campos são os
+  obrigatórios do catálogo, com o segredo por último. O opcional fica para a tela da conta: a
+  conversa existe para chegar rápido ao que funciona.
+- **O agente entende e sugere** (`agente-setup` v4). Ele recebe o passo atual e pode devolver valores
+  só para os campos não secretos que o passo lista. Campo que se declara segredo é descartado ao ler
+  o pedido, e valor com cara de chave é descartado na saída. Ele não escolhe o passo: modelo que
+  escolhe o passo esquece campo obrigatório sem dar erro.
+- **A tela executa e conta.**
+  - Conta de canal: conectada e **verificada** com o provedor na hora (`verificar-remetente`).
+  - Provedor com servidor (UAZAPI): o chip é **criado** pela conversa, e o QR aparece nela.
+  - IA: a chave primeiro, depois o modelo, escolhido da lista que a chave alcança (`ia-modelos`).
+    Chave recusada volta a ser pedida.
+  - CRM: conectado, e a conversa diz se ele escreve ou só guarda.
+  - Ações do plano: quota, campanha e agentes rodam uma de cada vez, uma vez só.
+  - Erro ao conectar: a chave é esquecida e pedida de novo, e dá para pular a conta.
+
+**O segredo fora do estado é garantido por código, não por cuidado.**
+- `EstadoSetup.valores` guarda só o que não é segredo, e `aceitarValor` recusa campo marcado como
+  segredo.
+- O condutor recebe só QUAIS segredos foram digitados (`prontos`).
+- A conversa mostra "API key: guardada no cofre".
+- O teste no navegador confere as duas pontas ao fim de uma conversa inteira, com duas chaves
+  digitadas: nada no `localStorage` e nada nos pedidos ao agente.
+
+**Duas armadilhas pegas antes de sair.**
+- **Execução duplicada.** Em desenvolvimento, o efeito do React roda duas vezes seguidas, antes de o
+  estado `ocupado` mudar, e a conta seria criada duas vezes. A trava é um ref.
+- **A frase em volta do valor.** "Pode usar contato@afinix.com.br" num campo de e-mail seria recusada
+  como e-mail inválido. Agora, número e e-mail que não passam direto e vêm numa frase vão ao agente.
+  O teste ao vivo mostrou o agente separando os dois campos de uma frase só.
+
+**Conferido.**
+- 11 testes do condutor, com três sabotagens:
+  - segredo aceito no estado;
+  - quem não administra configurando;
+  - pergunta antes da peça.
+  Cada sabotagem acende o teste dela.
+- 12 testes do agente.
+- No navegador, uma conversa inteira com mocks que guardam o que foi criado, em escuro, claro e
+  390 px:
+  - a frase inicial preenche cinco perguntas;
+  - o chip existente é escolhido;
+  - a conta Resend é conectada e verificada;
+  - a conta OpenAI é conectada com o modelo escolhido.
+- Ao vivo, um passo de campo foi mandado à OpenAI com a chave do Vault. Voltou 200, no esquema
+  estrito.

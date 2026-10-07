@@ -4,11 +4,10 @@
  *
  * Três decisões moram aqui, e as três são de propósito:
  *
- * - **Roteiro, não modelo de linguagem.** No primeiro acesso o cliente ainda
- *   não tem credencial de IA — e a chave é dele (D59), não do produto. Um
- *   assistente que precisa de IA para existir não configura o produto que
- *   ainda não tem IA. As perguntas são fixas, as respostas viram ações
- *   concretas, e tudo isto é testável sem rede.
+ * - **Roteiro, não modelo de linguagem.** As perguntas são fixas, as respostas
+ *   viram ações concretas, e tudo isto é testável sem rede. Desde o D72 há um
+ *   agente de IA na conversa (com a chave da PLATAFORMA), mas ele só sugere
+ *   respostas; quem decide a ordem e o que vale é este roteiro.
  *
  * - **O estado é o banco.** O que já está feito vem da `Foto` — contas,
  *   credenciais, conexões, campanhas, contatos — e não de uma tabela de
@@ -16,16 +15,18 @@
  *   o produza, e mentiria no dia em que alguém configurasse pela tela (D31).
  *
  * - **Plano, não execução.** `montarPlano` devolve o que SERIA feito, com o
- *   efeito de cada passo dito em português. Quem executa é a tela, uma ação
- *   por clique de quem autorizou, com o JWT dessa pessoa — o RLS responde, não
- *   este arquivo.
+ *   efeito de cada passo dito em português. Quem executa é a tela, com o JWT
+ *   de quem conversa — o RLS responde, não este arquivo. Desde o D73, por
+ *   decisão do usuário, a tela executa cada ação quando a conversa chega nela,
+ *   sem cartão de "Autorizar": dar a informação no chat é o pedido.
  *
- * - **Chave só em Configurações (D68).** O assistente não tem campo de chave
- *   nenhum. Ele pergunta qual provedor, e então ESCOLHE entre as contas já
- *   conectadas; quando não há conta, o plano aponta a tela onde conectar, e a
- *   conversa segue sozinha quando a conta aparecer na `Foto`. Quem digita
- *   chave é quem administra, na tela de Configurações ou do canal — num lugar
- *   só, e não em cada fluxo que precise dela.
+ * - **Chave só em Configurações (D68), revisto no D73.** Este arquivo continua
+ *   sem campo de chave: quando a pessoa escolhe um provedor sem conta, quem
+ *   pede os dados é o condutor do setup por chat (`setupChat.ts`), num campo
+ *   protegido que vai direto para o Vault pela mesma função de banco das telas
+ *   de Configurações. O plano de cartões (`montarPlano`) segue existindo: no
+ *   chat, as ações dele rodam sozinhas, uma por vez, à medida que a conversa
+ *   chega lá.
  *
  * - **O agente propõe, o roteiro decide (D72).** Desde o Setup rápido há um
  *   agente de IA na conversa — com a chave da PLATAFORMA, porque ele existe
@@ -87,6 +88,9 @@ export interface Foto {
   readonly agentes: readonly { id: string; nome: string; canal: string; tenant_id: string | null }[];
   readonly campanhas: readonly { id: string; nome: string; ativa: boolean }[];
   readonly contatos: number;
+  /** Servidores de provedor que hospeda instância (D25). Com um, o setup por
+   *  chat CRIA o chip e mostra o QR; sem, conecta uma instância existente (D73). */
+  readonly servidores?: readonly { id: string; provedor: string; nome: string }[];
 }
 
 const entregavel = (p: Foto['provedores'][number]) => p.tem_adapter && p.ativo;
@@ -280,8 +284,8 @@ function perguntaProvedor(f: Foto, r: Respostas, canal: CanalEnvio): Pergunta {
       ? `Você já tem ${existentes.length === 1 ? 'uma conta' : `${existentes.length} contas`} de ${NOME[canal]} para ${pool === 'fria' ? 'lista fria' : 'base própria'}. Usar?`
       : `Qual provedor de ${NOME[canal]} você vai usar?`,
     ajuda: existentes.length
-      ? 'Para conectar mais contas, use a tela do canal: é lá que a chave é digitada.'
-      : 'Você conecta a conta e a chave na tela do canal — o plano leva até lá. Assim que a conta aparecer, o assistente continua daqui.',
+      ? 'Para conectar mais contas depois, use a tela do canal.'
+      : 'Escolha um, e eu peço aqui mesmo o que falta para conectar a conta.',
   };
 }
 
@@ -295,7 +299,7 @@ function perguntaIA(f: Foto): Pergunta {
   return {
     chave: 'ia', forma: 'unica',
     texto: 'Quer que um agente responda os contatos? Com qual IA?',
-    ajuda: 'O agente responde sozinho pelo motor, com freios em código, e devolve para uma pessoa o que não puder mandar. Dá para deixá-lo só escrevendo rascunhos, em Configurações ▸ Agentes. Aqui você escolhe a IA; a conta, logo depois, entre as que já estão conectadas.',
+    ajuda: 'O agente responde sozinho pelo motor, com freios em código, e devolve para uma pessoa o que não puder mandar. Dá para deixá-lo só escrevendo rascunhos, em Configurações ▸ Agentes. Se você ainda não tem conta conectada nessa IA, eu peço a chave aqui mesmo.',
     opcoes: [
       ...f.provedoresIA.map((p) => {
         const n = contasIA(f, p.slug).length;
@@ -314,7 +318,7 @@ function perguntaContaIA(f: Foto, provedor: string): Pergunta {
   return {
     chave: 'ia:conta', forma: 'unica',
     texto: `Qual conta de ${nome}?`,
-    ajuda: 'As contas e as chaves vivem em Configurações ▸ Provedores de IA. A campanha só aponta para uma delas.',
+    ajuda: 'A campanha usa uma delas. As contas ficam em Configurações ▸ Provedores de IA.',
     opcoes: contasIA(f, provedor).map((c, i) => ({
       valor: c.id, rotulo: c.nome, detalhe: c.modelo ? `modelo ${c.modelo}` : undefined, recomendada: i === 0,
     })),

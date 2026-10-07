@@ -1,8 +1,10 @@
 // "Isto parece uma chave?" (D72) — uma regra só, para a tela e para o agente.
 //
-// A conversa do Setup rápido não é lugar de chave: ela iria para a OpenAI no
-// meio do texto e ficaria guardada no navegador. A TELA pergunta isto antes
-// de enviar e de guardar; o AGENTE pergunta de novo antes de chamar o modelo,
+// O texto livre da conversa do Setup rápido não é lugar de chave: ela iria
+// para a OpenAI no meio da frase e ficaria guardada no navegador. Chave entra
+// pelo campo protegido que a conversa mostra quando pede uma (D73), e esse vai
+// direto para o Vault. A TELA pergunta isto antes de mandar texto livre e de
+// guardá-lo; o AGENTE pergunta de novo antes de chamar o modelo,
 // porque a tela é do cliente e pode ser outra. Duas cópias da regra seriam a
 // segunda normalização do D32: a tela deixaria passar o que o agente barra,
 // ou o contrário, e o furo apareceria como chave do cliente num log alheio.
@@ -15,20 +17,6 @@ export function pareceSegredo(texto: string): boolean {
     || /[A-Za-z0-9_\-.+/=]{40,}/.test(texto.replace(/https?:\/\/\S+/g, ''));
 }
 
-/** Onde a chave colada deveria ter entrado, pelo que o texto em volta sugere. */
-export type LugarDaChave = 'ia' | 'crm' | 'whatsapp_nao_oficial' | 'whatsapp_oficial' | 'email' | 'sms';
-
-export function lugarDaChave(texto: string): LugarDaChave {
-  const t = texto.toLowerCase();
-  if (/openai|anthropic|claude|gemini|deepseek|openrouter|\bia\b|sk-/.test(t)) return 'ia';
-  if (/pipefy|hubspot|pipedrive|crm|salesforce|zoho|ploomes|rd station/.test(t)) return 'crm';
-  if (/uazapi|evolution|chip|qr/.test(t)) return 'whatsapp_nao_oficial';
-  if (/meta|gupshup|whatsapp/.test(t)) return 'whatsapp_oficial';
-  if (/resend|locaweb|smtp|e-?mail/.test(t)) return 'email';
-  if (/comtele|sms/.test(t)) return 'sms';
-  return 'ia';
-}
-
 export const AVISO_DE_CHAVE =
-  'Isso parece uma chave ou um token, e eu não leio chave na conversa: ela não foi enviada nem guardada. '
-  + 'Por segurança, considere trocá-la no provedor. Cole-a no formulário que acabei de abrir — de lá ela vai direto para o cofre.';
+  'Isso parece uma chave ou um token, e por isso não foi enviado nem guardado: chave não vai no texto da conversa. '
+  + 'Quando eu pedir uma chave, aparece um campo protegido no lugar da caixa de mensagem — cole lá, e ela vai direto para o cofre.';

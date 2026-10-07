@@ -52,7 +52,7 @@ test('pedido: as chaves de verdade do assistente chegam ao modelo, inclusive por
 
 test('saída: só chave e valor do vocabulário passam', () => {
   const s = lerSaida(JSON.stringify({
-    mensagem: 'Entendi: WhatsApp, lista fria.', abrir: 'whatsapp_nao_oficial',
+    mensagem: 'Entendi: WhatsApp, lista fria.', campos: [],
     respostas: [
       { chave: 'canais', valores: ['whatsapp', 'instagram', 'whatsapp'], numeros: [] },
       { chave: 'pool', valores: ['gelada', 'fria'], numeros: [] },
@@ -61,18 +61,37 @@ test('saída: só chave e valor do vocabulário passam', () => {
     ],
   }), MAPA);
   assert.deepEqual(s.respostas, { canais: ['whatsapp'], pool: 'fria', porDia: { whatsapp: 80 } });
-  assert.equal(s.abrir, 'whatsapp_nao_oficial');
 });
 
-test('saída fora do formato vira pergunta de volta, e atalho inventado vira nenhum', () => {
+test('campos: só os do passo, e nunca um valor com cara de chave (D73)', () => {
+  const PODE = [{ chave: 'identificador', rotulo: 'número' }, { chave: 'assunto_padrao', rotulo: 'assunto' }];
+  const s = lerSaida(JSON.stringify({
+    mensagem: 'ok', respostas: [],
+    campos: [
+      { chave: 'identificador', valor: ' 5511988887777 ' },
+      { chave: 'api_key', valor: 'qualquer' },                                   // não está no passo
+      { chave: 'assunto_padrao', valor: 'sk-proj-AbCdEfGhIjKlMnOpQrStUv123456' }, // parece chave
+    ],
+  }), MAPA, PODE);
+  assert.deepEqual(s.campos, { identificador: '5511988887777' });
+});
+
+test('pedido: campo que se declara segredo não é preenchível pelo agente', () => {
+  const p = lerPedido({ mensagem: 'oi', passo: { tipo: 'campo', descricao: 'x', campos: [
+    { chave: 'identificador', rotulo: 'n' }, { chave: 'api_key', rotulo: 'k', segredo: true },
+  ] } }) as PedidoSetup;
+  assert.deepEqual(p.passo.campos.map((c) => c.chave), ['identificador']);
+});
+
+test('saída fora do formato vira pergunta de volta, sem resposta nem campo', () => {
   const a = lerSaida('isto não é json', MAPA);
   assert.deepEqual(a.respostas, {});
+  assert.deepEqual(a.campos, {});
   assert.match(a.mensagem, /Pode dizer/);
-  assert.equal(lerSaida(JSON.stringify({ mensagem: 'ok', abrir: '/admin', respostas: [] }), MAPA).abrir, '');
 });
 
 test('conversa: chave da plataforma no cabeçalho, modelo barato, formato estrito, e a lista pedida uma vez', async () => {
-  const { buscar, chamadas } = openai({ mensagem: 'Certo.', abrir: '', respostas: [{ chave: 'pool', valores: ['fria'], numeros: [] }] });
+  const { buscar, chamadas } = openai({ mensagem: 'Certo.', campos: [], respostas: [{ chave: 'pool', valores: ['fria'], numeros: [] }] });
   const r = await conversar(PEDIDO, CHAVE_PLATAFORMA, buscar, 1000);
   assert.ok(r.ok);
   assert.equal(r.ok && r.modelo, 'gpt-5-mini');
@@ -87,12 +106,12 @@ test('conversa: chave da plataforma no cabeçalho, modelo barato, formato estrit
   assert.equal(chamadas.filter((c) => c.url.endsWith('/models')).length, 1);
 });
 
-test('chave colada na conversa não sai para a OpenAI, e a pessoa vai para o lugar dela', async () => {
-  const { buscar, chamadas } = openai({ mensagem: 'x', abrir: '', respostas: [] });
+test('chave colada no texto livre não sai para a OpenAI', async () => {
+  const { buscar, chamadas } = openai({ mensagem: 'x', campos: [], respostas: [] });
   const p = lerPedido({ mensagem: 'minha chave da openai é sk-proj-AbCdEfGhIjKlMnOpQrStUv123456', mapa: MAPA }) as PedidoSetup;
   const r = await conversar(p, CHAVE_PLATAFORMA, buscar);
   assert.equal(chamadas.length, 0);
-  assert.ok(r.ok && r.saida.abrir === 'ia');
+  assert.ok(r.ok && Object.keys(r.saida.campos).length === 0);
   assert.ok(r.ok && !r.saida.mensagem.includes('sk-proj'));
 });
 

@@ -1,14 +1,18 @@
-// O agente do Setup rápido (D72): lê o que a pessoa escreveu e devolve
-// respostas SUGERIDAS para as perguntas do assistente.
+// O agente do Setup rápido (D72; por chat desde o D73): lê o que a pessoa
+// escreveu e devolve respostas e valores SUGERIDOS para o passo da conversa.
+//
+// Quem decide o próximo passo é o condutor da tela (`app/src/setupChat.ts`),
+// e quem executa é a tela, com o JWT da pessoa. Daqui sai texto e sugestão.
 //
 // O que ele não faz, por desenho:
 //
 //   - não escreve no banco e não autoriza cartão nenhum: o que sai daqui é
 //     texto e sugestão, e a tela passa a sugestão pelo `valida` do roteiro
 //     (`aplicarSugestao`), o mesmo de quem clica;
-//   - não vê nem pede chave: chave colada na conversa é barrada aqui, antes
-//     do modelo, pela MESMA regra que a tela usa antes de enviar
-//     (`adapters/segredo.ts`), e o prompt manda apontar a tela certa;
+//   - não vê nem pede chave: a conversa pede segredo num campo protegido que
+//     vai da tela direto para o Vault, sem passar por aqui; e chave colada no
+//     texto livre é barrada antes do modelo, pela MESMA regra que a tela usa
+//     antes de enviar (`adapters/segredo.ts`);
 //   - não escolhe fora do vocabulário: o mapa que a tela manda diz, chave por
 //     chave, o que é escolhível agora, e `lerSaida` descarta o resto antes de
 //     a sugestão voltar à rede.
@@ -20,32 +24,33 @@
 // Só `fetch`, injetável: o arquivo roda no Deno da function e no Node do teste.
 
 import type { Buscador } from '../adapters/tipos.ts';
-import { AVISO_DE_CHAVE, lugarDaChave, pareceSegredo } from '../adapters/segredo.ts';
+import { AVISO_DE_CHAVE, pareceSegredo } from '../adapters/segredo.ts';
 
 export { pareceSegredo };
 
 export interface ValorDoMapa { valor: string; rotulo: string; detalhe?: string }
 export interface EntradaDoMapa { forma: 'multipla' | 'unica' | 'numeros'; pergunta: string; valores: ValorDoMapa[] }
 
+/** Campo que o agente pode preencher no passo atual. Nunca segredo: a tela
+ *  não manda, e `lerPedido` não aceitaria um marcado assim. */
+export interface CampoDoPasso { chave: string; rotulo: string }
+
 export interface PedidoSetup {
   mensagem: string;
   historico: { papel: 'pessoa' | 'agente'; texto: string }[];
-  /** A pergunta da vez, para o agente saber onde a conversa está. */
-  perguntaAtual: string | null;
+  /** O passo da conversa, como o condutor o descreve (`passoParaOAgente`). */
+  passo: { tipo: string; descricao: string; campos: CampoDoPasso[] };
   /** O que já está feito, lido do banco pela tela (a lista "Onde você está"). */
   situacao: string[];
   respostas: Record<string, unknown>;
   mapa: Record<string, EntradaDoMapa>;
 }
 
-/** Atalhos que a tela do Setup sabe abrir. Fora disto, o agente não navega. */
-export const ATALHOS = ['', 'whatsapp_oficial', 'whatsapp_nao_oficial', 'email', 'sms', 'ia', 'crm'] as const;
-export type Atalho = typeof ATALHOS[number];
-
 export interface SaidaSetup {
   mensagem: string;
   respostas: Record<string, string | string[] | Record<string, number>>;
-  abrir: Atalho;
+  /** Valores para campos do passo atual. Só os que o pedido listou. */
+  campos: Record<string, string>;
 }
 
 // Tetos de tamanho: a porta é de quem está logado, e a chave é da plataforma.
@@ -91,10 +96,20 @@ export function lerPedido(x: unknown): PedidoSetup | string {
   const brutoResp = o.respostas && typeof o.respostas === 'object' && !Array.isArray(o.respostas)
     ? o.respostas as Record<string, unknown> : {};
   const respostas = JSON.stringify(brutoResp).length <= 4000 ? brutoResp : {};
-  return {
-    mensagem, historico, mapa, situacao, respostas,
-    perguntaAtual: typeof o.perguntaAtual === 'string' ? curto(o.perguntaAtual, 60) : null,
+  const bp = o.passo && typeof o.passo === 'object' && !Array.isArray(o.passo) ? o.passo as Record<string, unknown> : {};
+  const passo = {
+    tipo: curto(bp.tipo, 40) || 'nenhum',
+    descricao: curto(bp.descricao, 1500),
+    campos: (Array.isArray(bp.campos) ? bp.campos : []).slice(0, 12)
+      .filter((c): c is Record<string, unknown> => !!c && typeof c === 'object'
+        && typeof (c as Record<string, unknown>).chave === 'string'
+        // Campo que se declara segredo não é preenchível pelo agente, venha de
+        // onde vier o pedido.
+        && (c as Record<string, unknown>).segredo !== true)
+      .map((c) => ({ chave: curto(c.chave, 40), rotulo: curto(c.rotulo, 160) }))
+      .filter((c) => /^[A-Za-z_]{2,40}$/.test(c.chave)),
   };
+  return { mensagem, historico, mapa, situacao, respostas, passo };
 }
 
 /** Dos modelos que a chave alcança, o primeiro desta ordem. Barato e rápido
@@ -118,20 +133,22 @@ export function instrucoes(p: PedidoSetup): string {
   ).join('\n');
   return [
     'Você é o agente de configuração do Prospecta, um motor de prospecção multicanal (WhatsApp, e-mail, SMS).',
-    'Seu trabalho: entender em português o que a pessoa quer e preencher as respostas do assistente de configuração, para ela não precisar clicar pergunta por pergunta.',
+    'Seu trabalho: configurar canais, IA, CRM e a primeira campanha conversando — entender o que a pessoa quer e preencher por ela o que der, para ela não precisar clicar pergunta por pergunta.',
     '',
     'Regras:',
-    '1. Só use as chaves e os valores do VOCABULÁRIO abaixo, escritos exatamente como estão. Se a pessoa não disse algo, não invente: deixe a chave de fora.',
-    '2. Em "numeros", cada item é {canal, quantidade} com o total por dia daquele canal.',
-    '3. Você nunca vê, pede nem aceita chave de API, token ou senha. Se a pessoa colar um segredo na conversa, NÃO o repita, diga que ele deve ser apagado da conversa e trocado no provedor por segurança, e aponte o atalho do lugar certo (campo "abrir").',
-    '4. Você não executa nada. Quem executa é a pessoa, autorizando cada cartão do plano. Nunca diga que algo foi feito, criado ou conectado.',
-    '5. Lista fria (pool "fria") e base própria ("morna") usam contas separadas; WhatsApp não oficial é o que roda lista fria, o oficial é para base própria com consentimento.',
-    '6. "abrir" leva a pessoa a um atalho da tela de setup quando o próximo passo é conectar conta ou chave: whatsapp_oficial, whatsapp_nao_oficial, email, sms, ia, crm. Use "" quando não precisar.',
-    '7. "mensagem": responda em português do Brasil, curto (até 4 frases), dizendo o que você entendeu e qual é a próxima decisão. As respostas que você preencher aparecem na conversa para a pessoa conferir e mudar; não pergunte se pode preenchê-las. Sem markdown.',
+    '1. Você conduz uma conversa de configuração. O sistema decide qual é o próximo passo e o mostra à pessoa logo depois da sua mensagem; você entende o que ela escreveu e preenche o que der.',
+    '2. Em "respostas", só use as chaves e os valores do VOCABULÁRIO abaixo, escritos exatamente como estão. Se a pessoa não disse algo, não invente: deixe de fora. Uma frase pode responder várias perguntas.',
+    '3. Em "numeros", cada item é {canal, quantidade} com o total por dia daquele canal.',
+    '4. Em "campos", só as chaves listadas em CAMPOS QUE VOCÊ PODE PREENCHER, com o valor que a pessoa deu (número, e-mail, nome). Nada inventado.',
+    '5. Chave de API, token e senha NUNCA passam por você. Quando o passo pede um segredo, o sistema mostra um campo protegido que vai direto para o cofre; diga para colar ali. Nunca peça para digitar segredo na conversa e nunca repita um.',
+    '6. Você não executa nada e não diz que algo foi feito: o sistema conecta cada conta e avisa o resultado ele mesmo.',
+    '7. Lista fria ("fria") e base própria ("morna") usam contas separadas; WhatsApp não oficial é o que roda lista fria, o oficial é para base própria com consentimento.',
+    '8. Se a pessoa perguntar algo, responda em poucas frases e volte ao passo. "mensagem": português do Brasil, curto (até 3 frases), sem markdown, sem repetir a pergunta do passo — o sistema já a mostra.',
     '',
-    `Pergunta da vez no assistente: ${p.perguntaAtual ?? 'nenhuma — a conversa terminou e o plano está na tela'}`,
+    `PASSO ATUAL: ${p.passo.tipo} — ${p.passo.descricao || 'sem descrição'}`,
+    `CAMPOS QUE VOCÊ PODE PREENCHER: ${p.passo.campos.length ? p.passo.campos.map((c) => `${c.chave} (${c.rotulo})`).join('; ') : 'nenhum'}`,
     `O que já está feito (lido do banco): ${p.situacao.length ? p.situacao.join(' | ') : 'nada informado'}`,
-    `Respostas já dadas (não as repita nem as troque): ${JSON.stringify(p.respostas)}`,
+    `Respostas já dadas (não as troque): ${JSON.stringify(p.respostas)}`,
     '',
     'VOCABULÁRIO:',
     mapa,
@@ -144,10 +161,16 @@ const ESQUEMA = {
   schema: {
     type: 'object',
     additionalProperties: false,
-    required: ['mensagem', 'respostas', 'abrir'],
+    required: ['mensagem', 'respostas', 'campos'],
     properties: {
       mensagem: { type: 'string' },
-      abrir: { type: 'string', enum: [...ATALHOS] },
+      campos: {
+        type: 'array',
+        items: {
+          type: 'object', additionalProperties: false, required: ['chave', 'valor'],
+          properties: { chave: { type: 'string' }, valor: { type: 'string' } },
+        },
+      },
       respostas: {
         type: 'array',
         items: {
@@ -193,13 +216,23 @@ export function corpoDoPedido(modelo: string, p: PedidoSetup): Record<string, un
  * valor fora da lista, número que não é inteiro positivo: some aqui, antes de
  * voltar para a tela — que confere de novo, pelo roteiro.
  */
-export function lerSaida(conteudo: string, mapa: Record<string, EntradaDoMapa>): SaidaSetup {
+export function lerSaida(
+  conteudo: string, mapa: Record<string, EntradaDoMapa>, camposDoPasso: readonly CampoDoPasso[] = [],
+): SaidaSetup {
   let o: Record<string, unknown> = {};
   try { o = JSON.parse(conteudo) as Record<string, unknown>; } catch { /* resposta fora do formato */ }
   const mensagem = typeof o.mensagem === 'string' && o.mensagem.trim()
     ? o.mensagem.trim().slice(0, 1200)
     : 'Não entendi bem. Pode dizer por quais canais quer enviar e para quem (sua base ou uma lista nova)?';
-  const abrir = (ATALHOS as readonly string[]).includes(String(o.abrir)) ? o.abrir as Atalho : '';
+  // Campo fora do passo some, e valor que parece chave também: o agente não
+  // tem por onde devolver segredo à tela, nem que o modelo tente.
+  const podem = new Set(camposDoPasso.map((c) => c.chave));
+  const campos: Record<string, string> = {};
+  for (const c of Array.isArray(o.campos) ? o.campos : []) {
+    const { chave, valor } = (c ?? {}) as Record<string, unknown>;
+    if (typeof chave === 'string' && podem.has(chave) && typeof valor === 'string' && valor.trim()
+      && valor.length <= 300 && !pareceSegredo(valor)) campos[chave] = valor.trim();
+  }
 
   const respostas: SaidaSetup['respostas'] = {};
   for (const item of Array.isArray(o.respostas) ? o.respostas : []) {
@@ -224,7 +257,7 @@ export function lerSaida(conteudo: string, mapa: Record<string, EntradaDoMapa>):
     if (!vs.length) continue;
     respostas[chave] = e.forma === 'multipla' ? [...new Set(vs)] : vs[0]!;
   }
-  return { mensagem, respostas, abrir };
+  return { mensagem, respostas, campos };
 }
 
 export type Conversa =
@@ -241,7 +274,7 @@ export async function conversar(
     return {
       ok: true, modelo: '',
       saida: {
-        mensagem: AVISO_DE_CHAVE, respostas: {}, abrir: lugarDaChave(pedido.mensagem),
+        mensagem: AVISO_DE_CHAVE, respostas: {}, campos: {},
       },
     };
   }
@@ -271,9 +304,9 @@ export async function conversar(
     }
     const msg = c.choices?.[0]?.message;
     if (typeof msg?.refusal === 'string' && msg.refusal) {
-      return { ok: true, modelo, saida: { mensagem: 'Não consigo ajudar com isso aqui. Posso ajudar a configurar canais, IA, CRM e a primeira campanha.', respostas: {}, abrir: '' } };
+      return { ok: true, modelo, saida: { mensagem: 'Não consigo ajudar com isso aqui. Posso ajudar a configurar canais, IA, CRM e a primeira campanha.', respostas: {}, campos: {} } };
     }
-    return { ok: true, modelo, saida: lerSaida(typeof msg?.content === 'string' ? msg.content : '', pedido.mapa) };
+    return { ok: true, modelo, saida: lerSaida(typeof msg?.content === 'string' ? msg.content : '', pedido.mapa, pedido.passo.campos) };
   } catch (e) {
     return { ok: false, status: 502, erro: `sem resposta da OpenAI: ${e instanceof Error ? e.message : String(e)}` };
   }
