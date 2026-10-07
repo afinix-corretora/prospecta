@@ -19,7 +19,7 @@ import { PlanilhaSource } from '@adapters/planilha.ts';
 import { identidadesParaJson } from '@adapters/fonte.ts';
 import type { Colheita } from '@adapters/fonte.ts';
 import { useSessao } from '../sessao';
-import { Aviso, Kpi, Secao } from '../componentes/base';
+import { Aviso, Kpi, Secao, Pagina } from '../componentes/base';
 import { ingerirContato, preverIngestao } from '../dados';
 import type { LinhaPrevista } from '../dados';
 import { mensagemDeErro } from '../supabase';
@@ -115,9 +115,7 @@ export function Importar() {
     : 0;
 
   return (
-    <>
-      <Secao titulo="Importar contatos"
-             nota="Planilha em CSV. Nada é gravado antes da conferência." />
+    <Pagina titulo="Importar contatos" sub="Planilha em CSV. Nada é gravado antes da conferência.">
 
       <div className="painel">
         <input
@@ -221,7 +219,7 @@ export function Importar() {
           )}
         </>
       )}
-    </>
+    </Pagina>
   );
 }
 

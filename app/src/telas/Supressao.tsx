@@ -25,7 +25,7 @@ import { PlanilhaSource } from '@adapters/planilha.ts';
 import { normalizarTelefone, telefoneValido } from '@adapters/telefone.ts';
 import { emailValido, normalizarEmail } from '@adapters/email.ts';
 import { useSessao } from '../sessao';
-import { Aviso, Campo, Kpi, NOME_CANAL, Secao, corCanal } from '../componentes/base';
+import { Aviso, Campo, Kpi, NOME_CANAL, Secao, corCanal, Pagina } from '../componentes/base';
 import { lerSupressoes, suprimirEndereco } from '../dados';
 import type { Supressao as Sup } from '../dados';
 import { mensagemDeErro } from '../supabase';
@@ -49,9 +49,7 @@ export function Supressao() {
   const porContato = lista.length - porEndereco;
 
   return (
-    <>
-      <Secao titulo="Supressão"
-             nota="Quem está aqui não recebe nada, por nenhum caminho." />
+    <Pagina titulo="Supressão" sub="Quem está aqui não recebe nada, por nenhum caminho.">
 
       <div className="kpis">
         <Kpi rotulo="Endereços" valor={porEndereco} sub="número ou e-mail específico" />
@@ -103,7 +101,7 @@ export function Supressao() {
           </table>
         </div>
       )}
-    </>
+    </Pagina>
   );
 }
 

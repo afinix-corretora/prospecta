@@ -14,9 +14,8 @@ import type {
 } from '../dados';
 import {
   Aviso, Campo, Kpi, LinhaIndice, NOME_CANAL, Secao, corCanal,
-  tinta,
+  tinta, Pagina,
 } from '../componentes/base';
-import { Ico } from '../componentes/icones';
 import { familiaDe, familiasDoCanal } from '../componentes/Rail';
 
 /** Carrega uma vez e devolve estado de tela — erro visível, não engolido. */
@@ -38,13 +37,10 @@ export function Moldura({ titulo, sub, voltar, children }: {
   titulo: string; sub: string; voltar?: () => void; children: React.ReactNode;
 }) {
   return (
-    <div className="wrap">
-      <div className="cabeca"><div>
-        {voltar && <button className="voltar" onClick={voltar}><Ico nome="voltar" className="" />Configurações</button>}
-        <h1>{titulo}</h1><p>{sub}</p>
-      </div></div>
+    <Pagina titulo={titulo} sub={sub}
+            voltar={voltar ? { rotulo: 'Configurações', aoClicar: voltar } : undefined}>
       {children}
-    </div>
+    </Pagina>
   );
 }
 

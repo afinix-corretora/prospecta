@@ -13,7 +13,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useSessao } from '../sessao';
-import { Aviso, Kpi, NOME_CANAL, Secao, corCanal } from '../componentes/base';
+import { Aviso, Kpi, NOME_CANAL, Secao, corCanal, Pagina } from '../componentes/base';
 import {
   inscrever, lerCampanhas, lerContatos, lerVersoesDeFlow, preverInscricao, suprimirContato,
 } from '../dados';
@@ -59,9 +59,7 @@ export function Contatos() {
   }
 
   return (
-    <>
-      <Secao titulo="Contatos"
-             nota={carregando ? 'carregando…' : `${contatos.length} na lista`} />
+    <Pagina titulo="Contatos" sub={carregando ? 'carregando…' : `${contatos.length} na lista`}>
 
       <div className="painel">
         <input
@@ -135,7 +133,7 @@ export function Contatos() {
           aoTerminar={() => { setEscolhidos(new Set()); void recarregar(busca); }}
         />
       )}
-    </>
+    </Pagina>
   );
 }
 

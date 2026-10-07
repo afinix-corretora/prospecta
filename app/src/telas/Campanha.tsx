@@ -11,7 +11,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useSessao } from '../sessao';
-import { Aviso, Kpi, NOME_CANAL, Secao, corCanal } from '../componentes/base';
+import { Aviso, Kpi, NOME_CANAL, Secao, corCanal, Pagina } from '../componentes/base';
 import {
   alternarCampanha, atribuirAgente, definirEmailDaCampanha, definirFlowDaCampanha, definirIADaCampanha,
   lerAgentes, lerCredenciaisIA, lerProvedoresIA,
@@ -53,6 +53,7 @@ const STATUS: Record<string, string> = {
 };
 
 export function Campanha() {
+  const nav = useNavigate();
   const { id = '' } = useParams();
   const { tenant, opera } = useSessao();
   const [campanha, setCampanha] = useState<Camp | null>(null);
@@ -103,21 +104,21 @@ export function Campanha() {
 
   useEffect(() => { void recarregar(); }, [tenant?.tenant_id, id]);
 
-  if (carregando) return <p className="vazio">Carregando…</p>;
-  if (erro) return <Aviso tipo="erro">{erro}</Aviso>;
-  if (!campanha || !resumo) return <Aviso tipo="erro">Campanha não encontrada.</Aviso>;
+  if (carregando) return <div className="wrap"><p className="vazio">Carregando…</p></div>;
+  if (erro) return <div className="wrap"><Aviso tipo="erro">{erro}</Aviso></div>;
+  if (!campanha || !resumo) return <div className="wrap"><Aviso tipo="erro">Campanha não encontrada.</Aviso></div>;
 
   const simuladas = resumo.por_status.simulado ?? 0;
   const canceladas = resumo.por_status.cancelado ?? 0;
   const soShadow = resumo.mensagens > 0 && simuladas === resumo.mensagens;
 
   return (
-    <>
-      <Secao
-        titulo={campanha.nome}
-        nota={`${campanha.tipo} · ${campanha.canais_habilitados.map((c) => NOME_CANAL[c] ?? c).join(', ')}`
-              + (campanha.ativa ? '' : ' · DESLIGADA')}
-      />
+    <Pagina
+      titulo={campanha.nome}
+      voltar={{ rotulo: 'Campanhas', aoClicar: () => nav('/campanhas') }}
+      sub={`${campanha.tipo} · ${campanha.canais_habilitados.map((c) => NOME_CANAL[c] ?? c).join(', ')}`
+           + (campanha.ativa ? '' : ' · DESLIGADA')}
+    >
 
       <Comando campanha={campanha} resumo={resumo} podeOperar={opera}
                aoMudar={recarregar} aoFalhar={setErro} />
@@ -228,7 +229,7 @@ export function Campanha() {
       )}
 
       <button className="btn" onClick={() => void recarregar()}>Atualizar</button>
-    </>
+    </Pagina>
   );
 }
 

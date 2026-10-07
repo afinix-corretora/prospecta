@@ -24,7 +24,7 @@
  */
 import { useEffect, useState } from 'react';
 import { useSessao } from '../sessao';
-import { Aviso, Kpi, Secao } from '../componentes/base';
+import { Aviso, Kpi, Secao, Pagina } from '../componentes/base';
 import { lerResumoDaOutbox, lerWritebacksFalhados, lerWritebacksSaidos } from '../dados';
 import type { ResumoDaOutbox, WritebackFalhado, WritebackSaido } from '../dados';
 import { situacaoDoWriteback } from './situacao_do_writeback';
@@ -108,11 +108,7 @@ export function Writeback() {
   useEffect(() => { void recarregar(); }, [tenant?.tenant_id]);
 
   return (
-    <>
-      <Secao
-        titulo="Writeback"
-        nota="O que o motor descobriu e tem para contar ao CRM."
-      />
+    <Pagina titulo="Writeback" sub="O que o motor descobriu e tem para contar ao CRM.">
 
       {erro && <Aviso tipo="erro">{erro}</Aviso>}
       {carregando && <Aviso tipo="neutro">Lendo…</Aviso>}
@@ -191,6 +187,6 @@ export function Writeback() {
           )}
         </>
       )}
-    </>
+    </Pagina>
   );
 }

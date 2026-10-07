@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Ico } from './icones';
 import type { CSSProperties, ReactNode } from 'react';
 
 export const IC: Record<string, ReactNode> = {
@@ -131,4 +132,34 @@ export function Aviso({ tipo, children }: { tipo: 'erro' | 'ok' | 'neutro'; chil
 
 export function Secao({ titulo, nota }: { titulo: string; nota?: ReactNode }) {
   return <div className="sec"><h2>{titulo}</h2>{nota && <span>{nota}</span>}</div>;
+}
+
+/**
+ * A moldura de toda tela: a margem da página, o título como h1, a frase que
+ * diz para que a tela serve e, quando há, o caminho de volta e a ação
+ * principal. Tela que começava com uma `Secao` no lugar do título encostava
+ * no menu e não tinha cabeçalho — é o que esta peça impede.
+ */
+export function Pagina({ titulo, sub, voltar, acao, children }: {
+  titulo: ReactNode;
+  sub?: ReactNode;
+  voltar?: { rotulo: string; aoClicar(): void };
+  acao?: ReactNode;
+  children?: ReactNode;
+}) {
+  return (
+    <div className="wrap">
+      <div className="cabeca">
+        <div>
+          {voltar && (
+            <button className="voltar" onClick={voltar.aoClicar}><Ico nome="voltar" className="" />{voltar.rotulo}</button>
+          )}
+          <h1>{titulo}</h1>
+          {sub && <p>{sub}</p>}
+        </div>
+        {acao && <div className="cta">{acao}</div>}
+      </div>
+      {children}
+    </div>
+  );
 }
