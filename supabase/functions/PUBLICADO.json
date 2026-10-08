@@ -25,9 +25,9 @@
     "versao": 7
   },
   "provisionar-instancia": {
-    "digest": "1da47ca63de1a86a",
-    "em": "2026-10-02 (v5, D62; cada arquivo do bundle lido de volta do projeto e comparado byte a byte, 15/15)",
-    "versao": 5
+    "digest": "4c73712e161e2515",
+    "em": "2026-10-08 (v6, D73; trava do número antes do provedor e desfazer da órfã. Os 17 arquivos que o bundle devolve lidos de volta pela resposta salva da MCP e comparados sem transcrição, 17/17; motor/porta.ts é import type e não volta, D52. Ao vivo pelo pg_net com a chave anon: número ruim 400 e servidor fora do alcance 404, as duas do código novo)",
+    "versao": 6
   },
   "verificar-remetente": {
     "digest": "0c207fd937abbcef",

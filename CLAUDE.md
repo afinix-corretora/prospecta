@@ -471,7 +471,9 @@ e elas têm teste automatizado obrigatório.**
   instância ANTES de o banco gravar a conta: doze instâncias órfãs na UAZAPI em dois minutos, na
   primeira conversa de verdade. Depois do erro o passo é `falhou`, e só a pessoa decide (D73).
 - **Nunca** pedir ao provedor um chip com um número que já é chip do cliente, em qualquer pool. Um
-  número é um chip só; a pergunta vem ANTES de falar com o provedor, no chat e na tela do canal (D73).
+  número é um chip só; a pergunta vem ANTES de falar com o provedor, no chat, na tela do canal e na
+  edge function, que é a única que a tela não contorna. E o que o provedor criou e o banco recusou é
+  apagado na hora: 56 instâncias órfãs ficaram no painel antes disso (D73).
 - **Nunca** filtrar chave de um pedido por um padrão que não foi posto contra as chaves reais. O
   filtro de `lerPedido` era só minúsculas e jogava fora `porDia` em silêncio; quem achou foi mandar o
   pedido montado pelo código ao modelo de verdade, não o teste (D72).
@@ -730,8 +732,9 @@ e elas têm teste automatizado obrigatório.**
 > não era cumprida, sem efeito errado. A migration que liga o `tem_adapter` do
 > Pipefy só entrou depois do v5, para o catálogo nunca prometer um adapter que o worker não tinha
 > (D31). `crm-descobrir` está na **versão 1**, chamada pela TELA como `verificar-remetente`, com o
-> alvo lido pelo JWT de quem pediu. `canal-webhook` segue na **versão 4** (D61), e
-> `provisionar-instancia` (**versão 5**) e `verificar-remetente` (**versão 1**) seguem do D62 —
+> alvo lido pelo JWT de quem pediu. `canal-webhook` segue na **versão 4** (D61), `verificar-remetente`
+> (**versão 1**) segue do D62, e `provisionar-instancia` está na **versão 6** desde 08/10, com o número
+> perguntado ao banco ANTES do provedor e a instância apagada se o banco recusar a conta (D73) —
 > a porta do CRM mora em arquivos próprios (`motor/porta-crm.ts`, `_shared/banco-crm.ts`)
 > justamente para as três não mudarem de bundle — e a do agente (`motor/porta-agente.ts`,
 > `_shared/banco-agente.ts`) pelo mesmo motivo. O `motor-worker` v6 foi lido de volta pela

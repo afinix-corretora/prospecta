@@ -2951,9 +2951,31 @@ Duas correções, cada uma com teste que falha sem ela:
   conversa diz de quem é o número e pede outro. A tela de criar instância do canal ganhou a mesma
   conferência.
 
-O que fica pendente:
-- A edge function ainda cria a instância antes de conferir. A ordem é de propósito (D25: conta nunca
-  aponta para instância inexistente). O que falta nela é a mesma pergunta antes de chamar o provedor.
-  Isso exige republicar um bundle de 16 arquivos (~80 KB) e entra na próxima publicação dela.
-- As instâncias órfãs precisam ser apagadas no painel da UAZAPI. Elas não estão pareadas com
-  WhatsApp nenhum. O nome delas é "UAZAPI (não oficial) — base própria (5517981347908)".
+O que ficou para depois, e foi feito no mesmo dia:
+- **As órfãs eram 56, não 12.** Foram criadas entre 12:22 e 12:57 UTC. O laço só parou quando a aba
+  carregou a versão corrigida da tela; as 12 eram as que o registro das functions ainda mostrava.
+  Foram apagadas pela API da UAZAPI, de dentro do banco, pelo `pg_net`. Primeiro se listou
+  (`GET /instance/all`, com o `admintoken` lido do Vault dentro do SQL). Depois se apagou só o que
+  tinha o nome exato, estava `disconnected` e não tinha número pareado. Antes de apagar, conferiu-se
+  que nenhum dos 56 tokens era o do "Chip 1 - Prospecta". Uma foi apagada primeiro, para ver a
+  resposta, e depois as 55 (`DELETE /instance` com o `token` de cada uma). Foram 56 respostas
+  "Instance Deleted", e a lista seguinte tinha 15 instâncias: o Chip 1 e as de outras operações do
+  grupo, que dividem o servidor e não foram tocadas.
+- **A trava entrou na edge function** (`provisionar-instancia` v6). A decisão saiu da function e foi
+  para `motor/provisionamento.ts`, com porta e teste (`tests/provisionamento.test.ts`), no desenho de
+  `ia-modelos`:
+  - o número é perguntado ao banco antes do provedor;
+  - entram contas de qualquer cliente e as arquivadas, porque o nome do segredo no Vault é único no
+    projeto inteiro e arquivar não o apaga;
+  - a conta de outro cliente não é descrita, só recusada;
+  - o número é normalizado antes de perguntar e antes de gravar. Antes ia como foi digitado, e
+    "(17) 98134-7908" e "5517981347908" seriam dois chips.
+- **O que sobrar é desfeito.** Se o banco ainda recusar depois de a instância existir (dois pedidos
+  ao mesmo tempo, o Vault fora do ar), a function apaga a instância que acabou de criar, com o token
+  dela. O desfazer mora em `adapters/desprovisionar.ts`, e não em `whatsapp-uazapi.ts`, para não
+  mudar o bundle do worker, do webhook e do verificador (o mesmo motivo de `motor/porta-crm.ts`).
+- **A sabotagem acende.** Sem a trava, três testes ficam vermelhos. Sem o desfazer, um.
+- **O que fica.** Um número que foi chip e está arquivado não pode virar chip de novo pela plataforma,
+  porque o segredo dele continua no Vault com aquele nome. A recusa agora diz isso. Antes era o
+  `secrets_name_idx` depois de criar a instância. Resolver de verdade é decidir o que acontece com o
+  segredo de uma conta arquivada, e isso não foi decidido aqui.

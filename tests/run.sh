@@ -214,6 +214,11 @@ node --experimental-strip-types --test "$RAIZ/tests/agente_setup.test.ts" \
   | grep -E "^# (tests|pass|fail)|^not ok"
 
 echo ""
+echo "→ criar chip: o número é perguntado antes do provedor, e a órfã é desfeita (TypeScript)"
+node --experimental-strip-types --test "$RAIZ/tests/provisionamento.test.ts" \
+  | grep -E "^# (tests|pass|fail)|^not ok"
+
+echo ""
 echo "→ setup por chat: o condutor, o segredo fora do estado e as ações uma vez só (TypeScript)"
 node --experimental-strip-types --test "$RAIZ/tests/setup_chat.test.ts" \
   | grep -E "^# (tests|pass|fail)|^not ok"
