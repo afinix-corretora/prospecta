@@ -76,9 +76,17 @@ export interface EstadoSetup {
   readonly pulados: readonly string[];
   /** Ação → id que ela produziu (a campanha), para quem depende dela. */
   readonly produzidos: Readonly<Record<string, string>>;
+  /**
+   * Coleta → o erro da última tentativa de conectar. Enquanto houver, o passo
+   * é `falhou` e a conversa ESPERA a pessoa decidir: tentar de novo, corrigir
+   * ou pular. Sem isto, a coleta completa voltava a `conectar` sozinha depois
+   * do erro — e cada volta criava uma instância no provedor antes de o banco
+   * recusar: doze em dois minutos, na primeira conversa de verdade (D73).
+   */
+  readonly falhas?: Readonly<Record<string, string>>;
 }
 
-export const ESTADO_VAZIO: EstadoSetup = { respostas: {}, valores: {}, feitos: {}, pulados: [], produzidos: {} };
+export const ESTADO_VAZIO: EstadoSetup = { respostas: {}, valores: {}, feitos: {}, pulados: [], produzidos: {}, falhas: {} };
 
 /** Quais segredos de cada coleta já foram digitados. Só as chaves. */
 export type Prontos = Readonly<Record<string, readonly string[]>>;
@@ -87,6 +95,10 @@ export type PassoSetup =
   | { readonly tipo: 'pergunta'; readonly pergunta: Pergunta }
   | { readonly tipo: 'campo'; readonly coleta: Coleta; readonly campo: CampoSetup }
   | { readonly tipo: 'conectar'; readonly coleta: Coleta; readonly valores: Readonly<Record<string, string>> }
+  /** A última tentativa falhou: nada roda até a pessoa escolher o que fazer. */
+  | { readonly tipo: 'falhou'; readonly coleta: Coleta; readonly erro: string }
+  /** O número (ou endereço) já é de uma conta deste cliente: um chip é um número só. */
+  | { readonly tipo: 'conflito'; readonly coleta: Coleta; readonly conta: { apelido: string; pool: Pool } }
   /** Coleta que a pessoa não pode fazer: o papel dela não administra o cliente. */
   | { readonly tipo: 'sem_permissao'; readonly coleta: Coleta }
   | { readonly tipo: 'acao'; readonly acao: Acao }
@@ -199,6 +211,10 @@ export function proximoPasso(f: Foto, e: EstadoSetup, prontos: Prontos = {}): Pa
     if (!col || e.feitos[col.id] || e.pulados.includes(col.id)) continue;
     if (!f.administra) return { tipo: 'sem_permissao', coleta: col };
     const valores = e.valores[col.id] ?? {};
+    const erro = e.falhas?.[col.id];
+    if (erro) return { tipo: 'falhou', coleta: col, erro };
+    const dono = col.canal && valores.identificador ? contaComIdentificador(f, col.canal, valores.identificador) : null;
+    if (dono) return { tipo: 'conflito', coleta: col, conta: dono };
     const falta = col.campos.find((c) => (c.segredo ? !(prontos[col.id] ?? []).includes(c.chave) : !valores[c.chave]));
     if (falta) return { tipo: 'campo', coleta: col, campo: falta };
     return { tipo: 'conectar', coleta: col, valores };
@@ -261,6 +277,48 @@ export function aposConectar(e: EstadoSetup, coleta: Coleta, texto: string, prod
   if (coleta.alvo === 'canal' || coleta.alvo === 'instancia') respostas[`provedor:${coleta.canal}`] = USAR;
   if (coleta.alvo === 'ia' && produzido) respostas['ia:conta'] = produzido;
   return { ...e, respostas: respostas as Respostas, feitos: { ...e.feitos, [coleta.id]: texto } };
+}
+
+/**
+ * A conta deste cliente que já usa este número ou endereço, em QUALQUER pool.
+ * Um número de WhatsApp é um chip só: criar outra instância com ele não dá um
+ * segundo chip, dá uma instância órfã no provedor e uma recusa no banco (o
+ * segredo da conta é nomeado pelo número). A conversa pergunta antes de
+ * chamar o provedor.
+ */
+export function contaComIdentificador(f: Foto, canal: string, identificador: string): { apelido: string; pool: Pool } | null {
+  const alvo = identificador.trim().toLowerCase();
+  const r = f.remetentes.find((x) => x.canal === canal && x.identificador.trim().toLowerCase() === alvo);
+  return r ? { apelido: r.apelido || r.identificador, pool: r.tipo_permitido } : null;
+}
+
+/** Depois de um erro: guarda o motivo, e a conversa espera. */
+export function aposFalhar(e: EstadoSetup, coleta: Coleta, erro: string): EstadoSetup {
+  return { ...e, falhas: { ...(e.falhas ?? {}), [coleta.id]: erro } };
+}
+
+/**
+ * O que a pessoa decidiu depois do erro. `tentar` só tira a falha (o segredo,
+ * se havia, a tela já esqueceu, e o condutor o pede de novo); `corrigir` tira
+ * também o que foi digitado, para a coleta recomeçar; `pular` deixa a peça.
+ */
+export function decidirFalha(e: EstadoSetup, coleta: Coleta, decisao: 'tentar' | 'corrigir' | 'pular'): EstadoSetup {
+  const falhas = { ...(e.falhas ?? {}) };
+  delete falhas[coleta.id];
+  if (decisao === 'pular') return { ...e, falhas, pulados: [...e.pulados, coleta.id] };
+  if (decisao === 'corrigir') {
+    const valores = { ...e.valores };
+    delete valores[coleta.id];
+    return { ...e, falhas, valores };
+  }
+  return { ...e, falhas };
+}
+
+/** Número ou endereço que já é de outra conta: some, e o campo volta a ser pedido. */
+export function esquecerIdentificador(e: EstadoSetup, coleta: Coleta): EstadoSetup {
+  const v = { ...(e.valores[coleta.id] ?? {}) };
+  delete v.identificador;
+  return { ...e, valores: { ...e.valores, [coleta.id]: v } };
 }
 
 /** O nome com que a conta nasce. Não é perguntado: a tela da conta renomeia. */

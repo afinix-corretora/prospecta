@@ -466,6 +466,12 @@ e elas têm teste automatizado obrigatório.**
 - **Nunca** confiar em estado do React para não executar duas vezes. Em desenvolvimento o efeito roda
   duas vezes seguidas, antes de `ocupado` mudar: a conta seria conectada duas vezes. A trava do setup
   por chat é um ref (D73).
+- **Nunca** deixar um passo que fala com o mundo de fora repetir sozinho depois de um erro. O setup
+  por chat voltava a `conectar` a cada render enquanto a coleta estava completa, e o provedor cria a
+  instância ANTES de o banco gravar a conta: doze instâncias órfãs na UAZAPI em dois minutos, na
+  primeira conversa de verdade. Depois do erro o passo é `falhou`, e só a pessoa decide (D73).
+- **Nunca** pedir ao provedor um chip com um número que já é chip do cliente, em qualquer pool. Um
+  número é um chip só; a pergunta vem ANTES de falar com o provedor, no chat e na tela do canal (D73).
 - **Nunca** filtrar chave de um pedido por um padrão que não foi posto contra as chaves reais. O
   filtro de `lerPedido` era só minúsculas e jogava fora `porDia` em silêncio; quem achou foi mandar o
   pedido montado pelo código ao modelo de verdade, não o teste (D72).

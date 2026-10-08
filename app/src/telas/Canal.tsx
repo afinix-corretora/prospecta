@@ -1,3 +1,4 @@
+import { normalizarTelefone } from '@adapters/telefone.ts';
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useSessao } from '../sessao';
@@ -357,13 +358,14 @@ function Servidores(props: {
       )}
 
       <CriarInstancia servidores={props.servidores.filter((s) => s.ativo && s.admin_secret_id)}
+                      remetentes={props.remetentes}
                       administra={props.administra} aoMudar={props.aoMudar} />
     </>
   );
 }
 
 function CriarInstancia(props: {
-  servidores: Servidor[]; administra: boolean; aoMudar(): Promise<void>;
+  servidores: Servidor[]; remetentes: Remetente[]; administra: boolean; aoMudar(): Promise<void>;
 }) {
   const [f, setF] = useState({ serverId: '', apelido: '', identificador: '', tipo: 'fria' as 'morna' | 'fria', quota: '50' });
   const [estado, setEstado] = useState<'parado' | 'criando'>('parado');
@@ -374,7 +376,17 @@ function CriarInstancia(props: {
 
   async function criar(e: React.FormEvent) {
     e.preventDefault();
-    setMsg(null); setResultado(null); setEstado('criando');
+    setMsg(null); setResultado(null);
+    // O provedor cria a instância ANTES de o banco gravar a conta; número que
+    // já é chip deste cliente seria uma instância órfã no painel e uma recusa
+    // aqui (D73). A pergunta vem antes de falar com o provedor.
+    const numero = normalizarTelefone(f.identificador);
+    const dono = props.remetentes.find((x) => x.canal === 'whatsapp' && normalizarTelefone(x.identificador) === numero);
+    if (dono) {
+      setMsg({ tipo: 'erro', texto: `${numero} já é o chip "${dono.apelido || dono.identificador}" (${dono.tipo_permitido === 'fria' ? 'lista fria' : 'base própria'}). Um número é um chip só.` });
+      return;
+    }
+    setEstado('criando');
     const r = await provisionarInstancia({
       serverId, apelido: f.apelido, identificador: f.identificador,
       tipo: f.tipo, quota: Number(f.quota) || 1,

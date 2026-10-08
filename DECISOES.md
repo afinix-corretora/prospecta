@@ -2930,3 +2930,30 @@ necessário no chat e configurar os itens automaticamente à medida que as infor
   - a conta OpenAI é conectada com o modelo escolhido.
 - Ao vivo, um passo de campo foi mandado à OpenAI com a chave do Vault. Voltou 200, no esquema
   estrito.
+
+**Adendo, 08/10: a primeira conversa de verdade criou doze instâncias órfãs.**
+
+O que aconteceu, em ordem:
+1. O cliente já tinha o chip "Chip 1 - Prospecta" (5517981347908) na lista fria.
+2. Na conversa, ele escolheu base própria. Para esse pool não havia chip, e a conversa ofereceu criar
+   um. Ele digitou o mesmo número.
+3. `provisionar-instancia` criou a instância na UAZAPI, e só depois `criar_remetente_provisionado`
+   tentou gravar. O banco recusou: o segredo da conta é nomeado pelo número, e já existia.
+4. A coleta continuou completa, e o condutor devolveu `conectar` de novo a cada render. Foram 12
+   chamadas em 2 minutos (12:22–12:24 UTC, pelo registro das functions). Cada uma deve ter deixado
+   uma instância sem par no servidor da UAZAPI.
+
+Duas correções, cada uma com teste que falha sem ela:
+- **`falhou`.** Depois de um erro, o passo é `falhou` (`EstadoSetup.falhas`), e nada roda até a
+  pessoa escolher: tentar de novo, corrigir os dados ou pular. Passo que fala com o mundo de fora não
+  se repete sozinho.
+- **`conflito`.** Número que já é conta deste cliente, em qualquer pool, não chega ao provedor. A
+  conversa diz de quem é o número e pede outro. A tela de criar instância do canal ganhou a mesma
+  conferência.
+
+O que fica pendente:
+- A edge function ainda cria a instância antes de conferir. A ordem é de propósito (D25: conta nunca
+  aponta para instância inexistente). O que falta nela é a mesma pergunta antes de chamar o provedor.
+  Isso exige republicar um bundle de 16 arquivos (~80 KB) e entra na próxima publicação dela.
+- As instâncias órfãs precisam ser apagadas no painel da UAZAPI. Elas não estão pareadas com
+  WhatsApp nenhum. O nome delas é "UAZAPI (não oficial) — base própria (5517981347908)".

@@ -39,7 +39,8 @@ import {
 } from '../assistente';
 import type { Acao, Foto, Pergunta, Resposta } from '../assistente';
 import {
-  ESTADO_VAZIO, aceitarValor, aposConectar, nomeDaConta, passoParaOAgente, proximoPasso,
+  ESTADO_VAZIO, aceitarValor, aposConectar, aposFalhar, decidirFalha, esquecerIdentificador, nomeDaConta,
+  passoParaOAgente, proximoPasso,
 } from '../setupChat';
 import type { Coleta, EstadoSetup, PassoSetup } from '../setupChat';
 import { Aviso } from '../componentes/base';
@@ -108,7 +109,9 @@ function chaveDoPasso(p: PassoSetup): string {
   if (p.tipo === 'pergunta') return `pergunta:${p.pergunta.chave}`;
   if (p.tipo === 'campo') return `campo:${p.coleta.id}:${p.campo.chave}`;
   if (p.tipo === 'acao' || p.tipo === 'acao_impedida') return `acao:${p.acao.id}`;
-  if (p.tipo === 'conectar' || p.tipo === 'sem_permissao') return `${p.tipo}:${p.coleta.id}`;
+  if (p.tipo === 'conectar' || p.tipo === 'sem_permissao' || p.tipo === 'falhou' || p.tipo === 'conflito') {
+    return `${p.tipo}:${p.coleta.id}`;
+  }
   return 'fim';
 }
 
@@ -182,20 +185,40 @@ export function Setup() {
 
   // Passos que não perguntam nada rodam sozinhos — é o "configurar à medida
   // que a informação chega". Um de cada vez: `ocupado` segura o próximo.
+  //
+  // `falhou` NÃO está aqui de propósito: depois de um erro, a conversa espera a
+  // pessoa decidir. Repetir sozinho foi o laço que criou doze instâncias órfãs.
   useEffect(() => {
     if (!passo || !foto || ocupado) return;
     const k = chaveDoPasso(passo);
-    const roda = ['conectar', 'acao', 'sem_permissao', 'acao_impedida'].includes(passo.tipo);
-    if (!roda || rodando.current === k) return;
-    rodando.current = k;
-    if (passo.tipo === 'conectar') void executar(k, () => conectar(passo.coleta, passo.valores));
-    if (passo.tipo === 'acao') void executar(k, () => fazerAcao(passo.acao));
+    if (passo.tipo === 'conectar' || passo.tipo === 'acao') {
+      if (rodando.current === k) return;
+      rodando.current = k;
+      if (passo.tipo === 'conectar') void executar(k, () => conectar(passo.coleta, passo.valores));
+      else void executar(k, () => fazerAcao(passo.acao));
+      return;
+    }
+    // Os passos abaixo mudam o estado na hora. A trava é o próprio estado: se
+    // a mudança já está lá, é a segunda volta do efeito, e não faz nada.
+    if (passo.tipo === 'conflito') {
+      const col = passo.coleta;
+      if (!memRef.current.estado.valores[col.id]?.identificador) return;
+      const valor = memRef.current.estado.valores[col.id]!.identificador!;
+      mudar((m) => ({ ...m, perguntado: '', estado: esquecerIdentificador(m.estado, col),
+        falas: [...m.falas, { de: 'sistema', tipo: 'aviso',
+          texto: `${valor} já é a conta "${passo.conta.apelido}" (${passo.conta.pool === 'fria' ? 'lista fria' : 'base própria'}). `
+            + `Um número é um chip só: criar outro com ele não dá um segundo chip. Mande outro número, ou pule esta conta — `
+            + `para usar o chip que já existe, volte e escolha o mesmo tipo de lista dele.` }] }));
+      return;
+    }
     if (passo.tipo === 'sem_permissao') {
+      if (memRef.current.estado.pulados.includes(passo.coleta.id)) return;
       mudar((m) => ({ ...m, estado: { ...m.estado, pulados: [...m.estado.pulados, passo.coleta.id] },
         falas: [...m.falas, { de: 'sistema', tipo: 'aviso',
           texto: `Conectar ${passo.coleta.nomeProvedor} é de quem administra o cliente (dono ou admin). Peça a essa pessoa, ou ela pode abrir esta mesma conversa. Sigo com o resto.` }] }));
     }
     if (passo.tipo === 'acao_impedida') {
+      if (memRef.current.estado.pulados.includes(passo.acao.id)) return;
       mudar((m) => ({ ...m, estado: { ...m.estado, pulados: [...m.estado.pulados, passo.acao.id] },
         falas: [...m.falas, { de: 'sistema', tipo: 'aviso', texto: `${passo.acao.titulo}: não deu — ${passo.motivo}.` }] }));
     }
@@ -254,10 +277,12 @@ export function Setup() {
         falas: [...m.falas, { de: 'sistema', tipo: 'feito', texto: texto + ressalva }] }));
       await recarregar();
     } catch (e) {
-      // A chave pode ser o problema: ela é pedida de novo, e o resto fica.
+      // A chave pode ser o problema: ela é esquecida, e a conversa ESPERA a
+      // pessoa decidir — tentar de novo, corrigir os dados ou pular.
       esquecer();
-      mudar((m) => ({ ...m, perguntado: '', falas: [...m.falas, { de: 'sistema', tipo: 'erro',
-        texto: `Não deu para conectar ${col.nomeProvedor}: ${mensagemDeErro(e)}. Vou pedir a chave de novo; se preferir, pule esta conta.` }] }));
+      mudar((m) => ({ ...m, estado: aposFalhar(m.estado, col, mensagemDeErro(e)),
+        falas: [...m.falas, { de: 'sistema', tipo: 'erro',
+          texto: `Não deu para conectar ${col.nomeProvedor}: ${mensagemDeErro(e)}. Nada vai ser tentado de novo sem você pedir.` }] }));
     }
   }
 
@@ -576,6 +601,19 @@ function RespostaRapida(props: {
         {p.forma === 'multipla' && (
           <button className="btn prim mini" disabled={!valida(p, marcados)} onClick={() => props.onResponder(p, marcados)}>Confirmar</button>
         )}
+      </div>
+    );
+  }
+
+  if (passo.tipo === 'falhou') {
+    const col = passo.coleta;
+    const decidir = (d: 'tentar' | 'corrigir' | 'pular', fala: string) => props.aoMudar((m) => ({ ...m,
+      perguntado: '', estado: decidirFalha(m.estado, col, d), falas: [...m.falas, { de: 'pessoa', texto: fala }] }));
+    return (
+      <div className="opcoes-chat">
+        <button type="button" className="opcao-chat" onClick={() => decidir('tentar', 'Tentar de novo')}>Tentar de novo</button>
+        <button type="button" className="opcao-chat" onClick={() => decidir('corrigir', 'Corrigir os dados')}>Corrigir os dados</button>
+        <button type="button" className="opcao-chat" onClick={() => decidir('pular', `Pular ${col.nomeProvedor} por agora`)}>Pular esta conta</button>
       </div>
     );
   }

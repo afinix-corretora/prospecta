@@ -17,7 +17,8 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
-  ESTADO_VAZIO, aceitarValor, aposConectar, coletaDa, passoParaOAgente, proximoPasso,
+  ESTADO_VAZIO, aceitarValor, aposConectar, aposFalhar, coletaDa, decidirFalha, esquecerIdentificador,
+  passoParaOAgente, proximoPasso,
 } from '../app/src/setupChat.ts';
 import type { EstadoSetup, PassoSetup } from '../app/src/setupChat.ts';
 import { NAO, USAR } from '../app/src/assistente.ts';
@@ -154,4 +155,45 @@ test('o agente sabe QUE a conversa pede uma chave, nunca qual é, e só pode pre
   const ctx = passoParaOAgente(p) as { segredo: boolean; campos_que_voce_pode_preencher: { chave: string }[] };
   assert.equal(ctx.segredo, true);
   assert.deepEqual(ctx.campos_que_voce_pode_preencher.map((c) => c.chave), ['identificador', 'assunto_padrao']);
+});
+
+// ---------------------------------------------------------------------------
+// O que a primeira conversa de verdade achou (D73): doze instâncias órfãs
+// ---------------------------------------------------------------------------
+
+const CHIP_FRIO = { id: 'w1', canal: 'whatsapp', provedor: 'uazapi', tipo_permitido: 'fria' as const, quota_diaria: 50,
+  estado: 'ativo', apelido: 'Chip 1', identificador: '5517981347908' };
+const R_MORNA_WA: Respostas = { canais: ['whatsapp'], pool: 'morna', porDia: { whatsapp: 80 }, 'familia:whatsapp': 'nao', 'provedor:whatsapp': 'uazapi' };
+
+test('depois de um erro, a conversa ESPERA: não volta a conectar sozinha', () => {
+  const f = { ...FOTO, servidores: [{ id: 's1', provedor: 'uazapi', nome: 'U' }] };
+  const col = coletaDa(f, R_MORNA_WA, 'provedor:whatsapp')!;
+  const ok = aceitarValor(est(R_MORNA_WA), col, 'identificador', '5511988887777');
+  assert.ok(ok.ok);
+  const e = ok.ok ? ok.estado : est({});
+  assert.equal(proximoPasso(f, e).tipo, 'conectar');
+
+  const falhou = aposFalhar(e, col, 'o banco recusou');
+  const p = proximoPasso(f, falhou);
+  assert.equal(p.tipo, 'falhou', 'sem isto, a coleta completa voltava a conectar a cada render');
+  assert.equal(proximoPasso(f, falhou).tipo, 'falhou', 'e continua esperando');
+
+  assert.equal(proximoPasso(f, decidirFalha(falhou, col, 'tentar')).tipo, 'conectar');
+  assert.equal(tipo(proximoPasso(f, decidirFalha(falhou, col, 'corrigir'))), 'campo:identificador');
+  assert.equal(tipo(proximoPasso(f, decidirFalha(falhou, col, 'pular'))), 'pergunta:ia');
+});
+
+test('número que já é chip deste cliente, em QUALQUER pool, não chega ao provedor', () => {
+  // Foi o caso real: o chip existia na lista fria, a conversa era para a base
+  // própria, e o mesmo número virou pedido de instância nova.
+  const f = { ...FOTO, remetentes: [CHIP_FRIO], servidores: [{ id: 's1', provedor: 'uazapi', nome: 'U' }] };
+  const col = coletaDa(f, R_MORNA_WA, 'provedor:whatsapp')!;
+  assert.ok(col, 'base própria sem chip: a conversa oferece conectar um');
+  const r = aceitarValor(est(R_MORNA_WA), col, 'identificador', '(17) 98134-7908');
+  assert.ok(r.ok);
+  const e = r.ok ? r.estado : est({});
+  const p = proximoPasso(f, e);
+  assert.equal(p.tipo, 'conflito');
+  assert.ok(p.tipo === 'conflito' && p.conta.apelido === 'Chip 1' && p.conta.pool === 'fria');
+  assert.equal(tipo(proximoPasso(f, esquecerIdentificador(e, col))), 'campo:identificador', 'o número sai e é pedido de novo');
 });
