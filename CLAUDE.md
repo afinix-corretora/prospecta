@@ -474,6 +474,10 @@ e elas têm teste automatizado obrigatório.**
   número é um chip só; a pergunta vem ANTES de falar com o provedor, no chat, na tela do canal e na
   edge function, que é a única que a tela não contorna. E o que o provedor criou e o banco recusou é
   apagado na hora: 56 instâncias órfãs ficaram no painel antes disso (D73).
+- **Nunca** nomear um segredo do Vault por um dado que pode voltar. Nome de segredo é único no projeto
+  inteiro e arquivar não apaga o segredo: nomeado pelo número, o chip removido ocupava para sempre o
+  nome que o chip novo precisava, e a recusa vinha DEPOIS de a instância existir. O nome leva o id da
+  conta, como o cadastro manual já fazia desde o D26 (D74).
 - **Nunca** filtrar chave de um pedido por um padrão que não foi posto contra as chaves reais. O
   filtro de `lerPedido` era só minúsculas e jogava fora `porDia` em silêncio; quem achou foi mandar o
   pedido montado pelo código ao modelo de verdade, não o teste (D72).
@@ -701,7 +705,7 @@ e elas têm teste automatizado obrigatório.**
 > **derivados do schema** cobram `tenant_id`, RLS e FK composta de toda tabela nova — lista escrita
 > à mão envelhece sem avisar, e essa já tinha perdido a `provider_servers` (D31).
 >
-> O schema está **aplicado no projeto `hucuwjvihqgftdjpnych`** (62 migrations no repositório, 69
+> O schema está **aplicado no projeto `hucuwjvihqgftdjpnych`** (63 migrations no repositório, 70
 > registros no projeto — a 55ª, que só apaga os dois classificadores sem chamador do D63, entrou em
 > 05/10 pelo SQL Editor, porque o DROP pelo MCP espera uma confirmação que não chega à sessão remota
 > (D63) — duas corretivas de texto, uma separação, duas do D46 (superfície e
@@ -733,8 +737,9 @@ e elas têm teste automatizado obrigatório.**
 > Pipefy só entrou depois do v5, para o catálogo nunca prometer um adapter que o worker não tinha
 > (D31). `crm-descobrir` está na **versão 1**, chamada pela TELA como `verificar-remetente`, com o
 > alvo lido pelo JWT de quem pediu. `canal-webhook` segue na **versão 4** (D61), `verificar-remetente`
-> (**versão 1**) segue do D62, e `provisionar-instancia` está na **versão 6** desde 08/10, com o número
-> perguntado ao banco ANTES do provedor e a instância apagada se o banco recusar a conta (D73) —
+> (**versão 1**) segue do D62, e `provisionar-instancia` está na **versão 7** desde 08/10, com o número
+> perguntado ao banco ANTES do provedor, a instância apagada se o banco recusar a conta (D73) e o
+> número de chip removido livre para virar chip de novo (D74) —
 > a porta do CRM mora em arquivos próprios (`motor/porta-crm.ts`, `_shared/banco-crm.ts`)
 > justamente para as três não mudarem de bundle — e a do agente (`motor/porta-agente.ts`,
 > `_shared/banco-agente.ts`) pelo mesmo motivo. O `motor-worker` v6 foi lido de volta pela

@@ -5,8 +5,8 @@
 //
 //   1. quem pede precisa ALCANÇAR o servidor — lido com o JWT dele, o RLS de
 //      `provider_servers` responde (D62);
-//   2. o número não pode ser chip de ninguém — pergunta feita ao banco ANTES
-//      de falar com o provedor (D73);
+//   2. o número não pode ser chip ATIVO de ninguém — pergunta feita ao banco
+//      ANTES de falar com o provedor (D73); chip removido não conta (D74);
 //   3. cria a instância no provedor;
 //   4. só então grava conta e credencial, numa transação só;
 //   5. se o banco recusar mesmo assim, apaga a instância que acabou de criar.
@@ -16,7 +16,8 @@
 // que aconteceu: o setup por chat pediu de novo, a cada render, um número que
 // já era chip, e cada pedido deixou uma instância no painel da UAZAPI. 56 em
 // 35 minutos. O passo 2 tira a causa conhecida; o 5 cobre o que sobrar (dois
-// pedidos ao mesmo tempo, o Vault fora do ar).
+// pedidos ao mesmo tempo, o Vault fora do ar). A causa de fundo — o segredo
+// nomeado pelo número, que fazia até chip removido colidir — saiu no D74.
 //
 // O QR não é guardado: vai na resposta e morre ali. Guardar QR é guardar
 // credencial de sessão de WhatsApp.
@@ -87,15 +88,15 @@ function recusa(status: 400 | 404 | 409 | 500 | 502, erro: string): RespostaProv
 /**
  * Por que este número não pode virar chip aqui — ou `null` quando pode.
  *
- * Duas regras, porque são dois lugares do banco que recusariam DEPOIS de a
- * instância existir:
+ * Só conta ATIVA impede. Um número é uma sessão de WhatsApp só: chip ativo
+ * neste cliente é a unicidade de `sender_accounts`, que recusaria depois de a
+ * instância existir; chip ativo noutro cliente é o mesmo aparelho, e ler o QR
+ * aqui derrubaria a sessão de lá.
  *
- *   - o segredo do chip é guardado no Vault com o nome
- *     `remetente:<provedor>:<número>`, e nome de segredo é único no projeto
- *     inteiro: vale para qualquer cliente, e para conta arquivada também,
- *     porque arquivar não apaga a credencial;
- *   - `sender_accounts` não aceita o mesmo número duas vezes no mesmo canal do
- *     mesmo cliente enquanto a conta não está arquivada.
+ * Conta arquivada não impede, e isso é o D74. Até ele o segredo era nomeado
+ * pelo número e continuava no Vault depois do arquivamento, então o número
+ * nunca mais virava chip — o D62 tinha liberado a unicidade das arquivadas
+ * justamente para isso funcionar. Desde o D74 o segredo é nomeado pela conta.
  *
  * A conta de outro cliente não é descrita: dizer o apelido seria contar a um
  * cliente o que o outro cadastrou.
@@ -104,22 +105,15 @@ export function porQueONumeroNaoServe(
   contas: readonly ContaComONumero[],
   alvo: { tenant_id: string; provedor: string; canal: string; numero: string },
 ): string | null {
-  const minha = (c: ContaComONumero) => c.tenant_id === alvo.tenant_id;
-  const nome = (c: ContaComONumero) =>
-    `"${c.apelido || alvo.numero}" (${c.tipo_permitido === 'fria' ? 'lista fria' : 'base própria'})`;
+  const ativas = contas.filter((c) => !c.removido_em && (c.canal === alvo.canal || c.provedor === alvo.provedor));
 
-  const ativa = contas.find((c) => minha(c) && !c.removido_em && (c.canal === alvo.canal || c.provedor === alvo.provedor));
-  if (ativa) return `${alvo.numero} já é o chip ${nome(ativa)}. Um número é um chip só.`;
-
-  const arquivada = contas.find((c) => minha(c) && c.provedor === alvo.provedor);
-  if (arquivada) {
-    return `${alvo.numero} foi o chip ${nome(arquivada)}, que está removido. A credencial dele continua guardada `
-      + 'com este número, então um chip novo com ele ainda não tem como ser criado.';
+  const minha = ativas.find((c) => c.tenant_id === alvo.tenant_id);
+  if (minha) {
+    const pool = minha.tipo_permitido === 'fria' ? 'lista fria' : 'base própria';
+    return `${alvo.numero} já é o chip "${minha.apelido || alvo.numero}" (${pool}). Um número é um chip só.`;
   }
 
-  if (contas.some((c) => !minha(c) && c.provedor === alvo.provedor)) {
-    return `${alvo.numero} já está em uso como chip e não pode ser cadastrado de novo.`;
-  }
+  if (ativas.length) return `${alvo.numero} já está em uso como chip e não pode ser cadastrado de novo.`;
   return null;
 }
 

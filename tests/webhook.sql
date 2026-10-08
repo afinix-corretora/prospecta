@@ -492,6 +492,83 @@ SELECT wh.confere('e continuam fechadas para anônimo',
        AND p.proname IN ('salvar_servidor_provedor','salvar_credencial_remetente')
        AND has_function_privilege('anon', p.oid, 'EXECUTE')));
 
+-- ---------------------------------------------------------------------------
+-- Número que já foi chip vira chip de novo (D74)
+-- ---------------------------------------------------------------------------
+--
+-- Sem Vault, a criação para na borda (acima). Aqui entra um Vault de mentira
+-- com o que importa do de verdade: nome de segredo ÚNICO. Foi esse índice
+-- (`secrets_name_idx`) que recusou o chip depois de a instância existir, e é
+-- contra ele que o caso precisa ser encenado — sem ele, qualquer nome passa.
+-- O schema sai antes do relatório, para nada abaixo enxergar um Vault.
+
+CREATE SCHEMA vault;
+CREATE TABLE vault.secrets (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), name text, secret text);
+CREATE UNIQUE INDEX secrets_name_idx ON vault.secrets (name);
+CREATE FUNCTION vault.create_secret(new_secret text, new_name text) RETURNS uuid
+LANGUAGE sql AS $$ INSERT INTO vault.secrets (name, secret) VALUES (new_name, new_secret) RETURNING id $$;
+
+CREATE TABLE wh.chip (rodada text, sender_id uuid, erro text);
+
+DO $$
+DECLARE v record;
+BEGIN
+  SELECT * INTO v FROM criar_remetente_provisionado(
+    'ee000000-0000-0000-0000-0000000000d1','Chip que volta','5511988880009','fria',50,
+    '{"token":"t1","base_url":"https://afinix.uazapi.com"}'::jsonb, gen_random_uuid());
+  INSERT INTO wh.chip VALUES ('primeira', v.sender_id, NULL);
+END;
+$$;
+
+-- Enquanto ativo, o número continua sendo de um chip só.
+DO $$
+DECLARE v record;
+BEGIN
+  SELECT * INTO v FROM criar_remetente_provisionado(
+    'ee000000-0000-0000-0000-0000000000d1','Chip repetido','5511988880009','fria',50,
+    '{"token":"t2","base_url":"https://afinix.uazapi.com"}'::jsonb, gen_random_uuid());
+  INSERT INTO wh.chip VALUES ('repetida', v.sender_id, NULL);
+EXCEPTION WHEN unique_violation THEN
+  INSERT INTO wh.chip VALUES ('repetida', NULL, SQLERRM);
+END;
+$$;
+
+SELECT wh.confere('com o chip ativo, o mesmo número é recusado pela conta, não pelo Vault',
+  (SELECT erro FROM wh.chip WHERE rodada = 'repetida') LIKE '%sender_accounts_identificador_uk%',
+  coalesce((SELECT erro FROM wh.chip WHERE rodada = 'repetida'), 'aceitou'));
+
+-- Removido como a tela remove: arquivado, com o segredo ficando onde está.
+UPDATE sender_accounts SET estado = 'desativado', removido_em = now()
+ WHERE id = (SELECT sender_id FROM wh.chip WHERE rodada = 'primeira');
+
+DO $$
+DECLARE v record;
+BEGIN
+  SELECT * INTO v FROM criar_remetente_provisionado(
+    'ee000000-0000-0000-0000-0000000000d1','Chip de volta','5511988880009','morna',50,
+    '{"token":"t3","base_url":"https://afinix.uazapi.com"}'::jsonb, gen_random_uuid());
+  INSERT INTO wh.chip VALUES ('depois de removido', v.sender_id, NULL);
+EXCEPTION WHEN others THEN
+  INSERT INTO wh.chip VALUES ('depois de removido', NULL, SQLSTATE || ': ' || SQLERRM);
+END;
+$$;
+
+SELECT wh.confere('número de chip removido vira chip de novo',
+  (SELECT sender_id IS NOT NULL FROM wh.chip WHERE rodada = 'depois de removido'),
+  coalesce((SELECT erro FROM wh.chip WHERE rodada = 'depois de removido'), ''));
+
+SELECT wh.confere('o chip antigo continua lá, arquivado, com a história e o segredo dele',
+  (SELECT removido_em IS NOT NULL AND credenciais_secret_id IN (SELECT id FROM vault.secrets)
+     FROM sender_accounts WHERE id = (SELECT sender_id FROM wh.chip WHERE rodada = 'primeira')));
+
+SELECT wh.confere('cada conta tem o seu segredo, nomeado pela conta e não pelo número',
+  (SELECT count(DISTINCT s.credenciais_secret_id) = 2
+          AND bool_and(v.name LIKE 'remetente:uazapi:' || s.id::text || ':%')
+     FROM sender_accounts s JOIN vault.secrets v ON v.id = s.credenciais_secret_id
+    WHERE s.identificador = '5511988880009'));
+
+DROP SCHEMA vault CASCADE;
+
 \echo ''
 \echo '============= WEBHOOK POR CHIP ============='
 SELECT CASE WHEN ok THEN 'PASS' ELSE 'FALHA' END AS status, nome,

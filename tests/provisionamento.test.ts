@@ -7,8 +7,8 @@
 //
 // O que importa conferir:
 //
-//   - número que já é chip (do cliente, arquivado, ou de outro cliente no mesmo
-//     provedor) é recusado SEM nenhuma chamada ao provedor;
+//   - número que já é chip ATIVO (do cliente ou de outro, no mesmo canal) é
+//     recusado SEM nenhuma chamada ao provedor; chip removido não impede (D74);
 //   - a recusa por outro cliente não conta o apelido dele;
 //   - o número digitado com máscara é perguntado e gravado normalizado (D32);
 //   - quando o banco recusa depois, a instância criada é apagada na hora, com
@@ -77,13 +77,18 @@ test('número que já é chip do cliente: recusa antes do provedor, dizendo qual
   assert.equal(gravadas.length, 0);
 });
 
-test('chip arquivado do cliente no mesmo provedor: recusa — a credencial dele ainda ocupa o nome no Vault', async () => {
+test('chip removido do cliente: o número vira chip de novo (D74)', async () => {
+  // Até o D74 isto era 409: o segredo do chip arquivado ocupava, no Vault, o
+  // nome que o chip novo precisava. Agora o segredo é nomeado pela conta.
   const { buscar, chamadas } = provedor();
-  const { p } = porta([conta({ removido_em: '2026-10-01T00:00:00Z' })]);
+  const { p, gravadas } = porta([
+    conta({ removido_em: '2026-10-01T00:00:00Z' }),
+    conta({ tenant_id: OUTRO, removido_em: '2026-09-01T00:00:00Z' }),
+  ]);
   const r = await provisionarDoPedido(p, PEDIDO, buscar);
-  assert.equal(r.status, 409);
-  assert.match(r.corpo.ok ? '' : r.corpo.erro, /removido/);
-  assert.equal(chamadas.length, 0);
+  assert.equal(r.status, 200);
+  assert.ok(chamadas.some((c) => c.url.endsWith('/instance/init')));
+  assert.equal(gravadas[0]!.identificador, '5517981347908');
 });
 
 test('chip de outro cliente no mesmo provedor: recusa sem contar o apelido dele', async () => {
@@ -95,11 +100,14 @@ test('chip de outro cliente no mesmo provedor: recusa sem contar o apelido dele'
   assert.equal(chamadas.length, 0);
 });
 
-test('o mesmo número noutro provedor de outro cliente não é conflito', () => {
+test('só conta ATIVA no mesmo canal impede, de qualquer cliente e qualquer provedor', () => {
   const alvo = { tenant_id: MEU, provedor: 'uazapi', canal: 'whatsapp', numero: '5517981347908' };
-  assert.equal(porQueONumeroNaoServe([conta({ tenant_id: OUTRO, provedor: 'evolution' })], alvo), null);
-  // ...mas no MESMO cliente e canal é, qualquer que seja o provedor: a unicidade é por canal.
+  // Um número é uma sessão de WhatsApp: ativo noutro cliente, noutro provedor, ainda é o mesmo aparelho.
+  assert.match(porQueONumeroNaoServe([conta({ tenant_id: OUTRO, provedor: 'evolution' })], alvo) ?? '', /em uso/);
   assert.match(porQueONumeroNaoServe([conta({ provedor: 'evolution' })], alvo) ?? '', /já é o chip/);
+  // Noutro canal (o mesmo número como remetente de SMS) não é sessão de WhatsApp.
+  assert.equal(porQueONumeroNaoServe([conta({ canal: 'sms', provedor: 'comtele' })], alvo), null);
+  assert.equal(porQueONumeroNaoServe([conta({ removido_em: '2026-10-01T00:00:00Z' })], alvo), null);
 });
 
 test('número livre: pergunta pelos dois jeitos de escrever, cria, e grava normalizado', async () => {

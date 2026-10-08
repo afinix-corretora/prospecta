@@ -2975,7 +2975,56 @@ O que ficou para depois, e foi feito no mesmo dia:
   dela. O desfazer mora em `adapters/desprovisionar.ts`, e não em `whatsapp-uazapi.ts`, para não
   mudar o bundle do worker, do webhook e do verificador (o mesmo motivo de `motor/porta-crm.ts`).
 - **A sabotagem acende.** Sem a trava, três testes ficam vermelhos. Sem o desfazer, um.
-- **O que fica.** Um número que foi chip e está arquivado não pode virar chip de novo pela plataforma,
-  porque o segredo dele continua no Vault com aquele nome. A recusa agora diz isso. Antes era o
-  `secrets_name_idx` depois de criar a instância. Resolver de verdade é decidir o que acontece com o
-  segredo de uma conta arquivada, e isso não foi decidido aqui.
+- **O que ficou.** Um número que foi chip e está arquivado não podia virar chip de novo, porque o
+  segredo dele continuava no Vault com aquele nome. Resolvido no D74, no mesmo dia.
+
+### D74 — O segredo do chip é da conta, não do número (08/10)
+
+O adendo do D73 deixou um caso aberto: um número que já foi chip e foi removido não virava chip de
+novo pela plataforma.
+
+**A causa.** `criar_remetente_provisionado` guardava a credencial no Vault com o nome
+`remetente:<provedor>:<número>`. Duas coisas se somavam:
+- nome de segredo é único no projeto inteiro;
+- arquivar uma conta (D62) não apaga o segredo, de propósito: a história e o webhook ficam.
+
+Então o chip removido ocupava para sempre o nome de que o chip novo precisava. O D62 tinha tirado
+as arquivadas da unicidade de `sender_accounts` justamente para "removi e quero cadastrar de novo"
+funcionar, e o Vault desfazia isso uma camada abaixo. A recusa vinha depois de a instância já
+existir no provedor, e foi assim que nasceram as 56 órfãs do D73.
+
+**A decisão.** O nome do segredo passa a levar o id da conta, sorteado antes do INSERT:
+`remetente:<provedor>:<id da conta>:<sorteio>`. É o que o cadastro manual
+(`salvar_credencial_remetente`) já fazia desde o D26, então as duas portas agora fazem igual. O
+nome nunca é lido de volta, porque a conta aponta para o segredo pelo id. Por isso os segredos que
+já existem não precisam mudar.
+
+**O que impede um número de virar chip agora:**
+- chip **ativo** dele no mesmo cliente. Essa é a unicidade de `sender_accounts`;
+- chip **ativo** dele em outro cliente, no mesmo canal. Um número é uma sessão de WhatsApp só, e ler
+  o QR aqui derrubaria a sessão de lá. A recusa não diz o apelido do outro cliente.
+
+**O que não impede mais:** chip removido, de qualquer cliente. O chip antigo continua arquivado, com
+a história, o webhook e o segredo dele. O novo é outra conta.
+
+**Ordem no projeto** (a do D31):
+1. A migration `20261008100000_segredo_por_conta` foi aplicada antes da function. Enquanto a v6
+   seguia no ar, a regra era mais rígida que o banco, nunca mais frouxa.
+2. `provisionar-instancia` v7 foi publicada depois.
+3. A grade de `criar_remetente_provisionado` não mudou (service_role e postgres), e o
+   `get_advisors` não achou nada novo.
+
+**Como foi conferido:**
+- **Banco.** Sem Vault, o `tests/webhook.sql` só ia até a borda. Agora ele monta um Vault de
+  mentira, com o mesmo índice único de nome (`secrets_name_idx`), e encena o caso:
+  1. cria o chip;
+  2. tenta de novo com o chip ativo, e a recusa vem da conta, não do Vault;
+  3. arquiva o chip;
+  4. cria de novo, e passa;
+  5. confere que cada conta tem o seu segredo, nomeado pela conta.
+
+  Sem a migration, três dessas asserções falham com exatamente o `secrets_name_idx` que apareceu em
+  produção. O schema de mentira sai antes do relatório.
+- **Function.** `tests/provisionamento.test.ts`: chip removido passa e chega ao provedor. Só conta
+  ativa no mesmo canal impede, de qualquer cliente e qualquer provedor. Contando as arquivadas de
+  novo, dois testes falham.
