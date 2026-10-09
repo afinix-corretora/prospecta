@@ -4,9 +4,11 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { useSessao } from '../sessao';
 import { mensagemDeErro, BASE_FUNCOES } from '../supabase';
 import {
-  alternarRemetente, conectarConta, lerProvedoresCanal, lerRemetentes, lerServidores,
-  provisionarInstancia, removerRemetente, salvarServidor, verificarRemetente,
+  alternarRemetente, conectarConta, definirRampa, lerProvedoresCanal, lerRampas,
+  lerRemetentes, lerServidores, provisionarInstancia, removerRemetente, salvarServidor,
+  verificarRemetente,
 } from '../dados';
+import type { Rampa } from '../dados';
 import type { ProvedorCanal, Remetente, Servidor } from '../dados';
 import {
   Aviso, Campo, Copiar, Icone, Kpi, LinhaIndice, NOME_CANAL, Secao, corCanal,
@@ -30,13 +32,17 @@ export function Canal() {
   const [provedores, setProvedores] = useState<ProvedorCanal[]>([]);
   const [remetentes, setRemetentes] = useState<Remetente[]>([]);
   const [servidores, setServidores] = useState<Servidor[]>([]);
+  const [rampas, setRampas] = useState<Map<string, Rampa>>(new Map());
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState('');
 
   async function recarregar() {
     try {
-      const [p, r, s] = await Promise.all([lerProvedoresCanal(), lerRemetentes(), lerServidores()]);
-      setProvedores(p); setRemetentes(r); setServidores(s);
+      const [p, r, s, rp] = await Promise.all([
+        lerProvedoresCanal(), lerRemetentes(), lerServidores(),
+        tenant?.tenant_id ? lerRampas(tenant.tenant_id) : Promise.resolve(new Map<string, Rampa>()),
+      ]);
+      setProvedores(p); setRemetentes(r); setServidores(s); setRampas(rp);
     } catch (e) { setErro(mensagemDeErro(e)); }
     finally { setCarregando(false); }
   }
@@ -52,8 +58,12 @@ export function Canal() {
 
   if (carregando) return <div className="wrap"><p className="vazio">Carregando…</p></div>;
 
-  const quota = contas.reduce((n, r) => n + r.quota_diaria, 0);
-  const usado = contas.reduce((n, r) => n + r.enviados_na_janela, 0);
+  // A capacidade de HOJE é a soma dos tetos, não das quotas: com um chip em
+  // rampa, somar a quota anuncia uma capacidade que o motor não entrega.
+  const alvo = contas.reduce((n, r) => n + r.quota_diaria, 0);
+  const quota = contas.reduce((n, r) => n + (rampas.get(r.id)?.teto_hoje ?? r.quota_diaria), 0);
+  const usado = contas.reduce((n, r) => n + (rampas.get(r.id)?.enviados_hoje ?? r.enviados_na_janela), 0);
+  const emRampa = contas.filter((r) => rampas.get(r.id)?.rampa_dias != null).length;
 
   return (
     <div className="wrap">
@@ -70,8 +80,10 @@ export function Canal() {
       <section className="kpis">
         <Kpi rotulo="Contas conectadas" valor={contas.length}
              sub={`${provs.filter((p) => p.tem_adapter).length} provedor(es) com adapter`} />
-        <Kpi rotulo="Capacidade diária" valor={quota}
-             sub={quota ? `${usado} usada(s) hoje` : 'nenhuma conta ainda'} />
+        <Kpi rotulo="Capacidade de hoje" valor={quota}
+             sub={!quota ? 'nenhuma conta ainda'
+                  : emRampa ? `${usado} usada(s) · ${emRampa} em aquecimento, alvo ${alvo}`
+                  : `${usado} usada(s) hoje`} />
         <Kpi rotulo="Provedores no catálogo" valor={provs.length}
              sub={provs.filter((p) => !p.tem_adapter).length ? 'algum ainda sem adapter' : 'todos com adapter'} />
       </section>
@@ -101,7 +113,7 @@ export function Canal() {
           <Secao titulo="Contas conectadas" nota={contas.length ? `${contas.length} no pool` : 'nenhuma ainda'} />
           <section className="indice">
             {contas.length ? contas.map((r) => (
-              <LinhaConta key={r.id} conta={r} provedores={provedores}
+              <LinhaConta key={r.id} conta={r} provedores={provedores} rampa={rampas.get(r.id)}
                           administra={administra} aoMudar={recarregar} />
             )) : (
               <div className="item" style={{ cursor: 'default' }}><span className="txt">
@@ -139,12 +151,17 @@ const ESTADO_CONTA: Record<string, string> = {
   desativado: 'fora do pool à mão',
 };
 
-export function LinhaConta({ conta, provedores, administra, aoMudar }: {
-  conta: Remetente; provedores: ProvedorCanal[];
+export function LinhaConta({ conta, provedores, rampa, administra, aoMudar }: {
+  conta: Remetente; provedores: ProvedorCanal[]; rampa?: Rampa;
   administra: boolean; aoMudar(): Promise<void>;
 }) {
   const p = provedores.find((x) => x.slug === conta.provedor);
-  const pct = conta.quota_diaria ? Math.round((conta.enviados_na_janela / conta.quota_diaria) * 100) : 0;
+  // O percentual é contra o TETO DE HOJE, não contra a quota: com rampa, um
+  // chip bloqueado em 4 de 4 mostraria "4%" se a conta fosse pela quota — a
+  // barra dizendo folga onde o motor já recusa.
+  const teto = rampa?.teto_hoje ?? conta.quota_diaria;
+  const hoje = rampa?.enviados_hoje ?? conta.enviados_na_janela;
+  const pct = teto ? Math.round((hoje / teto) * 100) : 0;
   const url = `${BASE_FUNCOES}/canal-webhook/${conta.webhook_token}`;
   const [mexendo, setMexendo] = useState(false);
   const [erro, setErro] = useState('');
@@ -186,13 +203,16 @@ export function LinhaConta({ conta, provedores, administra, aoMudar }: {
         <b style={{ opacity: ativo ? 1 : 0.6 }}>{conta.apelido || conta.identificador}</b>
         <p>
           {p?.nome ?? conta.provedor} · pool {conta.tipo_permitido} ·{' '}
-          {conta.enviados_na_janela}/{conta.quota_diaria} hoje ·{' '}
+          {hoje}/{teto} hoje{rampa?.rampa_dias ? ' (teto da rampa)' : ''} ·{' '}
           {/* `strong` e não `b`: `.item .txt b` é o título da linha. */}
           <strong style={{ color: ativo ? 'var(--ok)' : 'var(--warn)', fontWeight: 600 }}>
             {ESTADO_CONTA[conta.estado] ?? conta.estado}
           </strong>
           {conta.provider_server_id ? ' · criado pela plataforma' : ''}
         </p>
+        {rampa && (
+          <BlocoRampa rampa={rampa} administra={administra} aoMudar={aoMudar} />
+        )}
         <p style={{ marginTop: 6 }}>
           <span style={{ color: 'var(--ink-3)' }}>webhook deste chip: </span>
           <Copiar texto={url} />
@@ -248,6 +268,115 @@ export function LinhaConta({ conta, provedores, administra, aoMudar }: {
       </span>
       <span className={`delta ${pct >= 100 ? 'baixa' : pct > 60 ? 'neutra' : ''}`}>{pct}%</span>
     </div>
+  );
+}
+
+/** O aquecimento do chip: o teto que sobe (D75).
+ *
+ *  O que esta tela NÃO faz: calcular o teto. Ele vem de `rampa_dos_chips`, que
+ *  usa a mesma função do motor. Reproduzir a reta aqui seria a tela garantindo
+ *  um número que o despacho não aplica (D55).
+ *
+ *  E diz em voz alta o que mais confunde: a rampa anda em dia de ENVIO. Em
+ *  modo simulado o motor reserva o remetente igual (D36), mas nada sai — então
+ *  a rampa fica parada, e sem esta frase isso parece defeito.
+ */
+function BlocoRampa({ rampa, administra, aoMudar }: {
+  rampa: Rampa; administra: boolean; aoMudar(): Promise<void>;
+}) {
+  const [abrindo, setAbrindo] = useState(false);
+  const [dias, setDias] = useState(String(rampa.rampa_dias ?? 14));
+  const [inicial, setInicial] = useState(String(rampa.rampa_inicial ?? 5));
+  const [mexendo, setMexendo] = useState(false);
+  const [erro, setErro] = useState('');
+
+  const ligada = rampa.rampa_dias !== null;
+
+  async function salvar() {
+    const d = Number(dias); const i = Number(inicial);
+    if (!Number.isInteger(d) || d < 1 || d > 365) { setErro('dias: um inteiro de 1 a 365'); return; }
+    if (!Number.isInteger(i) || i < 1) { setErro('no primeiro dia: um inteiro a partir de 1'); return; }
+    setMexendo(true); setErro('');
+    try { await definirRampa(rampa.sender_id, d, i); setAbrindo(false); await aoMudar(); }
+    catch (e) { setErro(mensagemDeErro(e)); }
+    finally { setMexendo(false); }
+  }
+
+  async function desligar() {
+    setMexendo(true); setErro('');
+    try { await definirRampa(rampa.sender_id, null, null); setAbrindo(false); await aoMudar(); }
+    catch (e) { setErro(mensagemDeErro(e)); }
+    finally { setMexendo(false); }
+  }
+
+  return (
+    <>
+      <p style={{ marginTop: 6 }}>
+        <span style={{ color: 'var(--ink-3)' }}>aquecimento: </span>
+        {ligada ? (
+          <>
+            <strong style={{ fontWeight: 600 }}>
+              dia {rampa.rampa_dia} de {rampa.rampa_dias}
+            </strong>
+            {' '}· teto de hoje {rampa.teto_hoje} de {rampa.quota_diaria} ·{' '}
+            {rampa.reais_hoje > 0
+              ? `${rampa.reais_hoje} ${rampa.reais_hoje === 1 ? 'envio' : 'envios'} de verdade hoje`
+              : 'nenhum envio de verdade hoje'}
+          </>
+        ) : (
+          <span>desligado — o chip pode usar a quota cheia desde o primeiro dia</span>
+        )}
+      </p>
+      {ligada && (
+        <p style={{ marginTop: 6 }}><span className="ajuda">
+          A rampa sobe em reta até a quota e anda nos dias em que o chip enviou
+          DE VERDADE. Dia parado não conta, e passada em modo simulado também
+          não: o motor reserva o remetente igual, mas nada sai, então nada
+          aquece.
+          {rampa.rampa_dia >= (rampa.rampa_dias ?? 0) && ' A rampa terminou: o teto é a quota.'}
+        </span></p>
+      )}
+      {administra && !abrindo && (
+        <p style={{ marginTop: 6 }}>
+          <button className="btn mini" onClick={() => setAbrindo(true)}>
+            {ligada ? 'Mudar aquecimento' : 'Configurar aquecimento'}
+          </button>
+          {!ligada && (
+            <span className="ajuda" style={{ marginLeft: 8 }}>
+              Chip novo que começa na quota cheia é o jeito mais rápido de
+              perder o número.
+            </span>
+          )}
+        </p>
+      )}
+      {administra && abrindo && (
+        <div style={{ marginTop: 6 }}>
+          <Campo id={`rampa-dias-${rampa.sender_id}`} rotulo="Dias de envio até a quota"
+                 valor={dias} aoMudar={setDias} mono />
+          <Campo id={`rampa-ini-${rampa.sender_id}`} rotulo="Teto do primeiro dia"
+                 valor={inicial} aoMudar={setInicial} mono
+                 ajuda={`O teto nunca passa de ${rampa.quota_diaria}, que é a quota deste chip: `
+                      + `pedir mais no primeiro dia não aumenta nada. Mudar os parâmetros não `
+                      + `reinicia a rampa — ela continua no dia ${rampa.rampa_dia}.`} />
+          <p style={{ marginTop: 6 }}>
+            <button className="btn mini" disabled={mexendo} onClick={() => void salvar()}>
+              {mexendo ? 'salvando…' : 'Salvar'}
+            </button>
+            {ligada && (
+              <button className="btn mini" style={{ marginLeft: 6, color: 'var(--crit)' }}
+                      disabled={mexendo} onClick={() => void desligar()}>
+                Desligar aquecimento
+              </button>
+            )}
+            <button className="btn mini" style={{ marginLeft: 6 }}
+                    disabled={mexendo} onClick={() => { setAbrindo(false); setErro(''); }}>
+              Cancelar
+            </button>
+          </p>
+        </div>
+      )}
+      {erro && <p style={{ color: 'var(--crit)', fontSize: 11 }}>{erro}</p>}
+    </>
   );
 }
 

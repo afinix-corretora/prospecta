@@ -499,6 +499,50 @@ export async function alternarRemetente(id: string, ativo: boolean) {
 }
 
 // ---------------------------------------------------------------------------
+// A rampa de volume por chip (D75)
+// ---------------------------------------------------------------------------
+
+/** A rampa de um chip, com o teto de hoje JÁ CALCULADO pelo banco.
+ *
+ *  O teto não é recalculado aqui de propósito: a fórmula mora em
+ *  `privado.teto_da_rampa` e a tela lê o resultado. Repeti-la em TypeScript
+ *  seria o D55 — duas contas que divergem, e a tela garantindo um teto que o
+ *  motor não aplica. */
+export interface Rampa {
+  sender_id: string;
+  apelido: string | null;
+  canal: Remetente['canal'];
+  quota_diaria: number;
+  rampa_dias: number | null;
+  rampa_inicial: number | null;
+  rampa_dia: number;
+  teto_hoje: number;
+  enviados_hoje: number;
+  reais_hoje: number;
+}
+
+export async function lerRampas(tenant: string): Promise<Map<string, Rampa>> {
+  const { data, error } = await sb.rpc('rampa_dos_chips', { p_tenant: tenant });
+  if (error) throw error;
+  return new Map(((data ?? []) as Rampa[]).map((r) => [r.sender_id, r]));
+}
+
+/** Liga, muda ou desliga a rampa. `null` nos dois é desligar.
+ *
+ *  Escrita direta, como `alternarRemetente`: o RLS já diz quem escreve (D41),
+ *  e o privilégio é por coluna — `rampa_dia` e o contador de envio real não
+ *  estão na grade da tela, porque são o ANDAMENTO, que é do motor (D75). */
+export async function definirRampa(
+  id: string, dias: number | null, inicial: number | null,
+) {
+  const { error } = await sb
+    .from('sender_accounts')
+    .update({ rampa_dias: dias, rampa_inicial: inicial })
+    .eq('id', id);
+  if (error) throw error;
+}
+
+// ---------------------------------------------------------------------------
 // Configurações ▸ Blacklist (D63)
 // ---------------------------------------------------------------------------
 //

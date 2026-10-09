@@ -474,6 +474,22 @@ e elas têm teste automatizado obrigatório.**
   número é um chip só; a pergunta vem ANTES de falar com o provedor, no chat, na tela do canal e na
   edge function, que é a única que a tela não contorna. E o que o provedor criou e o banco recusou é
   apagado na hora: 56 instâncias órfãs ficaram no painel antes disso (D73).
+- **Nunca** pôr um teto novo em um dos lugares que comparam o contador e esquecer os outros. São
+  QUATRO: a reserva, o pool e os dois adiamentos. Com o teto só no pool, a reserva recusa o que o
+  pool ofereceu; com ele só na reserva, o passo é adiado por uma hora em vez de para amanhã, e volta
+  de hora em hora para ouvir o mesmo não (D75).
+- **Nunca** deixar shadow mode aquecer chip. Em `simulado` o motor escolhe e reserva remetente igual
+  (D36), mas nada sai — e reputação de número se constrói com mensagem que chegou. Por isso a rampa
+  anda por `enviados_reais_na_janela`, que só `registrar_resultado_envio(ok)` escreve, e não por
+  `enviados_na_janela`, que a reserva infla em simulado. Dia de calendário também não serve: chip
+  parado uma semana não aqueceu nada (D75).
+- **Nunca** dar à tela a coluna que mede o ANDAMENTO de um freio. `rampa_dias` e `rampa_inicial` são
+  a decisão de quem opera e estão na grade; `rampa_dia` e `enviados_reais_na_janela` não — com eles
+  abertos, zerar o aquecimento ou fazer a rampa andar sem envio fica a uma chamada de PostgREST. É o
+  D54 na coluna nova (D75).
+- **Nunca** somar quota onde o que vale é o teto de hoje. "Capacidade diária 500" com um chip em
+  rampa anuncia o que o motor não entrega, e o percentual da linha mostrava folga (17%) onde o
+  despacho já recusava (100%). Quem achou foi olhar a tela depois de pronta, não o teste (D75).
 - **Nunca** nomear um segredo do Vault por um dado que pode voltar. Nome de segredo é único no projeto
   inteiro e arquivar não apaga o segredo: nomeado pelo número, o chip removido ocupava para sempre o
   nome que o chip novo precisava, e a recusa vinha DEPOIS de a instância existir. O nome leva o id da
@@ -548,6 +564,18 @@ e elas têm teste automatizado obrigatório.**
 > A **tela de contatos** (D35) lista, busca por nome ou número, e inscreve em campanha — também com
 > prévia (`prever_inscricao`), porque aqui o erro é silencioso: inscrever quem não tem identidade no
 > canal dos passos não dá erro, dá uma campanha "concluída" sem mensagem nenhuma.
+>
+> A **rampa de volume por chip** existe desde o **D75**: chip novo manda pouco no primeiro dia e
+> cresce até a quota, que continua sendo o alvo configurado — ela não é reescrita, o teto de hoje é
+> DERIVADO dela por `privado.teto_da_rampa`. É opt-in (`rampa_dias IS NULL` é o comportamento de
+> sempre) e vale nos quatro lugares que comparam o contador com a quota: `reservar_envio`,
+> `remetentes_disponiveis` e os dois `proximo_horario_*`. A rampa anda em dia de ENVIO REAL, contado
+> em `enviados_reais_na_janela` por `registrar_resultado_envio(ok)` — em `simulado` o motor reserva
+> remetente igual, mas nada sai, então nada aquece, e a tela diz isso em voz alta. A tela do canal
+> mostra dia da rampa, teto de hoje e envios reais, com o percentual da linha e o KPI do topo contra
+> o TETO e não contra a quota; `rampa_dos_chips` devolve o teto já calculado, para a tela não
+> reproduzir a reta (D55). O que NÃO tem aqui: nada que simule uso humano — o que sobe é o volume de
+> mensagem real da cadência.
 >
 > O **e-mail** mora em Configurações desde o **D62**: o cliente cadastra quantos provedores quiser,
 > verifica a conexão pela tela (a edge function `verificar-remetente` pergunta ao provedor com o
@@ -705,7 +733,7 @@ e elas têm teste automatizado obrigatório.**
 > **derivados do schema** cobram `tenant_id`, RLS e FK composta de toda tabela nova — lista escrita
 > à mão envelhece sem avisar, e essa já tinha perdido a `provider_servers` (D31).
 >
-> O schema está **aplicado no projeto `hucuwjvihqgftdjpnych`** (63 migrations no repositório, 70
+> O schema está **aplicado no projeto `hucuwjvihqgftdjpnych`** (64 migrations no repositório, 73
 > registros no projeto — a 55ª, que só apaga os dois classificadores sem chamador do D63, entrou em
 > 05/10 pelo SQL Editor, porque o DROP pelo MCP espera uma confirmação que não chega à sessão remota
 > (D63) — duas corretivas de texto, uma separação, duas do D46 (superfície e

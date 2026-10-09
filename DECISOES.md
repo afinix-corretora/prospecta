@@ -3028,3 +3028,86 @@ a história, o webhook e o segredo dele. O novo é outra conta.
 - **Function.** `tests/provisionamento.test.ts`: chip removido passa e chega ao provedor. Só conta
   ativa no mesmo canal impede, de qualquer cliente e qualquer provedor. Contando as arquivadas de
   novo, dois testes falham.
+
+### D75 — A rampa de volume por chip (09/10)
+
+Chip novo que começa mandando a quota cheia é o jeito mais rápido de perder o número. A rampa é um
+teto que sobe: no primeiro dia o chip manda pouco, e cresce até a quota configurada.
+
+**O que esta decisão NÃO é.** O pedido original era uma tela de "maturação de chips": o agente
+buscaria links de grupos abertos, trocaria mensagens entre os próprios chips, criaria grupos, postaria
+status, tudo com aleatoriedade, e cada chip teria uma persona. Isso não foi construído, e a recusa
+está registrada aqui porque é decisão de produto, não esquecimento. O que aquela maturação faz é
+fabricar sinais de uso orgânico para derrotar a detecção de spam do WhatsApp — e a parte dos grupos
+abertos alcança terceiros, que recebem bots com identidade inventada nas conversas deles. O bloqueio
+que ela derrota existe para proteger quem recebe mensagem não pedida, que é exatamente o destinatário
+de campanha fria. A rampa resolve o mesmo problema de operação (não perder o chip) por outro
+mecanismo: volume real, crescendo devagar.
+
+**Três decisões de desenho.**
+
+1. **`quota_diaria` não é reescrita.** Ela continua sendo o alvo; o teto de hoje é derivado dela por
+   `privado.teto_da_rampa(quota, dias, inicial, dia)`, uma reta. Um job que reescrevesse a coluna
+   todo dia perderia o alvo e seria um modelo de lote — o que este motor não é.
+
+2. **A rampa anda em dia de ENVIO, não de calendário.** Chip parado uma semana não construiu
+   reputação; acordar no teto do dia 7 é o risco que a rampa existe para evitar. E `simulado` não
+   conta: em shadow mode o motor escolhe e reserva remetente igual (D36), mas nada sai. Por isso a
+   coluna nova é `enviados_reais_na_janela`, escrita só por `registrar_resultado_envio(ok)` — que em
+   `simulado` nunca é chamada, porque a mensagem nasce com status `simulado` e não vira `pendente`.
+   `enviados_na_janela`, que a reserva infla, serviria e estaria errada.
+
+3. **É opt-in.** `rampa_dias IS NULL` é o comportamento de sempre, byte por byte. Ligar a rampa num
+   chip que já roda é decisão de quem opera, não efeito colateral da migration. O chip de produção
+   ficou sem rampa.
+
+**Os quatro lugares.** O teto entrou onde o contador era comparado com a quota: `reservar_envio` (a
+invariante 3 de fato), `remetentes_disponiveis` (o pool), `proximo_horario_de_pool` e
+`proximo_horario_da_campanha` (os adiamentos). Mexer num e esquecer o outro é o D37 e o D40 de novo —
+com o teto só no pool, a reserva recusa o que o pool ofereceu; com ele só na reserva, o passo é
+adiado por uma hora em vez de para amanhã, e volta de hora em hora para ouvir o mesmo não. Os quatro
+corpos partiram de `pg_get_functiondef` no projeto, não de cópia antiga (D59).
+
+**A grade.** `rampa_dias` e `rampa_inicial` entraram na grade da tela; `rampa_dia` e
+`enviados_reais_na_janela`, não. São o andamento, que é do motor: com eles abertos, zerar o
+aquecimento ou fazer a rampa andar sem envio ficaria a uma chamada de PostgREST. É o D54 na coluna
+nova.
+
+**Como foi conferido.**
+
+- `tests/rampa.sql`, 37 asserções. A que só a rampa satisfaz: o chip é recusado **enquanto**
+  `enviados_na_janela < quota_diaria` (4 de 100). Sem rampa nada no motor recusa nessa situação, então
+  nenhuma passa por acaso.
+- Sete sabotagens, cada uma acendendo o que devia: a reserva sem o teto (3 vermelhas), o pool (1),
+  cada adiamento (1 cada), o contador de envio real (1), a rampa andando por calendário (2 — inclusive
+  "um dia inteiro de shadow mode não avança a rampa", que ficou em `rampa_dia=4`), e a grade sem as
+  colunas (1).
+- Aplicada no projeto e conferida por digest estrutural contra o banco de teste: 90 blocos — corpos
+  de função, colunas, constraints e grade de privilégio — batendo byte a byte. A primeira aplicação
+  **não** batia: dois corpos tinham ido sem os comentários internos, e o digest pegou. Corretiva de
+  texto, da família do D32 e do D39.
+- `get_advisors` depois de aplicar acusou **um aviso novo, e era meu**: `privado.teto_da_rampa` com
+  `search_path` mutável, a classe do D19. Corrigida com `SET search_path = pg_catalog` — e não
+  `public, privado` como as vizinhas, porque esta função não resolve nome de objeto nenhum, só
+  `least`, `greatest`, `round` e `coalesce`. O custo é perder o inlining pelo planner; com uma dezena
+  de chips, não se mede. Depois da corretiva, os advisors voltaram ao conjunto de sempre, e
+  `rampa_dos_chips` NÃO aparece entre as DEFINER — que é o que prova que ela é INVOKER, com o RLS
+  decidindo as linhas.
+- No navegador, com mocks, em escuro, claro e 390px. **Foi olhar a tela que achou um defeito que
+  teste nenhum pegaria**: o KPI do topo somava `quota_diaria` e anunciava "Capacidade diária 500"
+  com um chip em rampa, quando a capacidade de hoje era 293; e o percentual da linha, contado contra
+  a quota, mostrava 17% de folga onde o despacho já recusava. Os dois passaram a contar contra o teto.
+
+**O que fica pendente, e é consciente.**
+
+- **A rampa vale também para a resposta do agente.** Se o teto fechou, a resposta do agente a um
+  contato que escreveu não sai. Degrada visível — vira motivo em `rascunhos.envio_motivo` e aparece
+  na tela de Respostas (D69) —, mas não responder a uma pessoa é pior do que um toque frio a menos.
+  O conserto é `reservar_envio` saber se o pedido é cadência ou conversa; ficou de fora para não
+  alargar a mudança.
+- **A ordem do pool não mudou.** `ORDER BY health_score DESC, enviados_na_janela ASC` prefere o chip
+  com menos envios em absoluto, então o chip em rampa é escolhido primeiro até bater o teto dele. Não
+  fura nada — o teto segura —, mas ordenar pela FRAÇÃO do teto espalharia melhor. Não é necessário
+  para a rampa funcionar, e por isso não entrou.
+- **Reiniciar o aquecimento** não tem porta: `rampa_dia` é do motor. Quem quiser recomeçar hoje muda
+  os parâmetros, que não reiniciam a rampa — a tela diz isso.

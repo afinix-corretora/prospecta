@@ -13,8 +13,8 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useSessao } from '../sessao';
 import { mensagemDeErro } from '../supabase';
-import { lerCampanhas, lerProvedoresCanal, lerRemetentes } from '../dados';
-import type { Campanha, ProvedorCanal, Remetente } from '../dados';
+import { lerCampanhas, lerProvedoresCanal, lerRampas, lerRemetentes } from '../dados';
+import type { Campanha, ProvedorCanal, Rampa, Remetente } from '../dados';
 import { Aviso, Kpi, Secao } from '../componentes/base';
 import { ConectarConta, LinhaConta } from './Canal';
 import { Moldura } from './Telas';
@@ -25,6 +25,7 @@ export function ConfigEmail() {
   const [provedores, setProvedores] = useState<ProvedorCanal[]>([]);
   const [contas, setContas] = useState<Remetente[]>([]);
   const [campanhas, setCampanhas] = useState<Campanha[]>([]);
+  const [rampas, setRampas] = useState<Map<string, Rampa>>(new Map());
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState('');
 
@@ -32,10 +33,14 @@ export function ConfigEmail() {
   // acabou de pedir a verificação, e a resposta sumiria junto com ela.
   async function recarregar() {
     try {
-      const [p, r, c] = await Promise.all([lerProvedoresCanal(), lerRemetentes(), lerCampanhas()]);
+      const [p, r, c, rp] = await Promise.all([
+        lerProvedoresCanal(), lerRemetentes(), lerCampanhas(),
+        tenant?.tenant_id ? lerRampas(tenant.tenant_id) : Promise.resolve(new Map<string, Rampa>()),
+      ]);
       setProvedores(p.filter((x) => x.canal === 'email'));
       setContas(r.filter((x) => x.canal === 'email'));
       setCampanhas(c);
+      setRampas(rp);
       setErro('');
     } catch (e) { setErro(mensagemDeErro(e)); }
     finally { setCarregando(false); }
@@ -68,7 +73,8 @@ export function ConfigEmail() {
           const usam = fixas.filter((c) => c.remetente_email_id === r.id);
           return (
             <div key={r.id}>
-              <LinhaConta conta={r} provedores={provedores} administra={administra} aoMudar={recarregar} />
+              <LinhaConta conta={r} provedores={provedores} rampa={rampas.get(r.id)}
+                          administra={administra} aoMudar={recarregar} />
               {usam.length > 0 && (
                 <p className="ajuda" style={{ fontSize: 11.5, color: 'var(--ink-3)', margin: '4px 0 0 16px' }}>
                   Escolhida por: {usam.map((c) => c.nome).join(', ')}. Para remover, troque a conta
