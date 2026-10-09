@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="pt-BR" data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Prospecta</title>
+  <meta name="description" content="Motor de cadência multicanal">
+  <meta name="color-scheme" content="dark light">
+  <meta name="theme-color" content="#0D0D12">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <!-- O tema é decidido antes de o CSS pintar: escuro por padrão, claro se a
+       pessoa escolheu. Sem isto a tela pisca clara antes de o React montar. -->
+  <script>
+    try {
+      var t = localStorage.getItem('prospecta:tema');
+      if (t === 'light' || t === 'dark') document.documentElement.dataset.theme = t;
+    } catch (e) { /* aba anônima: fica o escuro */ }
+  </script>
+</head>
+<body>
+  <div id="raiz"></div>
+  <script type="module" src="/src/main.tsx"></script>
+</body>
+</html>

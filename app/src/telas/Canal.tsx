@@ -1,0 +1,682 @@
+import { normalizarTelefone } from '@adapters/telefone.ts';
+import { useEffect, useMemo, useState } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
+import { useSessao } from '../sessao';
+import { mensagemDeErro, BASE_FUNCOES } from '../supabase';
+import {
+  alternarRemetente, conectarConta, definirRampa, lerProvedoresCanal, lerRampas,
+  lerRemetentes, lerServidores, provisionarInstancia, removerRemetente, salvarServidor,
+  verificarRemetente,
+} from '../dados';
+import type { Rampa } from '../dados';
+import type { ProvedorCanal, Remetente, Servidor } from '../dados';
+import {
+  Aviso, Campo, Copiar, Icone, Kpi, LinhaIndice, NOME_CANAL, Secao, corCanal,
+} from '../componentes/base';
+import { Ico } from '../componentes/icones';
+import { FAMILIAS, familiaDe, familiasDoCanal } from '../componentes/Rail';
+import type { Familia } from '../componentes/Rail';
+
+const DESC_CANAL: Record<string, string> = {
+  whatsapp: 'Oficial pela Gupshup, não oficial pela UAZAPI. Cada conta tem quota e segredo próprios.',
+  email: 'Envio por API. Campanha fria usa domínio separado do institucional, e a resposta volta pelo inbound.',
+  sms: 'Uma linha, 160 caracteres. Confirma intenção e move a conversa de canal.',
+  instagram: 'Direct só dentro da janela de 24h aberta pela própria pessoa.',
+};
+
+export function Canal() {
+  const { canal = 'whatsapp', familia } = useParams<{ canal: string; familia?: Familia }>();
+  const nav = useNavigate();
+  const { tenant, administra } = useSessao();
+
+  const [provedores, setProvedores] = useState<ProvedorCanal[]>([]);
+  const [remetentes, setRemetentes] = useState<Remetente[]>([]);
+  const [servidores, setServidores] = useState<Servidor[]>([]);
+  const [rampas, setRampas] = useState<Map<string, Rampa>>(new Map());
+  const [carregando, setCarregando] = useState(true);
+  const [erro, setErro] = useState('');
+
+  async function recarregar() {
+    try {
+      const [p, r, s, rp] = await Promise.all([
+        lerProvedoresCanal(), lerRemetentes(), lerServidores(),
+        tenant?.tenant_id ? lerRampas(tenant.tenant_id) : Promise.resolve(new Map<string, Rampa>()),
+      ]);
+      setProvedores(p); setRemetentes(r); setServidores(s); setRampas(rp);
+    } catch (e) { setErro(mensagemDeErro(e)); }
+    finally { setCarregando(false); }
+  }
+  useEffect(() => { void recarregar(); }, [tenant?.tenant_id]);
+
+  const doCanal = useMemo(() => provedores.filter((p) => p.canal === canal), [provedores, canal]);
+  const familias = familiasDoCanal(doCanal);
+  const soIndice = familias.length > 0 && !familia;
+
+  const provs = familia ? doCanal.filter((p) => familiaDe(p) === familia) : doCanal;
+  const slugs = new Set(provs.map((p) => p.slug));
+  const contas = remetentes.filter((r) => r.canal === canal && slugs.has(r.provedor));
+
+  if (carregando) return <div className="wrap"><p className="vazio">Carregando…</p></div>;
+
+  // A capacidade de HOJE é a soma dos tetos, não das quotas: com um chip em
+  // rampa, somar a quota anuncia uma capacidade que o motor não entrega.
+  const alvo = contas.reduce((n, r) => n + r.quota_diaria, 0);
+  const quota = contas.reduce((n, r) => n + (rampas.get(r.id)?.teto_hoje ?? r.quota_diaria), 0);
+  const usado = contas.reduce((n, r) => n + (rampas.get(r.id)?.enviados_hoje ?? r.enviados_na_janela), 0);
+  const emRampa = contas.filter((r) => rampas.get(r.id)?.rampa_dias != null).length;
+
+  return (
+    <div className="wrap">
+      <div className="cabeca"><div>
+        <button className="voltar" onClick={() => nav(familia ? `/canais/${canal}` : '/canais')}>
+          <Ico nome="voltar" className="" />{familia ? NOME_CANAL[canal] : 'Canais'}
+        </button>
+        <h1>{familia ? `${NOME_CANAL[canal]} · ${FAMILIAS[familia].nome}` : NOME_CANAL[canal]}</h1>
+        <p>{familia ? FAMILIAS[familia].desc : DESC_CANAL[canal]}</p>
+      </div></div>
+
+      {erro && <Aviso tipo="erro">{erro}</Aviso>}
+
+      <section className="kpis">
+        <Kpi rotulo="Contas conectadas" valor={contas.length}
+             sub={`${provs.filter((p) => p.tem_adapter).length} provedor(es) com adapter`} />
+        <Kpi rotulo="Capacidade de hoje" valor={quota}
+             sub={!quota ? 'nenhuma conta ainda'
+                  : emRampa ? `${usado} usada(s) · ${emRampa} em aquecimento, alvo ${alvo}`
+                  : `${usado} usada(s) hoje`} />
+        <Kpi rotulo="Provedores no catálogo" valor={provs.length}
+             sub={provs.filter((p) => !p.tem_adapter).length ? 'algum ainda sem adapter' : 'todos com adapter'} />
+      </section>
+
+      {soIndice && (
+        <>
+          <Secao titulo="Como este canal fala" nota="oficial e não oficial têm base contratual e risco diferentes" />
+          <section className="indice">
+            {familias.map((f) => {
+              const s2 = new Set(doCanal.filter((p) => familiaDe(p) === f).map((p) => p.slug));
+              const n = remetentes.filter((r) => r.canal === canal && s2.has(r.provedor)).length;
+              return (
+                <LinhaIndice
+                  key={f} icone={canal} cor={corCanal(canal)} titulo={FAMILIAS[f].nome}
+                  descricao={`${FAMILIAS[f].desc} · ${doCanal.filter((p) => familiaDe(p) === f).map((p) => p.nome).join(', ')}`}
+                  contagem={`${n} conta${n === 1 ? '' : 's'}`}
+                  aoClicar={() => nav(`/canais/${canal}/${f}`)}
+                />
+              );
+            })}
+          </section>
+        </>
+      )}
+
+      {!soIndice && (
+        <>
+          <Secao titulo="Contas conectadas" nota={contas.length ? `${contas.length} no pool` : 'nenhuma ainda'} />
+          <section className="indice">
+            {contas.length ? contas.map((r) => (
+              <LinhaConta key={r.id} conta={r} provedores={provedores} rampa={rampas.get(r.id)}
+                          administra={administra} aoMudar={recarregar} />
+            )) : (
+              <div className="item" style={{ cursor: 'default' }}><span className="txt">
+                <b>Nenhuma conta conectada</b>
+                <p>Sem conta, o motor adia o passo em vez de prometer envio que não acontece.</p>
+              </span></div>
+            )}
+          </section>
+
+          {familia === 'nao' && (
+            <Servidores
+              provs={provs} servidores={servidores.filter((s) => slugs.has(s.provedor))}
+              remetentes={remetentes} administra={administra} tenant={tenant?.tenant_id ?? ''}
+              aoMudar={recarregar}
+            />
+          )}
+
+          <ConectarConta
+            provs={provs} canal={canal} administra={administra}
+            tenant={tenant?.tenant_id ?? ''} aoMudar={recarregar}
+          />
+        </>
+      )}
+    </div>
+  );
+}
+
+/** O que cada estado de remetente significa para o pool (D54). */
+const ESTADO_CONTA: Record<string, string> = {
+  ativo: 'no pool',
+  // Quem escreve este é o breaker, e ele volta sozinho quando a janela passa.
+  // Por isso a tela o mostra e não o edita: mexer aqui seria discordar do
+  // motor sobre um fato que é dele.
+  circuito_aberto: 'fora do pool pelo circuito — o breaker devolve sozinho',
+  desativado: 'fora do pool à mão',
+};
+
+export function LinhaConta({ conta, provedores, rampa, administra, aoMudar }: {
+  conta: Remetente; provedores: ProvedorCanal[]; rampa?: Rampa;
+  administra: boolean; aoMudar(): Promise<void>;
+}) {
+  const p = provedores.find((x) => x.slug === conta.provedor);
+  // O percentual é contra o TETO DE HOJE, não contra a quota: com rampa, um
+  // chip bloqueado em 4 de 4 mostraria "4%" se a conta fosse pela quota — a
+  // barra dizendo folga onde o motor já recusa.
+  const teto = rampa?.teto_hoje ?? conta.quota_diaria;
+  const hoje = rampa?.enviados_hoje ?? conta.enviados_na_janela;
+  const pct = teto ? Math.round((hoje / teto) * 100) : 0;
+  const url = `${BASE_FUNCOES}/canal-webhook/${conta.webhook_token}`;
+  const [mexendo, setMexendo] = useState(false);
+  const [erro, setErro] = useState('');
+
+  const [verificando, setVerificando] = useState(false);
+  const [confirmando, setConfirmando] = useState(false);
+
+  const ativo = conta.estado === 'ativo';
+
+  async function alternar() {
+    setMexendo(true); setErro('');
+    try { await alternarRemetente(conta.id, !ativo); await aoMudar(); }
+    catch (e) { setErro(mensagemDeErro(e)); }
+    finally { setMexendo(false); }
+  }
+
+  // A verificação NÃO tira a conta do pool, nem quando falha (D62): quem tira
+  // é o circuito, com envio de verdade. Duas fontes de "esta conta está fora"
+  // discordariam entre si. O resultado é gravado e a lista o lê de lá.
+  async function verificar() {
+    setVerificando(true); setErro('');
+    const r = await verificarRemetente(conta.id);
+    setVerificando(false);
+    if (!r.ok) { setErro(r.erro); return; }
+    await aoMudar();
+  }
+
+  async function remover() {
+    setMexendo(true); setErro('');
+    try { await removerRemetente(conta.id); await aoMudar(); }
+    catch (e) { setErro(mensagemDeErro(e)); setConfirmando(false); }
+    finally { setMexendo(false); }
+  }
+
+  return (
+    <div className="item" style={{ cursor: 'default', alignItems: 'flex-start' }}>
+      <Icone nome={conta.canal} cor={corCanal(conta.canal)} />
+      <span className="txt">
+        <b style={{ opacity: ativo ? 1 : 0.6 }}>{conta.apelido || conta.identificador}</b>
+        <p>
+          {p?.nome ?? conta.provedor} · pool {conta.tipo_permitido} ·{' '}
+          {hoje}/{teto} hoje{rampa?.rampa_dias ? ' (teto da rampa)' : ''} ·{' '}
+          {/* `strong` e não `b`: `.item .txt b` é o título da linha. */}
+          <strong style={{ color: ativo ? 'var(--ok)' : 'var(--warn)', fontWeight: 600 }}>
+            {ESTADO_CONTA[conta.estado] ?? conta.estado}
+          </strong>
+          {conta.provider_server_id ? ' · criado pela plataforma' : ''}
+        </p>
+        {rampa && (
+          <BlocoRampa rampa={rampa} administra={administra} aoMudar={aoMudar} />
+        )}
+        <p style={{ marginTop: 6 }}>
+          <span style={{ color: 'var(--ink-3)' }}>webhook deste chip: </span>
+          <Copiar texto={url} />
+        </p>
+        {/* Só `ativo` e `desativado` são da tela. `circuito_aberto` é do
+            breaker: tirar a conta do circuito à mão seria mandar o motor
+            tentar de novo o que ele acabou de ver falhar. */}
+        {administra && conta.estado !== 'circuito_aberto' && (
+          <p style={{ marginTop: 6 }}>
+            <button className="btn mini"
+                    disabled={mexendo} onClick={() => void alternar()}>
+              {mexendo ? 'um instante…' : ativo ? 'Tirar do pool' : 'Devolver ao pool'}
+            </button>
+            <span className="ajuda" style={{ marginLeft: 8 }}>
+              Tirar do pool não cancela o que já está na fila: o despacho
+              rebalanceia as pendentes para outra conta (D37).
+            </span>
+          </p>
+        )}
+        <p style={{ marginTop: 6 }}>
+          <span style={{ color: 'var(--ink-3)' }}>conexão: </span>
+          <Verificacao conta={conta} />
+        </p>
+        {administra && (
+          <p style={{ marginTop: 6 }}>
+            <button className="btn mini"
+                    disabled={verificando} onClick={() => void verificar()}>
+              {verificando ? 'perguntando ao provedor…' : 'Verificar conexão'}
+            </button>
+            {!confirmando ? (
+              <button className="btn mini" style={{ marginLeft: 6 }}
+                      disabled={mexendo} onClick={() => setConfirmando(true)}>
+                Remover
+              </button>
+            ) : (
+              <>
+                <span className="ajuda" style={{ marginLeft: 8 }}>
+                  Sai da lista e do pool para sempre; o histórico fica.
+                </span>
+                <button className="btn mini" style={{ marginLeft: 6, color: 'var(--crit)' }}
+                        disabled={mexendo} onClick={() => void remover()}>
+                  {mexendo ? 'removendo…' : 'Confirmar remoção'}
+                </button>
+                <button className="btn mini" style={{ marginLeft: 6 }}
+                        disabled={mexendo} onClick={() => setConfirmando(false)}>
+                  Cancelar
+                </button>
+              </>
+            )}
+          </p>
+        )}
+        {erro && <p style={{ color: 'var(--crit)', fontSize: 11 }}>{erro}</p>}
+      </span>
+      <span className={`delta ${pct >= 100 ? 'baixa' : pct > 60 ? 'neutra' : ''}`}>{pct}%</span>
+    </div>
+  );
+}
+
+/** O aquecimento do chip: o teto que sobe (D75).
+ *
+ *  O que esta tela NÃO faz: calcular o teto. Ele vem de `rampa_dos_chips`, que
+ *  usa a mesma função do motor. Reproduzir a reta aqui seria a tela garantindo
+ *  um número que o despacho não aplica (D55).
+ *
+ *  E diz em voz alta o que mais confunde: a rampa anda em dia de ENVIO. Em
+ *  modo simulado o motor reserva o remetente igual (D36), mas nada sai — então
+ *  a rampa fica parada, e sem esta frase isso parece defeito.
+ */
+function BlocoRampa({ rampa, administra, aoMudar }: {
+  rampa: Rampa; administra: boolean; aoMudar(): Promise<void>;
+}) {
+  const [abrindo, setAbrindo] = useState(false);
+  const [dias, setDias] = useState(String(rampa.rampa_dias ?? 14));
+  const [inicial, setInicial] = useState(String(rampa.rampa_inicial ?? 5));
+  const [mexendo, setMexendo] = useState(false);
+  const [erro, setErro] = useState('');
+
+  const ligada = rampa.rampa_dias !== null;
+
+  async function salvar() {
+    const d = Number(dias); const i = Number(inicial);
+    if (!Number.isInteger(d) || d < 1 || d > 365) { setErro('dias: um inteiro de 1 a 365'); return; }
+    if (!Number.isInteger(i) || i < 1) { setErro('no primeiro dia: um inteiro a partir de 1'); return; }
+    setMexendo(true); setErro('');
+    try { await definirRampa(rampa.sender_id, d, i); setAbrindo(false); await aoMudar(); }
+    catch (e) { setErro(mensagemDeErro(e)); }
+    finally { setMexendo(false); }
+  }
+
+  async function desligar() {
+    setMexendo(true); setErro('');
+    try { await definirRampa(rampa.sender_id, null, null); setAbrindo(false); await aoMudar(); }
+    catch (e) { setErro(mensagemDeErro(e)); }
+    finally { setMexendo(false); }
+  }
+
+  return (
+    <>
+      <p style={{ marginTop: 6 }}>
+        <span style={{ color: 'var(--ink-3)' }}>aquecimento: </span>
+        {ligada ? (
+          <>
+            <strong style={{ fontWeight: 600 }}>
+              dia {rampa.rampa_dia} de {rampa.rampa_dias}
+            </strong>
+            {' '}· teto de hoje {rampa.teto_hoje} de {rampa.quota_diaria} ·{' '}
+            {rampa.reais_hoje > 0
+              ? `${rampa.reais_hoje} ${rampa.reais_hoje === 1 ? 'envio' : 'envios'} de verdade hoje`
+              : 'nenhum envio de verdade hoje'}
+          </>
+        ) : (
+          <span>desligado — o chip pode usar a quota cheia desde o primeiro dia</span>
+        )}
+      </p>
+      {ligada && (
+        <p style={{ marginTop: 6 }}><span className="ajuda">
+          A rampa sobe em reta até a quota e anda nos dias em que o chip enviou
+          DE VERDADE. Dia parado não conta, e passada em modo simulado também
+          não: o motor reserva o remetente igual, mas nada sai, então nada
+          aquece.
+          {rampa.rampa_dia >= (rampa.rampa_dias ?? 0) && ' A rampa terminou: o teto é a quota.'}
+        </span></p>
+      )}
+      {administra && !abrindo && (
+        <p style={{ marginTop: 6 }}>
+          <button className="btn mini" onClick={() => setAbrindo(true)}>
+            {ligada ? 'Mudar aquecimento' : 'Configurar aquecimento'}
+          </button>
+          {!ligada && (
+            <span className="ajuda" style={{ marginLeft: 8 }}>
+              Chip novo que começa na quota cheia é o jeito mais rápido de
+              perder o número.
+            </span>
+          )}
+        </p>
+      )}
+      {administra && abrindo && (
+        <div style={{ marginTop: 6 }}>
+          <Campo id={`rampa-dias-${rampa.sender_id}`} rotulo="Dias de envio até a quota"
+                 valor={dias} aoMudar={setDias} mono />
+          <Campo id={`rampa-ini-${rampa.sender_id}`} rotulo="Teto do primeiro dia"
+                 valor={inicial} aoMudar={setInicial} mono
+                 ajuda={`O teto nunca passa de ${rampa.quota_diaria}, que é a quota deste chip: `
+                      + `pedir mais no primeiro dia não aumenta nada. Mudar os parâmetros não `
+                      + `reinicia a rampa — ela continua no dia ${rampa.rampa_dia}.`} />
+          <p style={{ marginTop: 6 }}>
+            <button className="btn mini" disabled={mexendo} onClick={() => void salvar()}>
+              {mexendo ? 'salvando…' : 'Salvar'}
+            </button>
+            {ligada && (
+              <button className="btn mini" style={{ marginLeft: 6, color: 'var(--crit)' }}
+                      disabled={mexendo} onClick={() => void desligar()}>
+                Desligar aquecimento
+              </button>
+            )}
+            <button className="btn mini" style={{ marginLeft: 6 }}
+                    disabled={mexendo} onClick={() => { setAbrindo(false); setErro(''); }}>
+              Cancelar
+            </button>
+          </p>
+        </div>
+      )}
+      {erro && <p style={{ color: 'var(--crit)', fontSize: 11 }}>{erro}</p>}
+    </>
+  );
+}
+
+/** O que a última verificação disse. "Nunca verificada" é dito como tal:
+ *  ausência de resultado não é sucesso, e mostrar nada pareceria "ok". */
+function Verificacao({ conta }: { conta: Remetente }) {
+  if (conta.verificacao_ok === null || !conta.verificado_em) {
+    return <span style={{ color: 'var(--ink-3)' }}>nunca verificada</span>;
+  }
+  const quando = new Date(conta.verificado_em).toLocaleString('pt-BR', {
+    day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit',
+  });
+  return (
+    <span>
+      <strong style={{ color: conta.verificacao_ok ? 'var(--ok)' : 'var(--crit)', fontWeight: 600 }}>
+        {conta.verificacao_ok ? 'ok' : 'falhou'}
+      </strong>
+      {conta.verificacao_detalhe ? ` — ${conta.verificacao_detalhe}` : ''}
+      <span style={{ color: 'var(--ink-3)' }}> · {quando}</span>
+    </span>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Servidores e criação de instância — só no mundo não oficial (D25, D27)
+// ---------------------------------------------------------------------------
+
+function Servidores(props: {
+  provs: ProvedorCanal[]; servidores: Servidor[]; remetentes: Remetente[];
+  administra: boolean; tenant: string; aoMudar(): Promise<void>;
+}) {
+  const hospedam = props.provs.filter((p) => p.tem_adapter);
+  const [f, setF] = useState({ provedor: '', nome: '', baseUrl: '', adminToken: '' });
+  const [estado, setEstado] = useState<'parado' | 'salvando'>('parado');
+  const [msg, setMsg] = useState<{ tipo: 'erro' | 'ok'; texto: string } | null>(null);
+
+  const provedor = f.provedor || hospedam[0]?.slug || '';
+
+  async function salvar(e: React.FormEvent) {
+    e.preventDefault();
+    setMsg(null); setEstado('salvando');
+    try {
+      await salvarServidor({ tenant: props.tenant, provedor, nome: f.nome, baseUrl: f.baseUrl, adminToken: f.adminToken });
+      setMsg({ tipo: 'ok', texto: 'Servidor salvo. O token foi para o Vault.' });
+      setF({ ...f, adminToken: '' });
+      await props.aoMudar();
+    } catch (e2) { setMsg({ tipo: 'erro', texto: mensagemDeErro(e2) }); }
+    finally { setEstado('parado'); }
+  }
+
+  return (
+    <>
+      <Secao titulo="Servidores de instância"
+             nota="a plataforma cria chip novo daqui, sem abrir o painel do provedor" />
+
+      <section className="indice" style={{ marginBottom: 14 }}>
+        {props.servidores.length ? props.servidores.map((s) => {
+          const p = props.provs.find((x) => x.slug === s.provedor);
+          const n = props.remetentes.filter((r) => r.provider_server_id === s.id).length;
+          return (
+            <div key={s.id} className="item" style={{ cursor: 'default' }}>
+              <Icone nome="servidor" />
+              <span className="txt">
+                <b>{s.nome}</b>
+                <p>{p?.nome ?? s.provedor} · <span className="mono">{s.base_url}</span></p>
+                <span className="chips" style={{ marginTop: 6 }}>
+                  <span className="chip">{n} instância(s)</span>
+                  <span className="chip">{s.admin_secret_id ? 'token no Vault' : 'sem token de admin'}</span>
+                </span>
+              </span>
+              <span className={`delta ${s.ativo && s.admin_secret_id ? '' : 'neutra'}`}>
+                {s.ativo ? (s.admin_secret_id ? 'pronto' : 'falta token') : 'inativo'}
+              </span>
+            </div>
+          );
+        }) : (
+          <div className="item" style={{ cursor: 'default' }}><span className="txt">
+            <b>Nenhum servidor conectado</b>
+            <p>Sem servidor, chip novo tem que ser criado no painel do provedor e cadastrado à mão.</p>
+          </span></div>
+        )}
+      </section>
+
+      {props.administra ? (
+        <form className="painel" onSubmit={salvar}>
+          <div className="campo">
+            <label htmlFor="srv-prov">Provedor</label>
+            <select id="srv-prov" value={provedor} onChange={(e) => setF({ ...f, provedor: e.target.value })}>
+              {hospedam.map((p) => <option key={p.slug} value={p.slug}>{p.nome}</option>)}
+            </select>
+          </div>
+          <Campo id="srv-nome" rotulo="Nome do servidor" valor={f.nome}
+                 aoMudar={(v) => setF({ ...f, nome: v })} placeholder="UAZAPI Afinix"
+                 ajuda="Reenviar o mesmo nome edita o servidor em vez de criar outro." />
+          <Campo id="srv-url" rotulo="URL" valor={f.baseUrl} mono
+                 aoMudar={(v) => setF({ ...f, baseUrl: v })} placeholder="https://suaempresa.uazapi.com"
+                 ajuda="Com https://. O banco recusa sem protocolo." />
+          <Campo id="srv-admin" rotulo="Token de administração" tipo="senha" valor={f.adminToken}
+                 aoMudar={(v) => setF({ ...f, adminToken: v })} obrigatorio={false}
+                 vault="Vai direto para o Vault. Em branco na edição, o token guardado fica como está." />
+          {msg && <Aviso tipo={msg.tipo}>{msg.texto}</Aviso>}
+          <button className="btn prim" disabled={estado === 'salvando' || !f.nome || !f.baseUrl}>
+            {estado === 'salvando' ? 'Salvando…' : 'Salvar servidor'}
+          </button>
+        </form>
+      ) : (
+        <Aviso tipo="neutro">Só quem administra o cliente configura provedor.</Aviso>
+      )}
+
+      <CriarInstancia servidores={props.servidores.filter((s) => s.ativo && s.admin_secret_id)}
+                      remetentes={props.remetentes}
+                      administra={props.administra} aoMudar={props.aoMudar} />
+    </>
+  );
+}
+
+function CriarInstancia(props: {
+  servidores: Servidor[]; remetentes: Remetente[]; administra: boolean; aoMudar(): Promise<void>;
+}) {
+  const [f, setF] = useState({ serverId: '', apelido: '', identificador: '', tipo: 'fria' as 'morna' | 'fria', quota: '50' });
+  const [estado, setEstado] = useState<'parado' | 'criando'>('parado');
+  const [msg, setMsg] = useState<{ tipo: 'erro' | 'ok'; texto: string } | null>(null);
+  const [resultado, setResultado] = useState<{ webhook: string; qr: string | null } | null>(null);
+
+  const serverId = f.serverId || props.servidores[0]?.id || '';
+
+  async function criar(e: React.FormEvent) {
+    e.preventDefault();
+    setMsg(null); setResultado(null);
+    // O provedor cria a instância ANTES de o banco gravar a conta; número que
+    // já é chip deste cliente seria uma instância órfã no painel e uma recusa
+    // aqui (D73). A pergunta vem antes de falar com o provedor.
+    const numero = normalizarTelefone(f.identificador);
+    const dono = props.remetentes.find((x) => x.canal === 'whatsapp' && normalizarTelefone(x.identificador) === numero);
+    if (dono) {
+      setMsg({ tipo: 'erro', texto: `${numero} já é o chip "${dono.apelido || dono.identificador}" (${dono.tipo_permitido === 'fria' ? 'lista fria' : 'base própria'}). Um número é um chip só.` });
+      return;
+    }
+    setEstado('criando');
+    const r = await provisionarInstancia({
+      serverId, apelido: f.apelido, identificador: f.identificador,
+      tipo: f.tipo, quota: Number(f.quota) || 1,
+    });
+    setEstado('parado');
+    if (!r.ok) { setMsg({ tipo: 'erro', texto: r.erro ?? 'falha ao criar instância' }); return; }
+    setResultado({ webhook: r.webhook_url ?? '', qr: r.qrcode ?? null });
+    setMsg({ tipo: 'ok', texto: 'Instância criada. Pareie lendo o QR no WhatsApp do chip.' });
+    await props.aoMudar();
+  }
+
+  return (
+    <>
+      <Secao titulo="Criar instância" nota="vira um chip no pool, com quota e webhook próprios" />
+      {!props.servidores.length ? (
+        <p className="vazio">Conecte um servidor com token de administração antes de criar instância.</p>
+      ) : !props.administra ? (
+        <Aviso tipo="neutro">Só quem administra o cliente cria instância.</Aviso>
+      ) : (
+        <form className="painel" onSubmit={criar}>
+          <div className="campo">
+            <label htmlFor="inst-srv">Servidor</label>
+            <select id="inst-srv" value={serverId} onChange={(e) => setF({ ...f, serverId: e.target.value })}>
+              {props.servidores.map((s) => <option key={s.id} value={s.id}>{s.nome}</option>)}
+            </select>
+          </div>
+          <Campo id="inst-apelido" rotulo="Apelido do chip" valor={f.apelido}
+                 aoMudar={(v) => setF({ ...f, apelido: v })} placeholder="Chip frio SP 02"
+                 ajuda="Um número não diz de quem é. O apelido diz." />
+          <Campo id="inst-num" rotulo="Número" valor={f.identificador} mono
+                 aoMudar={(v) => setF({ ...f, identificador: v })} placeholder="5511988880003" />
+          <div className="campo">
+            <label htmlFor="inst-pool">Pool</label>
+            <select id="inst-pool" value={f.tipo}
+                    onChange={(e) => setF({ ...f, tipo: e.target.value as 'morna' | 'fria' })}>
+              <option value="fria">fria — lista sem relação prévia</option>
+              <option value="morna">morna — base própria com opt-in</option>
+            </select>
+            <span className="ajuda">Pool frio nunca usa número institucional (D4).</span>
+          </div>
+          <Campo id="inst-quota" rotulo="Quota diária" valor={f.quota} mono
+                 aoMudar={(v) => setF({ ...f, quota: v })} placeholder="50"
+                 ajuda="Teto por dia desta conta. O banco recusa passar disso." />
+
+          {msg && <Aviso tipo={msg.tipo}>{msg.texto}</Aviso>}
+
+          {resultado && (
+            <div className="qr">
+              {resultado.qr
+                ? <img src={resultado.qr.startsWith('data:') ? resultado.qr : `data:image/png;base64,${resultado.qr}`}
+                       alt="QR code para parear o WhatsApp" />
+                : <p className="vazio">A instância foi criada, mas o QR não veio. Peça de novo pelo painel do provedor.</p>}
+              <p style={{ fontSize: 11.5, color: 'var(--ink-3)', textAlign: 'center', margin: 0 }}>
+                O QR não fica guardado: ele é credencial de sessão de WhatsApp.
+              </p>
+              {resultado.webhook && <Copiar texto={resultado.webhook} />}
+            </div>
+          )}
+
+          <button className="btn prim" disabled={estado === 'criando' || !f.apelido || !f.identificador}>
+            {estado === 'criando' ? 'Criando no provedor…' : 'Criar instância'}
+          </button>
+          <p style={{ fontSize: 11.5, color: 'var(--ink-3)', marginTop: 12 }}>
+            O webhook nasce junto: a instância é criada já apontando para o endpoint dela, então a
+            resposta do contato não se perde na janela entre criar e apontar.
+          </p>
+        </form>
+      )}
+    </>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Conectar conta que já existe no provedor
+// ---------------------------------------------------------------------------
+
+export function ConectarConta(props: {
+  provs: ProvedorCanal[]; canal: string; administra: boolean; tenant: string; aoMudar(): Promise<void>;
+}) {
+  const [slug, setSlug] = useState('');
+  const [valores, setValores] = useState<Record<string, string>>({});
+  const [base, setBase] = useState({ apelido: '', identificador: '', tipo: 'morna' as 'morna' | 'fria', quota: '200' });
+  const [estado, setEstado] = useState<'parado' | 'salvando'>('parado');
+  const [msg, setMsg] = useState<{ tipo: 'erro' | 'ok'; texto: string } | null>(null);
+
+  const p = props.provs.find((x) => x.slug === slug) ?? props.provs[0];
+
+  async function conectar(e: React.FormEvent) {
+    e.preventDefault();
+    if (!p) return;
+    setMsg(null); setEstado('salvando');
+    try {
+      await conectarConta({
+        tenant: props.tenant, canal: props.canal, provedor: p,
+        identificador: base.identificador, apelido: base.apelido,
+        tipo: base.tipo, quota: Number(base.quota) || 1, valores,
+      });
+      setMsg({ tipo: 'ok', texto: 'Conta conectada. O segredo foi para o Vault.' });
+      setValores({}); setBase({ ...base, apelido: '', identificador: '' });
+      await props.aoMudar();
+    } catch (e2) { setMsg({ tipo: 'erro', texto: mensagemDeErro(e2) }); }
+    finally { setEstado('parado'); }
+  }
+
+  if (!p) return null;
+
+  return (
+    <>
+      <Secao titulo="Conectar outra conta" nota="escolha o provedor e os campos certos aparecem" />
+      {!props.administra ? (
+        <Aviso tipo="neutro">Só quem administra o cliente conecta conta.</Aviso>
+      ) : (
+        <form className="painel" onSubmit={conectar}>
+          <div className="opts" style={{ marginBottom: 16 }}>
+            {props.provs.map((x) => (
+              <button key={x.slug} type="button" className="opt" aria-pressed={x.slug === p.slug}
+                      onClick={() => { setSlug(x.slug); setValores({}); }}>
+                <b>{x.nome}</b><p>{x.descricao}</p>
+                {!x.tem_adapter && <span className="chip">sem adapter</span>}
+              </button>
+            ))}
+          </div>
+
+          <Campo id="cc-apelido" rotulo="Apelido da conta" valor={base.apelido}
+                 aoMudar={(v) => setBase({ ...base, apelido: v })} placeholder="Comercial SP" />
+          <Campo id="cc-num" rotulo="Identificador" valor={base.identificador} mono
+                 aoMudar={(v) => setBase({ ...base, identificador: v })}
+                 placeholder={props.canal === 'email' ? 'resgate@suaempresa.com.br' : '5511988880001'} />
+
+          {p.campos.map((c) => (
+            <Campo
+              key={c.chave} id={`cc-${c.chave}`} rotulo={c.rotulo} tipo={c.tipo}
+              valor={valores[c.chave] ?? ''} obrigatorio={c.obrigatorio}
+              aoMudar={(v) => setValores({ ...valores, [c.chave]: v })}
+              ajuda={c.ajuda}
+              vault={c.segredo ? 'Vai para o Vault — o banco recusa gravar este campo em config.' : undefined}
+            />
+          ))}
+
+          <div className="campo">
+            <label htmlFor="cc-pool">Pool</label>
+            <select id="cc-pool" value={base.tipo}
+                    onChange={(e) => setBase({ ...base, tipo: e.target.value as 'morna' | 'fria' })}>
+              <option value="morna">morna — base própria com opt-in</option>
+              <option value="fria">fria — lista sem relação prévia</option>
+            </select>
+          </div>
+          <Campo id="cc-quota" rotulo="Quota diária" valor={base.quota} mono
+                 aoMudar={(v) => setBase({ ...base, quota: v })} placeholder="200" />
+
+          {msg && <Aviso tipo={msg.tipo}>{msg.texto}</Aviso>}
+          {!p.tem_adapter && (
+            <Aviso tipo="neutro">
+              {p.nome} ainda não tem adapter: a conta é cadastrada, mas não envia.
+            </Aviso>
+          )}
+          <button className="btn prim" disabled={estado === 'salvando' || !base.identificador}>
+            {estado === 'salvando' ? 'Conectando…' : 'Conectar conta'}
+          </button>
+        </form>
+      )}
+    </>
+  );
+}

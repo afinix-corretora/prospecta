@@ -1,0 +1,816 @@
+/* Identidade do Prospecta.
+ *
+ * Vem da referência escolhida pelo usuário (projeto "Dashboard", Behance):
+ * Anek Latin nos títulos e números, Roboto na interface, neutros carvão e
+ * lavanda, índigo e periwinkle como acento, menta para o que deu certo, item
+ * ativo como pílula preenchida, blobs desfocados atrás dos cartões.
+ *
+ * Escuro é o padrão (decisão do usuário); o claro é escolha de cada pessoa e
+ * fica guardado em `prospecta:tema`. Os nomes dos tokens são os de antes —
+ * as telas usam `var(--ink-3)` etc. em estilo inline, e trocar nome seria
+ * quebrar tela em silêncio.
+ *
+ * Cores de gráfico (`--g-*`) foram conferidas pelo validador de paleta nos
+ * dois temas: faixa de luminosidade, croma, separação para daltonismo e
+ * contraste contra o cartão. A menta da marca (#3DF5A8) é clara demais para
+ * preencher área no escuro, então ela mora na interface e o gráfico usa a
+ * menta conferida.
+ */
+
+:root, :root[data-theme="dark"] {
+  color-scheme: dark;
+  --ground:#0D0D12; --rail:#121218; --surface:#1A1A21; --surface-2:#23232C; --surface-3:#2D2D38;
+  --field:#14141A;
+  --line:#2A2A34; --line-strong:#3C3C4A;
+  --ink:#F4F2FA; --ink-2:#AEADBF; --ink-3:#8C8BA0;
+  --accent:#8E8BFF; --accent-ink:#12112B; --accent-soft:rgba(142,139,255,.14); --accent-line:rgba(142,139,255,.45);
+  --pill:#3A37C9; --pill-ink:#FFFFFF;
+  --mint:#3DF5A8;
+  --ok:#3DF5A8; --ok-ink:#052618; --ok-soft:rgba(61,245,168,.12);
+  --warn:#F2B35B; --warn-soft:rgba(242,179,91,.13); --crit:#FF8C7D; --crit-soft:rgba(255,140,125,.13);
+  --wa:#16A873; --mail:#7D79F2; --sms:#BF822A; --ig:#C760A6;
+  --g-1:#16A873; --g-2:#7D79F2; --g-3:#BF822A; --g-4:#C760A6;
+  --g-grid:rgba(255,255,255,.06);
+  --blob-1:rgba(98,92,235,.30); --blob-2:rgba(61,245,168,.09);
+  --shadow:0 1px 0 rgba(255,255,255,.03) inset, 0 18px 40px -24px rgba(0,0,0,.8);
+  --shadow-pop:0 20px 50px -18px rgba(0,0,0,.85), 0 0 0 1px var(--line);
+}
+:root[data-theme="light"] {
+  color-scheme: light;
+  --ground:#F4F0FA; --rail:#FFFFFF; --surface:#FFFFFF; --surface-2:#F3EEF8; --surface-3:#E9E2F1;
+  --field:#FBF9FD;
+  --line:#E7E0EF; --line-strong:#CFC5DC;
+  --ink:#15141B; --ink-2:#55536A; --ink-3:#67657C;
+  --accent:#3A37C9; --accent-ink:#FFFFFF; --accent-soft:#ECEBFF; --accent-line:rgba(58,55,201,.35);
+  --pill:#3DF5A8; --pill-ink:#06291B;
+  --mint:#3DF5A8;
+  --ok:#07744A; --ok-ink:#FFFFFF; --ok-soft:#DDF7EA;
+  --warn:#8F5E05; --warn-soft:#FBEFD6; --crit:#B3392A; --crit-soft:#FCE3DF;
+  /* Canal no claro também vira texto (nome do canal, iniciais): tons que
+     passam de 4,5:1 sobre o cartão. O gráfico usa `--g-*`, conferidos. */
+  --wa:#07744A; --mail:#4F4BD8; --sms:#9A5A0C; --ig:#B0418A;
+  --g-1:#0E9C64; --g-2:#4F4BD8; --g-3:#B26A12; --g-4:#B0418A;
+  --g-grid:rgba(21,20,27,.07);
+  --blob-1:rgba(140,135,255,.30); --blob-2:rgba(61,245,168,.20);
+  --shadow:0 1px 2px rgba(40,30,70,.04), 0 12px 32px -18px rgba(40,30,70,.22);
+  --shadow-pop:0 18px 44px -14px rgba(40,30,70,.30), 0 0 0 1px var(--line);
+}
+
+:root {
+  --display: "Anek Latin Variable", "Anek Latin", "Roboto Variable", system-ui, sans-serif;
+  --ui: "Roboto Variable", Roboto, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --code: "Roboto Mono Variable", "Roboto Mono", ui-monospace, monospace;
+  --r:18px; --r-md:14px; --r-sm:12px; --r-xs:9px;
+  --ease: cubic-bezier(.22,1,.36,1);
+  --rail-w: 248px;
+}
+
+* { box-sizing: border-box }
+/* `.sec` e `.indice` declaram display, e display vence o atributo hidden. */
+[hidden] { display: none !important }
+html, body, #raiz { height: 100% }
+body {
+  margin: 0; background: var(--ground); color: var(--ink);
+  font-family: var(--ui); font-size: 14px; line-height: 1.5;
+  -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility;
+  caret-color: var(--accent);
+}
+::selection { background: var(--accent-soft); color: var(--ink) }
+h1, h2, h3 {
+  font-family: var(--display); margin: 0; text-wrap: balance; letter-spacing: -.01em;
+  font-stretch: 96%;
+}
+h1 { font-weight: 600; font-size: 30px; line-height: 1.12 }
+h2 { font-weight: 600 }
+.mono { font-family: var(--code); font-variant-numeric: tabular-nums; font-size: .94em }
+code { font-family: var(--code); font-size: .92em }
+button { font: inherit; color: inherit; background: none; border: none; cursor: pointer }
+a { color: var(--accent); text-underline-offset: 3px; text-decoration-thickness: 1px }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 6px }
+
+/* Barras de rolagem no tom do tema — a parte que ninguém desenha e todo
+   mundo vê. */
+* { scrollbar-width: thin; scrollbar-color: var(--line-strong) transparent }
+::-webkit-scrollbar { width: 10px; height: 10px }
+::-webkit-scrollbar-thumb { background: var(--line-strong); border-radius: 99px; border: 3px solid transparent; background-clip: padding-box }
+::-webkit-scrollbar-track { background: transparent }
+
+/* Blobs do fundo, como na referência: atrás de tudo, sem capturar clique.
+   Aparecem nas calhas entre os cartões, que são opacos. */
+body::before, body::after {
+  content: ""; position: fixed; z-index: -1; border-radius: 50%;
+  filter: blur(110px); pointer-events: none;
+}
+body::before { width: 52vw; height: 52vw; right: -16vw; top: -22vw; background: var(--blob-1) }
+body::after { width: 40vw; height: 40vw; left: 8vw; bottom: -24vw; background: var(--blob-2) }
+
+/* ---------------------------------------------------------------------------
+   Casca
+--------------------------------------------------------------------------- */
+.shell { display: grid; grid-template-columns: var(--rail-w) minmax(0, 1fr); min-height: 100% }
+main { min-width: 0 }
+
+.rail {
+  background: var(--rail); border-right: 1px solid var(--line);
+  padding: 20px 14px 16px; display: flex; flex-direction: column; gap: 20px;
+  position: sticky; top: 0; align-self: start; height: 100vh; overflow-y: auto;
+}
+.brand { display: flex; align-items: center; gap: 11px; padding: 2px 8px 6px; color: var(--ink); text-decoration: none }
+.brand svg { width: 34px; height: 34px; flex: none }
+.brand > span { text-align: left }
+.brand b { display: block; color: var(--ink); font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -.01em; font-stretch: 92%; line-height: 1 }
+.brand span { display: block; font-size: 11.5px; color: var(--ink-3); margin-top: 3px; letter-spacing: .01em }
+
+.nav { display: flex; flex-direction: column; gap: 2px }
+.nav + .nav { padding-top: 14px; border-top: 1px solid var(--line) }
+.nav button {
+  display: flex; align-items: center; gap: 12px; padding: 0 12px; height: 40px;
+  border-radius: 12px; color: var(--ink-2); font-size: 14px; text-align: left; width: 100%;
+  transition: background-color .16s var(--ease), color .16s var(--ease);
+}
+.nav button > svg.i { width: 19px; height: 19px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; opacity: .9 }
+.nav button > span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
+.nav button:hover { background: var(--surface-2); color: var(--ink) }
+.nav button[aria-current="true"] { background: var(--pill); color: var(--pill-ink); font-weight: 600 }
+.nav button[aria-current="true"] > svg.i { opacity: 1 }
+.nav .conta {
+  margin-left: auto; min-width: 22px; height: 20px; padding: 0 7px; border-radius: 99px; flex: none;
+  display: grid; place-items: center; font-size: 11.5px; font-weight: 600; font-variant-numeric: tabular-nums;
+  background: var(--accent-soft); color: var(--accent);
+}
+.nav button[aria-current="true"] .conta { background: rgba(255,255,255,.22); color: inherit }
+.nav .chev { width: 15px; height: 15px; flex: none; transition: transform .2s var(--ease); color: var(--ink-3) }
+.nav .grupo[aria-expanded="true"] .chev { transform: rotate(90deg) }
+.nav .grupo[aria-current="true"] .chev { color: inherit }
+
+.sub, .sub2 { display: grid; grid-template-rows: 0fr; transition: grid-template-rows .22s var(--ease) }
+.sub[data-aberto="true"], .sub2[data-aberto="true"] { grid-template-rows: 1fr }
+.sub > div, .sub2 > div { overflow: hidden }
+.sub button, .sub2 button { height: 34px; font-size: 13.5px; padding: 0 10px 0 43px; position: relative; color: var(--ink-3) }
+.sub2 button { padding-left: 55px; font-size: 13px }
+.sub button::before, .sub2 button::before {
+  content: ""; position: absolute; left: 21px; top: 0; bottom: 0; width: 1px; background: var(--line);
+}
+.sub2 button::before { left: 33px }
+.sub button[aria-current="true"], .sub2 button[aria-current="true"] { background: var(--surface-2); color: var(--ink); font-weight: 600 }
+.sub button[aria-current="true"]::before, .sub2 button[aria-current="true"]::before { background: var(--accent); width: 2px; left: 20.5px; top: 8px; bottom: 8px; border-radius: 2px }
+.sub2 button[aria-current="true"]::before { left: 32.5px }
+.sub .grupo2 { justify-content: space-between }
+.sub .grupo2 .chev { width: 13px; height: 13px }
+
+.railfoot { margin-top: auto; display: grid; gap: 10px; padding-top: 14px; border-top: 1px solid var(--line) }
+.quem { display: flex; align-items: center; gap: 10px; padding: 0 6px; min-width: 0 }
+.avatar {
+  width: 34px; height: 34px; border-radius: 50%; flex: none; display: grid; place-items: center;
+  background: var(--accent-soft); color: var(--accent); font-family: var(--display); font-weight: 600; font-size: 15px;
+}
+.quem div { min-width: 0; line-height: 1.3 }
+.quem b { display: block; font-size: 13.5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis }
+.quem small { display: block; font-size: 12px; color: var(--ink-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis }
+.railfoot .campo { margin: 0; padding: 0 6px }
+.railfoot .acoes-rail { display: flex; gap: 6px; padding: 0 2px }
+.acoes-rail button {
+  flex: 1; height: 36px; border-radius: 11px; border: 1px solid var(--line);
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  font-size: 13px; color: var(--ink-2); transition: background-color .16s var(--ease), color .16s var(--ease);
+}
+.acoes-rail button:hover { background: var(--surface-2); color: var(--ink) }
+.acoes-rail svg { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round }
+
+/* Barra do topo: busca e atalhos. Fica presa ao rolar e deixa o conteúdo
+   passar por baixo — o desfoque aqui tem função, separa o que rola do que
+   fica. */
+.topo {
+  position: sticky; top: 0; z-index: 20; height: 68px;
+  display: flex; align-items: center; gap: 14px; padding: 0 30px;
+  background: color-mix(in oklab, var(--ground) 78%, transparent);
+  backdrop-filter: blur(14px) saturate(1.2); -webkit-backdrop-filter: blur(14px) saturate(1.2);
+  border-bottom: 1px solid color-mix(in oklab, var(--line) 60%, transparent);
+}
+.topo .menu, .topo .marca-topo { display: none }
+.topo form { flex: 0 1 380px; position: relative }
+.topo form svg { position: absolute; left: 13px; top: 50%; width: 17px; height: 17px; translate: 0 -50%; color: var(--ink-3); fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; pointer-events: none }
+.topo input {
+  width: 100%; height: 40px; border-radius: 12px; border: 1px solid var(--line);
+  background: var(--surface); color: var(--ink); font: inherit; font-size: 13.5px; padding: 0 14px 0 38px;
+  transition: border-color .16s var(--ease), box-shadow .16s var(--ease);
+}
+.topo input::placeholder { color: var(--ink-3) }
+.topo input:focus { outline: none; border-color: var(--accent-line); box-shadow: 0 0 0 4px var(--accent-soft) }
+.topo .dir { margin-left: auto; display: flex; align-items: center; gap: 8px }
+.icobtn {
+  width: 40px; height: 40px; border-radius: 12px; display: grid; place-items: center; flex: none;
+  border: 1px solid var(--line); background: var(--surface); color: var(--ink-2);
+  transition: background-color .16s var(--ease), color .16s var(--ease), border-color .16s var(--ease);
+}
+.icobtn:hover { color: var(--ink); border-color: var(--line-strong) }
+.icobtn svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round }
+.topo .cliente { margin-left: 2px; cursor: default }
+
+.veu { display: none }
+
+/* Largura pelo tipo de página: formulário, configuração e leitura ficam numa
+   coluna que o olho percorre; quadro, tabela e painel usam a largura toda. */
+.wrap { max-width: 1000px; padding: 28px 30px 72px }
+.wrap.larga { max-width: 1240px }
+
+/* Ritmo vertical numa regra só, em degraus de 4px: 16 entre blocos irmãos,
+   24 do cabeçalho ao conteúdo, 40 antes de uma seção e 12 dela ao que ela
+   abre. Antes era uma lista de pares vizinhos, e o par que faltava deixava
+   dois blocos colados. */
+/* `:not(:first-child)` dá peso à regra: classe sozinha declarada depois
+   (.indice, .aviso) não a desfaz em silêncio. */
+.wrap > :not(:first-child) { margin-top: 16px }
+.cabeca { display: flex; align-items: flex-end; gap: 18px; margin: 0 0 24px; flex-wrap: wrap }
+.wrap > .cabeca + *, .wrap > .ola + * { margin-top: 0 }
+.cabeca > div:first-child { min-width: 0; flex: 1 1 420px }
+.cabeca p { margin: 8px 0 0; color: var(--ink-2); max-width: 70ch; font-size: 14.5px }
+.cabeca .cta { margin-left: auto; display: flex; gap: 8px }
+.voltar {
+  margin-left: -8px;
+  display: inline-flex; align-items: center; gap: 6px; font-size: 13px;
+  color: var(--ink-3); margin-bottom: 12px; padding: 6px 10px 6px 8px; border-radius: 10px; font-weight: 500;
+  transition: background-color .16s var(--ease), color .16s var(--ease);
+}
+.voltar:hover { background: var(--surface-2); color: var(--ink) }
+.voltar svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round }
+
+.sec { display: flex; align-items: baseline; gap: 12px; margin: 40px 0 12px; flex-wrap: wrap }
+.wrap > .sec { margin: 40px 0 12px }
+.wrap > .sec + * { margin-top: 0 }
+.wrap > .sec:first-child, .wrap > .cabeca + .sec { margin-top: 0 }
+.sec h2 { font-size: 19px; font-weight: 600 }
+.sec span { font-size: 13px; color: var(--ink-3) }
+
+/* ---------------------------------------------------------------------------
+   Blocos
+--------------------------------------------------------------------------- */
+.kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px }
+.kpi {
+  background: var(--surface); border: 1px solid var(--line); border-radius: var(--r);
+  padding: 18px 18px 16px; box-shadow: var(--shadow); min-width: 0;
+  display: flex; flex-direction: column;
+}
+.kpi .r { font-size: 13.5px; color: var(--ink-2); font-weight: 600 }
+.kpi b {
+  font-family: var(--display); font-size: 30px; font-weight: 600; font-stretch: 92%;
+  letter-spacing: -.02em; line-height: 1.05; display: block; margin: 10px 0 4px;
+  font-variant-numeric: tabular-nums; overflow-wrap: anywhere;
+}
+.kpi .s { font-size: 12.5px; color: var(--ink-3) }
+
+.indice { display: grid; gap: 10px }
+/* Linha de "ainda não há nada": tracejada, sem sombra e sem fundo, para não
+   parecer um item que se clica. */
+div.item:not(:has(.ico)) { border-style: dashed; border-color: var(--line-strong); background: transparent; box-shadow: none }
+.item {
+  display: flex; align-items: center; gap: 15px; width: 100%; text-align: left;
+  background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-md);
+  padding: 15px 16px; color: inherit; min-width: 0;
+  transition: border-color .16s var(--ease), background-color .16s var(--ease);
+}
+button.item:hover { border-color: var(--line-strong); background: color-mix(in oklab, var(--surface) 70%, var(--surface-2)) }
+button.item:hover .seta { color: var(--ink); translate: 2px 0 }
+.item .ico {
+  width: 42px; height: 42px; flex: none; border-radius: 13px; display: grid; place-items: center;
+  background: var(--surface-2); color: var(--ink-2);
+}
+.item .ico svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.7 }
+.item .txt { min-width: 0; flex: 1 }
+.item .txt b {
+  display: block; font-family: var(--display); font-stretch: 96%;
+  font-size: 16.5px; font-weight: 600; letter-spacing: -.005em; line-height: 1.25;
+}
+.item .txt p { margin: 3px 0 0; font-size: 13px; color: var(--ink-3); line-height: 1.45 }
+.item .cont { font-size: 12.5px; color: var(--ink-3); flex: none; font-variant-numeric: tabular-nums }
+.item .seta { width: 17px; height: 17px; flex: none; color: var(--ink-3); fill: none; stroke: currentColor; stroke-width: 1.8; transition: translate .2s var(--ease), color .16s var(--ease) }
+
+.delta {
+  display: inline-flex; align-items: center; gap: 3px; font-size: 12px; font-weight: 600;
+  padding: 2px 8px; border-radius: 999px; background: var(--ok-soft); color: var(--ok);
+  font-variant-numeric: tabular-nums; flex: none; white-space: nowrap;
+}
+.delta svg { width: 11px; height: 11px; fill: none; stroke: currentColor; stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round }
+.delta.baixa { background: var(--crit-soft); color: var(--crit) }
+.delta.neutra { background: var(--surface-2); color: var(--ink-3) }
+
+.chips { display: flex; flex-wrap: wrap; gap: 6px }
+.chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 12px; padding: 3px 10px; border-radius: 999px; line-height: 1.5;
+  background: var(--surface-2); color: var(--ink-2); font-weight: 500;
+}
+.chip.ok { background: var(--ok-soft); color: var(--ok) }
+.chip.alerta { background: var(--warn-soft); color: var(--warn) }
+.chip.erro { background: var(--crit-soft); color: var(--crit) }
+.chip.acento { background: var(--accent-soft); color: var(--accent) }
+.ponto { width: 8px; height: 8px; border-radius: 50%; background: currentColor; flex: none; display: inline-block }
+
+.painel {
+  background: var(--surface); border: 1px solid var(--line); border-radius: var(--r);
+  padding: 20px; box-shadow: var(--shadow); min-width: 0;
+}
+.painel .aviso { margin: 12px 0 }
+.painel > :first-child { margin-top: 0 }
+.painel > :last-child { margin-bottom: 0 }
+.painel p { max-width: 80ch }
+.painel > .btn, .painel > .campo + .btn { margin-top: 4px }
+
+/* Busca de lista: uma ferramenta, não um cartão. */
+.ferramenta { display: grid; gap: 6px }
+.ferramenta .busca { max-width: 440px }
+.ferramenta p { margin: 0; font-size: 12.5px; color: var(--ink-3) }
+.opts { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px }
+.opt {
+  border: 1px solid var(--line); border-radius: var(--r-sm); padding: 13px 14px;
+  text-align: left; background: var(--surface); position: relative; min-width: 0;
+  display: flex; flex-direction: column; justify-content: flex-start; align-items: stretch;
+  transition: border-color .16s var(--ease), background-color .16s var(--ease);
+}
+.opt:hover { border-color: var(--line-strong); background: var(--surface-2) }
+.opt[aria-pressed="true"] { border-color: var(--accent-line); background: var(--accent-soft); box-shadow: 0 0 0 1px var(--accent-line) inset }
+.opt b { display: block; font-size: 14px; font-weight: 600 }
+.opt p { margin: 4px 0 0; font-size: 12.5px; color: var(--ink-3); line-height: 1.45; overflow-wrap: anywhere }
+
+.campo { display: flex; flex-direction: column; gap: 6px; margin-bottom: 16px; max-width: 640px }
+.campo:has(textarea) { max-width: none }
+.campo label { font-size: 13px; font-weight: 600; color: var(--ink) }
+.campo input, .campo select, .campo textarea, .busca {
+  border: 1px solid var(--line); border-radius: var(--r-sm); padding: 0 13px; height: 42px;
+  font: inherit; font-size: 14px; background: var(--field); color: var(--ink); width: 100%;
+  transition: border-color .16s var(--ease), box-shadow .16s var(--ease);
+}
+.campo textarea { height: auto; padding: 11px 13px; resize: vertical; min-height: 76px; line-height: 1.5 }
+.campo input::placeholder, .campo textarea::placeholder, .busca::placeholder { color: var(--ink-3) }
+.campo input:hover, .campo select:hover, .campo textarea:hover, .busca:hover { border-color: var(--line-strong) }
+.campo input:focus, .campo select:focus, .campo textarea:focus, .busca:focus {
+  outline: none; border-color: var(--accent-line); box-shadow: 0 0 0 4px var(--accent-soft);
+}
+/* Sem isto o select fica com o cromo do sistema por cima do tema. */
+.campo select {
+  appearance: none; cursor: pointer; padding-right: 36px;
+  background-image: linear-gradient(45deg, transparent 50%, currentColor 50%),
+                    linear-gradient(135deg, currentColor 50%, transparent 50%);
+  background-position: calc(100% - 19px) 52%, calc(100% - 14px) 52%;
+  background-size: 5px 5px, 5px 5px; background-repeat: no-repeat;
+}
+.campo select option { background: var(--surface); color: var(--ink) }
+.campo .ajuda { font-size: 12.5px; color: var(--ink-3); line-height: 1.45 }
+.campo .vault { font-size: 12.5px; color: var(--accent) }
+input[type="checkbox"], input[type="radio"] { accent-color: var(--accent); width: 16px; height: 16px }
+
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  min-height: 40px; border: 1px solid var(--line-strong); border-radius: var(--r-sm); padding: 0 16px;
+  font-weight: 600; font-size: 13.5px; background: var(--surface); color: var(--ink); white-space: nowrap;
+  transition: background-color .16s var(--ease), border-color .16s var(--ease), filter .16s var(--ease), transform .12s var(--ease);
+}
+.btn:hover { background: var(--surface-2) }
+.btn:active { transform: translateY(1px) }
+.btn.prim { background: var(--accent); border-color: transparent; color: var(--accent-ink) }
+.btn.prim:hover { filter: brightness(1.08); background: var(--accent) }
+.btn.mini { min-height: 32px; padding: 0 11px; font-size: 12.5px; border-radius: var(--r-xs); gap: 6px }
+.btn.mini + .btn.mini { margin-left: 6px }
+.btn[disabled] { opacity: .5; cursor: not-allowed; transform: none; filter: none }
+.btn svg { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round }
+.link { background: none; border: 0; padding: 0; color: var(--accent); cursor: pointer; text-decoration: underline; text-underline-offset: 3px; font: inherit }
+
+.copiar {
+  font-size: 12px; color: var(--ink-2); background: var(--surface-2);
+  border: 1px solid var(--line); border-radius: 8px; padding: 3px 8px; cursor: pointer;
+  max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: middle;
+  transition: border-color .16s var(--ease), color .16s var(--ease);
+}
+.copiar:hover { border-color: var(--line-strong); color: var(--ink) }
+.copiar.ok { background: var(--ok-soft); color: var(--ok); border-color: transparent }
+
+.aviso {
+  border-radius: var(--r-sm); padding: 12px 14px; font-size: 13.5px; margin: 0; line-height: 1.5;
+  border: 1px solid transparent;
+}
+.aviso.erro { background: var(--crit-soft); color: var(--crit); border-color: color-mix(in oklab, var(--crit) 25%, transparent) }
+.aviso.ok { background: var(--ok-soft); color: var(--ok); border-color: color-mix(in oklab, var(--ok) 22%, transparent) }
+.aviso.neutro { background: var(--surface-2); color: var(--ink-2); border-color: var(--line) }
+.aviso b { color: inherit }
+
+.vazio { color: var(--ink-3); font-size: 13.5px }
+
+/* ---------------------------------------------------------------------------
+   Entrar
+--------------------------------------------------------------------------- */
+.entrar { min-height: 100%; display: grid; place-items: center; padding: 24px }
+.entrar form, .entrar > .painel {
+  width: min(400px, 100%); background: var(--surface); border: 1px solid var(--line);
+  border-radius: 22px; padding: 30px; box-shadow: var(--shadow-pop);
+}
+.entrar > .painel { width: min(520px, 100%) }
+.entrar .selo { display: flex; align-items: center; gap: 10px; margin-bottom: 26px }
+.entrar .selo svg { width: 34px; height: 34px }
+.entrar .selo b { font-family: var(--display); font-size: 21px; font-weight: 600; font-stretch: 92% }
+.entrar h1 { font-size: 25px; margin-bottom: 6px }
+.entrar > form > p { color: var(--ink-2); font-size: 14px; margin: 0 0 22px }
+/* O endereço de retorno do link de acesso. Discreto quando está certo — e é a
+   única pista quando o problema mora na lista do Supabase (D50). */
+.entrar .nota-retorno {
+  color: var(--ink-3); font-size: 12.5px; line-height: 1.5;
+  margin: 14px 0 0; padding: 10px 12px;
+  border: 1px solid var(--line); border-radius: var(--r-sm);
+}
+.entrar .nota-retorno code { word-break: break-all }
+.entrar .btn.prim { width: 100%; min-height: 44px }
+.entrar .troca-modo { margin: 16px 0 0; text-align: center; font-size: 13px }
+.entrar button.link { color: var(--accent) }
+
+.qr { display: grid; gap: 10px; justify-items: center; padding: 16px; background: var(--surface-2); border-radius: var(--r-sm) }
+.qr img { width: 220px; height: 220px; image-rendering: pixelated; border-radius: 10px; background: #fff }
+
+/* Tabelas: conferência da importação, contatos, writeback. */
+.tab { width: 100%; border-collapse: collapse; font-size: 13.5px; margin-top: 10px; font-variant-numeric: tabular-nums }
+.tab th {
+  text-align: left; font-weight: 600; color: var(--ink-3); font-size: 12px;
+  padding: 0 12px 10px 0; border-bottom: 1px solid var(--line); white-space: nowrap;
+}
+.tab td {
+  padding: 11px 12px 11px 0; border-bottom: 1px solid var(--line);
+  vertical-align: top; color: var(--ink-2);
+}
+.tab tbody tr { transition: background-color .12s var(--ease) }
+.tab tbody tr:hover td { background: color-mix(in oklab, var(--surface-2) 55%, transparent) }
+.tab tr:last-child td { border-bottom: 0 }
+.tab td:first-child { color: var(--ink-3); white-space: nowrap; width: 1% }
+.tab td input[type="checkbox"] { margin: 2px 0 0 }
+.painel > .tab { width: calc(100% + 40px); margin-inline: -20px }
+.painel > .tab th:first-child, .painel > .tab td:first-child { padding-left: 20px }
+.painel > .tab th:last-child, .painel > .tab td:last-child { padding-right: 20px }
+
+
+/* Cinco KPIs não cabem na largura mínima padrão — sobraria um sozinho. */
+.kpis.cinco { grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)) }
+
+/* ---------------------------------------------------------------------------
+   Funil (D57) — colunas roláveis, cards arrastáveis, e um seletor de destino
+   em todo card, que é o que funciona no celular e no teclado.
+--------------------------------------------------------------------------- */
+.kanban { display: flex; gap: 14px; overflow-x: auto; padding-bottom: 12px; align-items: flex-start }
+.kanban .coluna {
+  flex: 0 0 264px; background: color-mix(in oklab, var(--surface) 55%, transparent);
+  border: 1px solid var(--line); border-radius: var(--r); padding: 12px;
+  min-height: 140px; transition: border-color .16s var(--ease), background-color .16s var(--ease);
+}
+.kanban .coluna[data-sobre="true"] { border-color: var(--accent-line); background: var(--accent-soft) }
+.kanban .coluna-topo { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 2px 4px }
+.kanban .coluna-topo b { font-family: var(--display); font-size: 15.5px; font-weight: 600; font-stretch: 96% }
+.kanban .coluna-nota { font-size: 12px; color: var(--ink-3); margin: 4px 4px 12px }
+.kanban .coluna-vazia {
+  font-size: 12.5px; color: var(--ink-3);
+  border: 1px dashed var(--line-strong); border-radius: var(--r-sm); padding: 12px; margin: 0;
+}
+.kanban .card {
+  background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-md);
+  padding: 12px; margin-bottom: 9px; cursor: grab; box-shadow: var(--shadow);
+  transition: border-color .16s var(--ease), translate .16s var(--ease);
+}
+.kanban .card:hover { border-color: var(--line-strong) }
+.kanban .card:active { cursor: grabbing }
+.kanban .card b { display: block; font-size: 14px; color: var(--ink) }
+.kanban .card-campanha {
+  display: inline-block; font-size: 11.5px; color: var(--ok);
+  background: var(--ok-soft); border-radius: 999px; padding: 1px 8px; margin-top: 6px;
+}
+.kanban .card-rodape { display: block; font-size: 12px; color: var(--ink-3); margin-top: 6px }
+.kanban .card-mover {
+  width: 100%; margin-top: 9px; font: inherit; font-size: 12.5px; height: 32px; padding: 0 28px 0 9px;
+  border: 1px solid var(--line); border-radius: 9px; background-color: var(--field); color: var(--ink-2);
+  appearance: none; cursor: pointer;
+  background-image: linear-gradient(45deg, transparent 50%, currentColor 50%),
+                    linear-gradient(135deg, currentColor 50%, transparent 50%);
+  background-position: calc(100% - 15px) 52%, calc(100% - 10px) 52%;
+  background-size: 5px 5px, 5px 5px; background-repeat: no-repeat;
+}
+.kanban { mask-image: linear-gradient(90deg, #000 calc(100% - 40px), transparent) }
+
+/* ---------------------------------------------------------------------------
+   Assistente de configuração (D67): balões à esquerda e à direita, e o plano
+   como pilha de cartões, cada um com o que vai fazer ANTES do botão.
+--------------------------------------------------------------------------- */
+.marca {
+  width: 24px; height: 24px; flex: none; border-radius: 999px; display: grid; place-items: center;
+  border: 1.5px solid var(--line-strong); font-size: 12px; font-weight: 700; color: var(--ok-ink);
+}
+.marca.ok { background: var(--ok); border-color: transparent }
+.marca svg, .cartao-cabeca .num svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round }
+.conversa { display: grid; gap: 16px }
+.troca { display: grid; gap: 9px }
+.balao {
+  max-width: min(660px, 92%); padding: 12px 16px; border-radius: 18px; font-size: 14px; line-height: 1.5;
+}
+.balao.ass { background: var(--surface-2); border-top-left-radius: 6px; justify-self: start }
+.balao.pes {
+  background: var(--accent-soft); border-top-right-radius: 6px; justify-self: end;
+  display: flex; gap: 12px; align-items: baseline; border: 1px solid var(--accent-line);
+}
+.balao.pes .link { font-size: 12.5px }
+.ajuda-balao { margin: 6px 0 0; font-size: 12.5px; color: var(--ink-3) }
+.painel.resposta { max-width: 780px }
+.opt[disabled] { opacity: .55; cursor: not-allowed }
+.opt[disabled]:hover { border-color: var(--line); background: var(--surface) }
+.opt b .chip { margin-left: 8px; background: var(--ok-soft); color: var(--ok) }
+.cartoes { display: grid; gap: 12px; margin-top: 14px }
+.cartao.feito { border-color: color-mix(in oklab, var(--ok) 45%, transparent) }
+.cartao.pulado { opacity: .65 }
+.cartao-cabeca { display: flex; align-items: center; gap: 12px }
+.cartao-cabeca b { flex: 1; font-size: 15px; font-family: var(--display); font-weight: 600; font-stretch: 96% }
+.cartao-cabeca .num {
+  width: 28px; height: 28px; border-radius: 999px; display: grid; place-items: center; flex: none;
+  background: var(--surface-2); font-size: 12.5px; font-weight: 600; font-variant-numeric: tabular-nums;
+}
+.cartao.feito .num { background: var(--ok); color: var(--ok-ink) }
+.cartao .se { margin: 14px 0 6px; font-size: 13px; color: var(--ink-3); font-weight: 600 }
+.cartao .efeitos { margin: 0 0 14px; padding-left: 18px; font-size: 13.5px; color: var(--ink-2); line-height: 1.6 }
+.cartao .resultado { margin: 10px 0; font-size: 13.5px; color: var(--ink-2) }
+.acoes-cartao { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 14px }
+.sec .link { font-size: 13px; color: var(--accent) }
+
+/* ---------------------------------------------------------------------------
+   Painel de resultados (Início)
+--------------------------------------------------------------------------- */
+.ola { display: flex; align-items: flex-end; gap: 16px; margin-bottom: 24px; flex-wrap: wrap }
+.ola > div:first-child { flex: 1 1 360px; min-width: 0 }
+.ola h1 { font-size: 34px; font-stretch: 90% }
+.ola p { margin: 6px 0 0; color: var(--ink-2); font-size: 14.5px }
+
+.segmento {
+  display: inline-flex; padding: 4px; border-radius: 13px; gap: 2px;
+  background: var(--surface); border: 1px solid var(--line);
+}
+.segmento button {
+  height: 32px; padding: 0 13px; border-radius: 9px; font-size: 13px; font-weight: 600; color: var(--ink-3);
+  transition: background-color .16s var(--ease), color .16s var(--ease);
+}
+.segmento button:hover { color: var(--ink) }
+.segmento button[aria-pressed="true"] { background: var(--surface-3); color: var(--ink) }
+
+.faixa-modo {
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  border-radius: var(--r-md); padding: 12px 16px;
+  background: var(--warn-soft); color: var(--warn); font-size: 13.5px;
+  border: 1px solid color-mix(in oklab, var(--warn) 28%, transparent);
+}
+.faixa-modo svg { width: 18px; height: 18px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round }
+.faixa-modo p { margin: 0; flex: 1 1 320px }
+
+.grade { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 16px }
+.grade > * { grid-column: span 12; margin: 0 !important }
+.c8 { grid-column: span 8 !important } .c4 { grid-column: span 4 !important }
+.c6 { grid-column: span 6 !important } .c3 { grid-column: span 3 !important } .c5 { grid-column: span 5 !important } .c7 { grid-column: span 7 !important }
+
+.bloco { display: flex; flex-direction: column; gap: 14px }
+.bloco-topo { display: flex; align-items: flex-start; gap: 12px; flex-wrap: wrap }
+.bloco-topo > div:not(.legenda) { flex: 1 1 200px; min-width: 0 }
+.bloco-topo h2 { font-size: 17.5px; line-height: 1.25 }
+.bloco-topo p { margin: 3px 0 0; font-size: 12.5px; color: var(--ink-3) }
+.bloco-topo .link { font-size: 13px; text-decoration: none; font-weight: 600; flex: none; margin-top: 2px }
+.bloco-topo .link:hover { text-decoration: underline }
+
+/* KPI com tendência: rótulo e número em cima, curva da série embaixo,
+   encostada na borda do cartão como na referência. */
+.kpi.serie { padding-bottom: 0; overflow: hidden }
+.kpi.serie .linha1 { display: flex; align-items: center; gap: 8px }
+.kpi.serie .linha1 .r { flex: 1; min-width: 0 }
+.kpi .numero { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap }
+.kpi .numero b { margin: 10px 0 2px }
+.kpi .curva { margin: 12px -18px 0; height: 64px; display: block }
+.kpi .curva svg { display: block; width: 100%; height: 64px }
+
+.legenda { display: flex; gap: 16px; flex-wrap: wrap; font-size: 12.5px; color: var(--ink-2) }
+.bloco-topo .legenda { margin-left: auto; padding-top: 4px; flex: none }
+.bloco-topo > .legenda { flex: 0 1 auto }
+.grafico .titulo-painel { font-size: 11.5px; fill: var(--ink-2); font-weight: 600; font-family: var(--ui) }
+.legenda span { display: inline-flex; align-items: center; gap: 7px }
+.legenda i { width: 10px; height: 10px; border-radius: 3px; display: inline-block }
+.legenda em { font-style: normal; color: var(--ink); font-weight: 600; font-variant-numeric: tabular-nums }
+
+.grafico { position: relative; width: 100%; user-select: none }
+.grafico svg { display: block; width: 100%; overflow: visible }
+.grafico .eixo { font-size: 11px; fill: var(--ink-3); font-family: var(--ui); font-variant-numeric: tabular-nums }
+.grafico .grade-y { stroke: var(--g-grid); stroke-width: 1 }
+.grafico .mira { stroke: var(--line-strong); stroke-width: 1; stroke-dasharray: 3 4 }
+.grafico .traco { fill: none; stroke-width: 2.25; stroke-linecap: round; stroke-linejoin: round }
+.grafico .desenha { stroke-dasharray: var(--len); stroke-dashoffset: var(--len); animation: desenhar .9s var(--ease) .05s forwards }
+@keyframes desenhar { to { stroke-dashoffset: 0 } }
+.grafico .area { opacity: 0; animation: surgir .6s var(--ease) .35s forwards }
+@keyframes surgir { to { opacity: 1 } }
+.dica {
+  position: absolute; z-index: 5; pointer-events: none; min-width: 150px;
+  background: var(--surface-3); color: var(--ink); border-radius: 14px; padding: 10px 13px;
+  box-shadow: var(--shadow-pop); font-size: 12.5px; translate: -50% calc(-100% - 16px);
+}
+.dica::after {
+  content: ""; position: absolute; left: 50%; bottom: -5px; width: 10px; height: 10px;
+  background: var(--surface-3); rotate: 45deg; translate: -50% 0; border-radius: 2px;
+}
+.dica b { display: block; font-size: 12px; color: var(--ink-2); font-weight: 600; margin-bottom: 6px }
+.dica div { display: flex; align-items: center; gap: 8px; justify-content: space-between }
+.dica div + div { margin-top: 3px }
+.dica span { display: inline-flex; align-items: center; gap: 7px; color: var(--ink-2) }
+.dica i { width: 8px; height: 8px; border-radius: 2px; display: inline-block }
+.dica em { font-style: normal; font-weight: 600; font-variant-numeric: tabular-nums }
+
+/* Barras horizontais: estágios do funil e canais. */
+.barras { display: grid; gap: 14px; margin: 0; padding: 0; list-style: none }
+.conversao { margin-top: auto; padding-top: 14px; border-top: 1px solid var(--line); display: grid; grid-template-columns: 1fr 1fr; gap: 12px }
+.conversao div { display: grid; gap: 2px; align-content: start }
+.conversao strong { font-family: var(--display); font-size: 22px; font-weight: 600; font-stretch: 92%; font-variant-numeric: tabular-nums; line-height: 1.1 }
+.conversao span { font-size: 12px; color: var(--ink-3) }
+.barras li { display: grid; gap: 7px }
+.barras .rot { display: flex; align-items: baseline; gap: 10px; font-size: 13.5px }
+.barras .rot span { flex: 1; min-width: 0; color: var(--ink-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
+.barras .rot b { font-variant-numeric: tabular-nums; font-weight: 600 }
+.barras .rot small { color: var(--ink-3); font-size: 12px; font-variant-numeric: tabular-nums; min-width: 38px; text-align: right }
+.trilho { height: 8px; border-radius: 99px; background: var(--surface-2); overflow: hidden }
+.trilho i { display: block; height: 100%; border-radius: 99px; transform-origin: left; animation: crescer .8s var(--ease) both }
+@keyframes crescer { from { transform: scaleX(0) } }
+
+/* Uma barra só, dividida por canal, com 2px de cartão entre os pedaços. */
+.divisao { display: flex; gap: 2px; height: 12px; border-radius: 99px; overflow: hidden; background: var(--surface-2) }
+.divisao i { display: block; height: 100%; min-width: 3px }
+
+.respostas-lista { display: grid; gap: 2px; margin: 0 -10px }
+.resp {
+  display: grid; grid-template-columns: 38px minmax(0, 1fr) auto; gap: 12px; align-items: start;
+  padding: 11px 10px; border-radius: 13px; text-align: left; width: 100%; color: inherit;
+  transition: background-color .14s var(--ease);
+}
+button.resp:hover { background: var(--surface-2) }
+.resp .avatar { width: 38px; height: 38px; font-size: 15px }
+.resp b { display: block; font-size: 14px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
+.resp p { margin: 2px 0 0; font-size: 13px; color: var(--ink-2); overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical }
+.resp .meta { display: flex; gap: 6px; margin-top: 6px; flex-wrap: wrap }
+.resp time { font-size: 12px; color: var(--ink-3); white-space: nowrap; font-variant-numeric: tabular-nums }
+
+.campanhas-lista { display: grid; gap: 4px; margin: 0 -10px }
+.camp {
+  display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 14px; align-items: center;
+  padding: 11px 10px; border-radius: 13px; width: 100%; text-align: left; color: inherit;
+  transition: background-color .14s var(--ease);
+}
+.camp:hover { background: var(--surface-2) }
+.camp b { font-size: 14px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
+.camp small { grid-column: 1; font-size: 12.5px; color: var(--ink-3) }
+.camp .num { grid-row: span 2; text-align: right; font-variant-numeric: tabular-nums }
+.camp .num strong { display: block; font-family: var(--display); font-size: 21px; font-weight: 600; font-stretch: 92%; line-height: 1.1 }
+.camp .num span { font-size: 12px; color: var(--ink-3) }
+
+/* Progresso da configuração: os passos numa linha, o próximo em destaque. */
+.progresso { display: flex; align-items: center; gap: 22px; flex-wrap: wrap }
+.progresso .anel { position: relative; width: 64px; height: 64px; flex: none }
+.progresso .anel svg { width: 64px; height: 64px; rotate: -90deg }
+.progresso .anel strong { position: absolute; inset: 0; display: grid; place-items: center; font-family: var(--display); font-size: 17px; font-weight: 600; font-variant-numeric: tabular-nums }
+.progresso .txt { flex: 1 1 240px; min-width: 0 }
+.progresso .txt h2 { font-size: 17.5px }
+.progresso .txt p { margin: 3px 0 0; font-size: 13px; color: var(--ink-2) }
+.passos { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px }
+
+.esqueleto {
+  border-radius: var(--r); min-height: 120px;
+  background: linear-gradient(100deg, var(--surface) 30%, var(--surface-2) 50%, var(--surface) 70%) 0 0 / 300% 100%;
+  border: 1px solid var(--line); animation: brilho 1.4s linear infinite;
+}
+@keyframes brilho { to { background-position: -150% 0 } }
+
+.tabela-oculta { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap }
+
+/* ---------------------------------------------------------------------------
+   Telas estreitas: o rail vira gaveta e o topo ganha o botão de menu.
+--------------------------------------------------------------------------- */
+/* ---------------------------------------------------------------------------
+   Setup rápido, por chat (D73)
+--------------------------------------------------------------------------- */
+.setup-chat { max-width: 880px }
+.estado-setup { display: flex; flex-wrap: wrap; gap: 8px; align-items: center }
+.estado-setup .chip svg { width: 11px; height: 11px; margin-right: 4px; fill: none; stroke: currentColor; stroke-width: 2.6; stroke-linecap: round; stroke-linejoin: round; vertical-align: -1px }
+.estado-setup .link { margin-left: auto; font-size: 13px; color: var(--ink-3) }
+
+.chat-setup { display: grid; gap: 14px; padding: 18px }
+.chat-falas {
+  display: grid; gap: 10px; align-content: start; min-height: 320px; max-height: min(62vh, 640px);
+  overflow-y: auto; overscroll-behavior: contain; padding: 4px 2px 6px;
+}
+.chat-falas .balao { white-space: pre-wrap }
+.chat-falas .balao.pes.protegido { display: inline-flex; flex-direction: row; align-items: center; gap: 8px; color: var(--ink-2) }
+.balao.pes.protegido svg { width: 13px; height: 13px; fill: none; stroke: var(--ok); stroke-width: 2.6; stroke-linecap: round; stroke-linejoin: round }
+.preencheu { list-style: none; margin: 10px 0 0; padding: 0; display: grid; gap: 4px; font-size: 12.5px; color: var(--ink-2) }
+.preencheu li { display: flex; gap: 6px; align-items: baseline }
+.preencheu svg { width: 12px; height: 12px; flex: none; translate: 0 1px; fill: none; stroke: var(--ok); stroke-width: 2.6; stroke-linecap: round; stroke-linejoin: round }
+
+.fala-sistema {
+  display: flex; gap: 10px; align-items: flex-start; max-width: min(660px, 92%);
+  padding: 11px 14px; border-radius: var(--r-sm); font-size: 13.5px; line-height: 1.5;
+  border: 1px solid var(--line); background: var(--surface);
+}
+.fala-sistema > svg { width: 17px; height: 17px; flex: none; margin-top: 1px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round }
+.fala-sistema p { margin: 0 }
+.fala-sistema.feito { border-color: color-mix(in oklab, var(--ok) 40%, transparent); background: var(--ok-soft) }
+.fala-sistema.feito > svg { color: var(--ok) }
+.fala-sistema.erro { border-color: color-mix(in oklab, var(--crit) 40%, transparent); background: var(--crit-soft) }
+.fala-sistema.erro > svg { color: var(--crit) }
+.fala-sistema.aviso { border-color: color-mix(in oklab, var(--warn) 35%, transparent); background: var(--warn-soft) }
+.fala-sistema.aviso > svg { color: var(--warn) }
+.fala-sistema .links { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px }
+.fala-sistema .links .btn svg { width: 13px; height: 13px }
+
+.qr-chat { display: grid; gap: 8px; justify-items: center; background: #fff; color: #15141B }
+.qr-chat img { width: 220px; height: 220px; image-rendering: pixelated }
+.qr-chat p { margin: 0; font-size: 12.5px }
+
+.digitando { display: inline-flex; gap: 5px; padding: 14px 16px }
+.digitando i { width: 6px; height: 6px; border-radius: 999px; background: var(--ink-3); animation: pisca 1.1s var(--ease) infinite }
+.digitando i:nth-child(2) { animation-delay: .15s }
+.digitando i:nth-child(3) { animation-delay: .3s }
+@keyframes pisca { 0%, 80%, 100% { opacity: .25 } 40% { opacity: 1 } }
+
+.opcoes-chat { display: flex; flex-wrap: wrap; gap: 8px; align-items: center }
+.opcao-chat {
+  min-height: 36px; border: 1px solid var(--accent-line); border-radius: 999px; padding: 6px 14px;
+  font-size: 13.5px; font-weight: 600; color: var(--accent); background: var(--surface);
+  transition: background-color .16s var(--ease), color .16s var(--ease);
+}
+.opcao-chat:hover { background: var(--accent-soft) }
+.opcao-chat[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink) }
+.opcao-chat.mono { font-family: var(--code); font-weight: 500; font-size: 12.5px }
+.opcao-chat .rec { margin-left: 8px; font-size: 11px; font-weight: 600; color: var(--ok) }
+.opcao-chat[aria-pressed="true"] .rec { color: inherit }
+.numero-chat { display: inline-flex; align-items: center; gap: 8px; font-size: 13.5px; color: var(--ink-2) }
+.numero-chat input {
+  width: 84px; height: 36px; border: 1px solid var(--line); border-radius: var(--r-xs); padding: 0 10px;
+  background: var(--field); color: var(--ink); font: inherit; font-family: var(--code); font-variant-numeric: tabular-nums;
+}
+.numero-chat input:focus { outline: none; border-color: var(--accent-line); box-shadow: 0 0 0 4px var(--accent-soft) }
+.nota-chat { font-size: 12.5px; color: var(--ink-3) }
+.opcoes-chat .link { font-size: 12.5px; color: var(--ink-3) }
+
+.agente-entrada { display: flex; gap: 10px; align-items: flex-end; border-top: 1px solid var(--line); padding-top: 14px }
+.agente-entrada textarea, .agente-entrada input.protegido {
+  flex: 1; min-width: 0; font: inherit; font-size: 14px; line-height: 1.5; color: var(--ink);
+  background: var(--field); border: 1px solid var(--line); border-radius: var(--r-sm); padding: 11px 13px;
+}
+.agente-entrada textarea { resize: none; min-height: 46px; max-height: 160px; field-sizing: content }
+.agente-entrada input.protegido { height: 46px; border-color: color-mix(in oklab, var(--ok) 45%, var(--line)); font-family: var(--code) }
+.agente-entrada textarea:hover, .agente-entrada input.protegido:hover { border-color: var(--line-strong) }
+.agente-entrada textarea:focus, .agente-entrada input.protegido:focus { outline: none; border-color: var(--accent-line); box-shadow: 0 0 0 4px var(--accent-soft) }
+.agente-entrada textarea::placeholder, .agente-entrada input::placeholder { color: var(--ink-3) }
+.agente-entrada .btn { height: 46px }
+.setup-rapido svg { width: 15px; height: 15px }
+
+@media (max-width: 1100px) {
+  .c8, .c4, .c6, .c3, .c5, .c7 { grid-column: span 12 !important }
+}
+@media (max-width: 900px) {
+  .shell { grid-template-columns: minmax(0, 1fr) }
+  .rail {
+    position: fixed; z-index: 40; inset: 0 auto 0 0; width: min(300px, 86vw); height: 100%;
+    translate: -102% 0; transition: translate .28s var(--ease); box-shadow: var(--shadow-pop);
+  }
+  .shell[data-gaveta="true"] .rail { translate: 0 0 }
+  .veu { display: block; position: fixed; inset: 0; z-index: 30; background: rgba(5,5,10,.5); opacity: 0; pointer-events: none; transition: opacity .2s var(--ease) }
+  .shell[data-gaveta="true"] .veu { opacity: 1; pointer-events: auto }
+  .topo { padding: 0 16px; gap: 10px; height: 62px }
+  .topo .menu { display: grid }
+  .topo .marca-topo { display: flex; align-items: center; gap: 8px; font-family: var(--display); font-weight: 600; font-size: 18px; font-stretch: 92% }
+  .topo .marca-topo svg { width: 28px; height: 28px }
+  .topo form { display: none }
+  .wrap { padding: 20px 16px 56px }
+  .cabeca { flex-direction: column; align-items: stretch; gap: 12px }
+  .cabeca .cta { margin-left: 0 }
+  h1 { font-size: 26px }
+  .ola h1 { font-size: 28px }
+  .balao { max-width: 100% }
+  .balao.pes { flex-direction: column; gap: 4px }
+  .painel { padding: 16px }
+  .tab { display: block; overflow-x: auto }
+  .painel > .tab { width: calc(100% + 32px); margin-inline: -16px }
+  .wrap > .sec { margin-top: 28px }
+  .cabeca .cta, .cabeca .cta .btn { width: 100% }
+}
+
+@media (max-width: 560px) {
+  .setup-rapido span { display: none }
+  .agente-entrada { flex-direction: column; align-items: stretch }
+  .agente-entrada .btn { height: 44px }
+  .kpis, .kpis.cinco { grid-template-columns: 1fr 1fr; gap: 10px }
+  .kpis .kpi b { font-size: 24px }
+  .grade > .kpis { grid-template-columns: 1fr 1fr; gap: 10px }
+  .grade > .kpis .kpi { padding: 14px 14px 12px }
+  .grade > .kpis .kpi.serie { padding-bottom: 0 }
+  .grade > .kpis .kpi b { font-size: 24px; margin-top: 6px }
+  .grade > .kpis .kpi .r { font-size: 12.5px }
+  .grade > .kpis .kpi .s { font-size: 11.5px }
+  .grade > .kpis .kpi .curva { margin: 8px -14px 0; height: 38px }
+  .grade > .kpis .kpi .curva svg { height: 38px }
+  .grade > .kpis .delta { font-size: 11px; padding: 1px 6px }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: .01ms !important; animation-delay: 0s !important; transition-duration: .01ms !important }
+  .grafico .desenha { stroke-dashoffset: 0 }
+}

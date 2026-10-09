@@ -58,18 +58,26 @@ e elas têm teste automatizado obrigatório.**
 1. **Idempotência.** Toda mensagem tem chave única `(enrollment_id, step_id)`. Reprocessar nunca
    duplica disparo. Batch do agendador usa `SELECT ... FOR UPDATE SKIP LOCKED`.
 2. **Supressão.** Contato em `suppression` nunca recebe nada, por nenhum caminho de código.
-   A checagem acontece no roteador, antes do adapter — não dentro de cada adapter.
+   A checagem acontece no roteador, antes do adapter — não dentro de cada adapter. E **de novo no
+   despacho** (D39): entre criar a mensagem e mandá-la existe uma janela, e quem pede para sair
+   dentro dela também não recebe. Mensagem assim vira `cancelado`, não `falha`.
 3. **Rate limit por remetente.** Nenhum `sender_account` ultrapassa sua quota. Conta com erro sai do
-   pool sozinha (circuit breaker) e os pendentes rebalanceiam.
-4. **Encerramento global.** Resposta em qualquer canal encerra o enrollment inteiro, não só o passo.
+   pool sozinha (circuit breaker), e os pendentes rebalanceiam — o que exige duas coisas, não uma:
+   `remetentes_disponiveis` deixa de oferecê-la às mensagens **futuras**, e `reivindicar_pendentes`
+   troca o remetente das que **já existem** (D37).
+4. **Encerramento global.** Resposta em qualquer canal encerra o enrollment inteiro, não só o passo
+   — inclusive a mensagem que já estava na fila esperando despacho (D40). Encerrar a cadência e
+   mandar mais um toque é a invariante furada pela borda.
 
 ---
 
 ## Anti-regras
 
 - **Nunca** recriar tabela que já existe. Consultar o schema antes de propor migration.
-- **Nunca** gravar token do Pipefy. Sempre gerar via `client_credentials` no `_shared/pipefy.ts`,
-  que é a única fonte de verdade desse OAuth.
+- **Nunca** gravar token do Pipefy. Sempre gerar via `client_credentials` no `adapters/pipefy.ts`,
+  que é a única fonte de verdade desse OAuth — o token vive na instância de uma execução e morre com
+  ela. Era `_shared/pipefy.ts` até o D64, que nunca foi escrito; mudou para `adapters/` porque ali só
+  entra `fetch` e a conversa inteira com o Pipefy é testável sem rede (D30).
 - **Nunca** colocar secret fora do Vault. Nem em env de edge function, nem em constante, nem em teste.
 - **Nunca** implementar envio que não passe pelo roteador (e portanto pelo gate de supressão).
 - **Nunca** escrever no CRM de forma síncrona dentro do caminho de envio. Writeback vai por `outbox`.
@@ -81,6 +89,429 @@ e elas têm teste automatizado obrigatório.**
   `contact_identity`.
 - **Nunca** deixar campanha fria usar remetente ou domínio da operação institucional.
 - **Nunca** encerrar enrollment por clique em link. Clique é engajamento, não resposta.
+- **Nunca** criar tabela de domínio sem `tenant_id`, nem chave estrangeira entre tabelas de domínio
+  que não seja composta `(tenant_id, id)`. RLS não alcança o worker, que roda com service key.
+- **Nunca** deixar tenant implícito em assinatura de função. É como bug entre clientes acontece.
+- **Nunca** criar função em `public` que não seja API de verdade. `public` é publicado pelo PostgREST;
+  RLS, gatilhos e motor moram em `privado`. E atenção à forma exata: no Postgres, função nova
+  **nasce** com EXECUTE para `PUBLIC`, do qual `anon` é membro — o que o D19 tirou foi o *default
+  privilege* nominal, não o implícito. Conceder a `authenticated` sem `REVOKE ALL ... FROM PUBLIC,
+  anon` antes é acrescentar um grant ao lado de uma porta aberta, não decidir (D55).
+- **Nunca** adicionar `privado` aos *Exposed schemas* do projeto. É o que separa motor de endpoint.
+- **Nunca** cadastrar remetente com provedor fora de `channel_provider_catalog`, nem gravar em
+  `sender_accounts.config` um campo que o catálogo marca como segredo. Segredo vai para o Vault.
+- **Nunca** deixar uma tela de Configurações ou Canais expandida por padrão. Grupo abre índice,
+  não conteúdo (D21).
+- **Nunca** receber webhook num endpoint que não identifique o chip. Sem chip não há tenant, e sem
+  tenant casar resposta pelo número encerra a cadência do cliente errado (D24).
+- **Nunca** exigir o painel do Supabase para configurar o produto. Segredo entra pela tela, por
+  `salvar_servidor_provedor` / `salvar_credencial_remetente` (D26).
+- **Nunca** misturar provedor oficial e não oficial na mesma tela. Mudam base contratual, risco de
+  banimento e pool permitido — misturar é como campanha institucional acaba num chip frio (D27).
+- **Nunca** deixar a tela decidir o que é segredo. Quem separa Vault de `config` é o catálogo,
+  dentro da função — a UI manda o que foi preenchido e não conhece provedor nenhum (D28).
+- **Nunca** escrever segredo no comando de um job do `pg_cron`. `cron.job` é tabela comum: vai para
+  backup, réplica e `pg_dump`. A chave fica no Vault e é lida na batida (D29).
+- **Nunca** abrir exceção de runtime em `adapters/`. Ali só entra `fetch` — é o que faz o mesmo
+  arquivo rodar no Deno da edge function e no Node do teste. Provedor que exige socket não vira
+  adapter; vira linha de catálogo com `tem_adapter = false` (D30).
+- **Nunca** devolver `culpa = 'destino'` por erro que não é do contato. Isso invalida
+  `contact_identities` e escreve `identidade_invalida` no CRM. Domínio não verificado e chave sem
+  permissão são culpa do remetente (D30).
+- **Nunca** deixar o roteador prometer um envio que o despachante não tem como fazer. Coluna de
+  catálogo que ninguém lê não é garantia: o pool pergunta `tem_adapter` e `ativo` antes de escolher,
+  e sem candidato o passo é adiado, nunca queimado (D31).
+- **Nunca** normalizar identidade em dois lugares. Quem normaliza é `adapters/telefone.ts`,
+  `adapters/email.ts` e `adapters/instagram.ts`; o banco **confere** (`privado.normalizada`). Duas
+  normalizações divergentes é, literalmente, como a supressão fica furada (D32).
+- **Nunca** fundir contatos numa importação. Identidades de uma linha que já pertencem a pessoas
+  diferentes param a importação; fundir é destrutivo e é decisão de operação (D32).
+- **Nunca** deixar a ingestão prometer um canal que o número não tem. Coluna genérica de telefone só
+  vira WhatsApp quando é celular — fixo não vira identidade nenhuma, porque prometê-lo é o roteador
+  escolhendo um destino que não existe (D33).
+- **Nunca** descartar em silêncio um valor que parecia identidade. Linha aceita com telefone ruim
+  sai em `ignorados` com coluna, valor e motivo: o contato entrar sem que ninguém saiba que o
+  telefone se perdeu é pior do que a recusa (D33).
+- **Nunca** gravar importação sem prévia. `prever_ingestao` diz o que aconteceria sem escrever nada,
+  e a trava recusa a *chamada* inteira — uma linha ruim no meio de 500 mata a importação (D34).
+- **Nunca** converter com cast um valor que veio do cliente dentro da prévia. Cast inválido aborta a
+  prévia toda, que é justamente o que ela existe para evitar: casa contra os rótulos do enum e
+  recusa só a linha (D34).
+- **Nunca** copiar código de `adapters/` para dentro de `app/`. O app importa por alias; cópia é a
+  segunda normalização do D32, e a divergência aparece em supressão furada, não em teste (D34).
+- **Nunca** confiar que `node --experimental-strip-types` confere tipo. Ele **apaga** o tipo. Quem
+  confere é o `tsc` do `tsconfig.json` da raiz, que `tests/run.sh` roda — foi ele que achou oito
+  erros que o motor carregava sem saber (D34).
+- **Nunca** inscrever em lote sem prévia. Inscrever sem identidade no canal dos passos **não dá
+  erro**: o motor pula passo a passo e encerra como concluído sem mandar nada. Silêncio é pior que
+  exceção (D35).
+- **Nunca** contar `array_length` de `array_agg` sobre junção externa sem `FILTER`. Sem par, o
+  agregado vira `{NULL}` e "nenhum" passa por "um" — foi assim que a prévia quase repetiu o
+  silêncio que existe para quebrar (D35).
+- **Nunca** deixar o shadow mode invisível. Ele roda o caminho inteiro e não envia; sem tela que
+  diga "todas em shadow mode", o modo que de-risca o projeto parece defeito (D36).
+- **Nunca** rotular ausência de remetente como shadow mode. Em `simulado` o motor **escolhe e
+  reserva** remetente igual — quem diz que nada saiu é o `status` da mensagem (D36).
+- **Nunca** escrever asserção que o cenário não consegue violar. Teto de 500 com três linhas no
+  banco passa com e sem o teto — é o `tem_adapter` do D31 outra vez (D36).
+- **Nunca** supor que tirar a conta do pool move as mensagens que já existem. `remetentes_disponiveis`
+  decide o **futuro**; a mensagem pendente carrega o remetente na linha, e quem a move é
+  `reivindicar_pendentes` (D37).
+- **Nunca** devolver a reserva de quota de um envio que não se sabe se saiu. Contar a mais aperta o
+  envio; contar a menos fura a invariante 3 (D37).
+- **Nunca** casar evento de provedor sem o chip. `provider_message_id` é do provedor e pode repetir
+  entre clientes; sem o tenant do chip, `respondido` encerra a cadência de quem não respondeu (D38).
+- **Nunca** pôr `EXCEPTION` em volta de um bloco de asserções. Quando dispara, ele desfaz as
+  asserções que já tinham passado e o teste encolhe sem avisar (D38).
+- **Nunca** chamar a função e conferir o efeito dela na mesma expressão SQL. O `EXISTS` ao lado lê o
+  snapshot do início da instrução e não enxerga a linha recém-gravada (D38).
+- **Nunca** tratar a supressão como pergunta de uma vez só. O gatilho guarda a criação da mensagem;
+  o despacho precisa do seu próprio portão, porque a janela entre um e outro é ilimitada (D39).
+- **Nunca** marcar como `falha` uma mensagem que não saiu por opt-out. Opt-out honrado não é defeito
+  do motor nem da conta que ia enviar — é `cancelado` (D39).
+- **Nunca** deixar o despachante discordar do agendador sobre o mesmo fato. Se `processar_vencidos`
+  pula campanha inativa e enrollment encerrado, `reivindicar_pendentes` também pula (D40).
+- **Nunca** filtrar despacho por "enrollment ativo". O último passo de toda cadência encerra o
+  enrollment na mesma passada que cria a mensagem: o filtro mataria o último toque de todas as
+  campanhas. O que distingue é o **motivo** do encerramento (D40).
+- **Nunca** cancelar por parada que volta atrás. Pausa e campanha desligada seguram a mensagem;
+  cancelada não é recriável, porque `(enrollment_id, step_id)` é única (D40).
+- **Sempre** perguntar, ao alargar o tempo de vida de um estado: *o que mais assume que ele é
+  curto?* O D37 alargou a janela `pendente` e só o D39 e o D40 foram atrás do que ela quebrou.
+- **Nunca** criar função em `public` para repetir o que a política de RLS já diz. A tela de
+  supressão insere direto; o teste é que passa a rodar no papel de quem usa o produto (D41).
+- **Nunca** deixar o shadow mode sem como ler o texto composto. Rodar tudo sem enviar só vale se
+  der para ver o que teria sido enviado — senão o erro mais provável, o template errado, passa
+  direto pelo modo que existe para pegá-lo (D42).
+- **Nunca** remendar o texto de um template por conta própria. Variável vazia deixa rastro
+  ("Olá ,"); a tela marca e quem escreveu decide se preenche o dado ou reescreve a frase (D42).
+- **Nunca** deixar o demo passar por um portão sem acioná-lo. Cenário que não cria a situação não
+  prova nada e não quebra nada — só para de contar, e a tela fica igual à de antes da correção.
+  `demo/conferir.py` recusa o `preview.json` que perder uma das situações (D43).
+- **Nunca** deduzir, no relato do demo, um fato que o motor não deixou gravado. O rebalanceamento
+  acontece dentro de `reivindicar_pendentes` e não deixa rastro em `messages`: ou se fotografa
+  antes, ou se está supondo — e supor foi como o demo anunciou quatro trocas que nunca houve (D43).
+- **Nunca** deixar um passo manual de configuração sem como conferir antes do efeito. Colar a `anon`
+  no lugar da `service_role` agenda, bate e responde 401 — e passada 401 é idêntica a passada sem
+  vencidos. Depois de agendado, o erro vira silêncio com cara de normalidade (D44).
+- **Nunca** devolver o segredo numa função que o lê. Fatos a respeito dele — papel, projeto,
+  validade, tamanho — nunca o valor. E com asserção, porque a distância entre uma coisa e outra é
+  uma linha de "debug" esquecida (D44).
+- **Nunca** aparar em silêncio a sujeira de um segredo. O worker usa o valor como está: espaço nas
+  pontas é defeito a apontar, não a esconder. E `btrim` de um argumento apara só espaço — quebra de
+  linha e tabulação passam direto (D44).
+- **Nunca** declarar um contrato sem conferir quem o produz. Dos quatro fatos do D3, três nunca
+  nasciam — a palavra só existia no enum, e `'respondido'` ainda por cima colidia com um valor de
+  `tipo_evento`, o que escondeu a falta (D45).
+- **Nunca** deixar o shadow mode escrever no CRM. `simulado` significa caminho inteiro sem efeito
+  externo, e o CRM é externo: contar que a campanha concluiu sem nenhuma mensagem ter saído é
+  mentira que o backfill não desfaz. O gate é a existência de mensagem não-simulada (D45).
+- **Nunca** devolver ao CRM um fato que veio dele. `mudanca_etapa_crm` encerra o enrollment e não
+  gera writeback — é o eco que o D3 manda evitar (D45).
+- **Nunca** tratar fato da pessoa como fato do enrollment. Resposta encerra todos os enrollments do
+  contato; sem índice único, quem está em três campanhas gera três escritas iguais no CRM (D45).
+- **Nunca** deixar um fato nascer sem quem o consuma. `tentativas`, `proxima_tentativa_em` e
+  `ultimo_erro` existiam desde a primeira migration e nenhum SQL as escrevia — coluna que parece
+  garantia e é decoração é o `tem_adapter` do D31 de novo (D46).
+- **Nunca** deixar o dreno parado parecer fila vazia. "Zero writebacks saindo" tem duas causas
+  opostas, e o único número que as separa é a idade do pendente mais antigo: fila vazia não tem
+  mais antigo (D46).
+- **Nunca** desistir de um writeback em silêncio. No teto de tentativas o fato nunca chega ao CRM;
+  se ninguém puder listar o que desistiu, é o D45 repetido uma camada acima (D46).
+- **Nunca** deixar uma linha reivindicada sair de `pendente`. A trava de dedup do D45 é parcial em
+  `status = 'pendente'`: tirar a linha de lá enquanto ela está em voo reabre a porta que o D45
+  fechou — e libera a trava é o que `falha` faz de propósito, porque o fato não chegou (D46).
+- **Nunca** perguntar a cada inscrição o que é da campanha. Qual flow a campanha roda muda uma vez;
+  perguntar N vezes é N chances de responder diferente, e a resposta errada não dá erro — dá
+  campanha "concluída" sem mensagem nenhuma (D47).
+- **Nunca** recusar o cruzamento parcial de canais entre flow e campanha. O D4 já pula o passo do
+  canal não habilitado, e flow multicanal em campanha de um canal só é uso legítimo. O que se recusa
+  é a interseção **vazia**. Trava estreita demais é o outro jeito de errar (D47).
+- **Nunca** afirmar no comentário mais do que o código sustenta. A checagem de "campanha sem flow"
+  não impede o enrollment vazio — o `NOT NULL` já impedia; ela só torna a recusa legível. A
+  sabotagem que não acende nada é o sinal de que a asserção, ou a afirmação, está errada (D47).
+- **Nunca** construir verificação sobre um campo que ninguém preenche. Os cinco adapters jogavam
+  fora o texto da resposta; um detector de opt-out lendo `payload->>'texto'` nunca dispararia, em
+  silêncio. Conferir a origem do dado vem antes de escrever quem o lê (D48).
+- **Nunca** suprimir por termo ambíguo sem contexto. "quero sair do meu plano" e "não quero
+  individual, quero empresarial" são intenção de COMPRA. Supressão é imutável: falso positivo apaga
+  o cliente para sempre, falso negativo se conserta pela tela. A trava mora do lado do erro caro
+  (D48).
+- **Nunca** deixar o classificador de opt-out ler o que não é string. Objeto virando
+  "[object Object]" e número virando "0" alimentam de ruído uma decisão que não tem volta (D48).
+- **Nunca** tratar devolução e denúncia como o mesmo fato. Denúncia é vontade e suprime a pessoa
+  (`opt_out`); devolução permanente é fato sobre o endereço e suprime só ele (`identidade_invalida`).
+  Fundir os dois reporta ao CRM uma decisão que a pessoa não tomou (D49).
+- **Nunca** suprimir por devolução que o provedor não disse ser permanente. Caixa cheia numa terça
+  não é motivo para perder um contato bom para sempre; o desconhecido é temporário (D49).
+- **Nunca** confiar que invalidar a identidade basta. `valida = false` decide o roteamento FUTURO;
+  a mensagem já pendente carrega a identidade na linha, e quem a barra no despacho é
+  `esta_suprimido` — é o D37 na camada da identidade (D49).
+- **Nunca** deixar uma configuração de painel falhar em silêncio dentro do app. O Supabase ignora
+  um `emailRedirectTo` fora da lista e cai no Site URL sem avisar: a chamada retorna sucesso e o
+  erro só aparece na caixa de entrada. A tela diz o que PEDIU, para a diferença ser visível (D50).
+- **Nunca** detectar endereço local com `includes('localhost')`. `https://localhost.exemplo.com` é
+  um endereço real, e o `includes` esconde o aviso justamente de quem precisa dele (D50).
+- **Nunca** supor que um token de CSS existe. `var(--inexistente)` não falha o build — a regra
+  simplesmente não se aplica, e o verde continua verde (D50).
+- **Nunca** escrever num documento que algo "já foi feito" sem quem confira. `LIGAR.md` dizia que as
+  edge functions estavam publicadas e conferidas; ficou falso no dia em que `adapters/` mudou.
+  `conferir-publicado.py` responde pelo digest do que cada function empacota (D51).
+- **Nunca** registrar como publicado o digest de agora. O que se registra é o que FOI publicado; na
+  dúvida, escrever "desconhecido" em vez de um número que parece conferência e não é (D51).
+- **Nunca** transportar código à mão quando o que ele compra pode esperar. Sem CLI, publicar é
+  reproduzir dezenas de KB exatos, e foi assim que o D32 nasceu. Se nada depende disso hoje, o que
+  se constrói é a verificação — ela vale para todas as próximas vezes (D51).
+- **Nunca** dar por publicado o que não foi lido de volta. O que prova que o projeto tem o código
+  do repositório é a comparação, não o retorno de sucesso do deploy — mesma ideia do digest
+  estrutural do schema. `conferir-contra-projeto.py` faz essa volta, e fica fora do suite porque
+  precisa de rede (D52).
+- **Nunca** ler "arquivo que não voltou" como bundle incompleto. `import type` é apagado pelo
+  bundler: o arquivo é enviado e não faz parte do pacote. O fecho de imports conta ele de
+  propósito, porque errar para o lado de pedir uma republicação a mais é barato, e errar para o
+  outro é o digest passando verde sobre diferença real (D52).
+- **Nunca** deixar o motor com um freio que nenhuma tela puxa. `ativa`, `status = 'pausado'` e
+  `estado = 'desativado'` existiam desde a primeira migration, testados, e parar uma campanha
+  exigia o painel do Supabase — que é o D26 furado por omissão (D54).
+- **Nunca** confundir o que o RLS garante com o que o privilégio garante. Política decide quais
+  LINHAS; `GRANT UPDATE` de tabela inteira deixa escrever QUALQUER COLUNA delas. Foi assim que
+  zerar `enviados_na_janela` — a invariante 3 — ficou a uma chamada de PostgREST (D54).
+- **Nunca** dar privilégio de escrita numa tabela que nenhuma tela escreve. `messages`,
+  `message_events` e `outbox` são do worker: com INSERT aberto, `tipo = 'respondido'` encerrava a
+  cadência de quem não respondeu nada (D54).
+- **Nunca** fechar uma porta sem olhar as vizinhas. Estreitar `enrollments.next_run_at` e deixar
+  `messages.status` aberta é trocar de porta, não fechar — é o "o que mais assume isso?" do D37
+  aplicado a privilégio (D54).
+- **Nunca** criar os dois lados de uma ligação e não ligá-los. `criar_campanha_de_modelo` criava
+  campanha e versão de flow, devolvia os dois ids e deixava a campanha órfã: quem descobria era
+  quem fosse inscrever, depois de importar a planilha (D54).
+- **Nunca** oferecer no produto um canal que nenhum provedor sabe enviar, e nunca fundir esse "não
+  dá" com o "ainda não". `sem_remetente` se resolve cadastrando um chip; `sem_adapter` não se
+  resolve por tela nenhuma, e juntar os dois manda a pessoa procurar configuração que não existe
+  (D54).
+- **Nunca** deixar duas listas escritas à mão, em linguagens diferentes, dizerem a mesma coisa sem
+  se compararem. `tem_adapter` no catálogo e `PROVEDORES_POR_CANAL` no registro divergem em
+  silêncio dos dois lados: uma vira falha da mensagem, a outra vira passo adiado para sempre (D54).
+- **Nunca** deixar uma tabela do domínio sem porta. `flows`, `flow_versions` e `flow_steps`
+  existiam desde a primeira migration e a única forma de gravar neles era instanciar um dos sete
+  modelos do catálogo — é o D41 da supressão de novo, e o D54 dos freios (D55).
+- **Nunca** deixar "correto e silencioso" passar por pronto. Publicar versão nova não repontar
+  campanha nenhuma é a decisão certa (a conferência do D47 é uma a uma); não dizer que não
+  repontou é a pessoa editar o texto e ir embora achando que mudou algo (D55).
+- **Nunca** gravar um valor que o motor não lê. O atraso do primeiro passo nunca é usado — o
+  agendador olha o do passo seguinte —, então ele é gravado 0 e a tela escreve o fato. Aceitar o
+  número digitado seria guardar decoração e devolvê-la depois como se fosse garantia (D55).
+- **Nunca** reproduzir em TypeScript uma regra que o SQL já decide sem pôr as duas frente a frente.
+  `renderizar` e `variaveisDoTexto` leem a mesma marcação: divergir faz a tela garantir que o texto
+  está inteiro sobre uma chave que o motor apaga — o D42 chegando tarde porque o aviso que existe
+  para chegar cedo estava errado (D55).
+- **Nunca** deixar a tela prometer efeito de um dado que ninguém consome. Atribuir agente por canal
+  grava a atribuição e nada mais: nenhum adapter, edge function ou função de despacho lê
+  `campaign_agents`. A tela diz isso em voz alta, porque o jeito de descobrir sozinho seria um lead
+  sem resposta (D55).
+- **Nunca** criar num lugar e completar no outro quando as duas escritas formam um só fato. Inserir
+  a campanha pela tela e apontar o flow numa segunda chamada é a campanha órfã do D54 de novo — a
+  função faz as duas na mesma transação (D55).
+- **Nunca** conferir só quem PRODUZ um dado. O D48 fez os adapters gravarem o texto da resposta e
+  conferiu o produtor; ninguém perguntou quem lê. Único leitor: o classificador de opt-out. A
+  pessoa respondia, a cadência encerrava certo, e o que ela disse era ilegível pelo produto — o
+  D42 com um lead no lugar do template (D56).
+- **Nunca** dar estado a uma tela de leitura só porque a lista parece uma caixa de entrada. "Lida",
+  "respondida" e atribuição seriam colunas sem quem as escreva, cometendo o `tem_adapter` do D31 na
+  mesma tela que existe para consertá-lo (D56).
+- **Nunca** referenciar estágio de funil por NOME. O código conhece `slug` e `tipo`; `nome` é
+  rótulo de tela e o cliente renomeia. Dois projetos da casa quebraram exatamente assim (D57).
+- **Nunca** deixar automação tirar card de `ganho` ou de `perdido`. Num projeto anterior a análise
+  de sentimento moveu para "Perdeu" uma conversa que tinha acabado de agendar reunião. Pessoa move
+  de onde quiser; automação, não (D57).
+- **Nunca** deixar uma coluna de funil parecer automática quando não é. `oportunidade` não tem
+  produtor até o classificador existir, e a tela DIZ isso — é o "gerenciado por IA só na UI" que a
+  base da casa registra em dois projetos (D57).
+- **Sempre** consultar a base de conhecimento da casa antes de construir um padrão que outros
+  projetos do grupo já implementaram. O Kanban veio com sete implementações comparadas e as
+  armadilhas já pagas em produção; quatro asserções de `tests/funil.sql` existem por bugs que este
+  repositório nunca teve (D57).
+- **Nunca** perguntar "esta resposta é positiva?". A pergunta é "é recusa?", e o que não for recusa
+  vai para uma pessoa. Detectar entusiasmo foi o que falhou no projeto anterior — o classificador
+  reperguntava dados e reativava tarde e duplicado (D58).
+- **Nunca** fundir as ações da blacklist. Recusar a oferta e pedir para sair são fatos diferentes
+  (D58), e a operação decidiu que, no padrão do produto, os dois suprimem (D63). A decisão é do
+  CLIENTE, termo a termo: a ação `recusa` continua existindo justamente para quem quiser o D58 de
+  volta sem migration. Perder a distinção é tirar dele a escolha.
+- **Nunca** deixar uma recusa engolir um pedido de saída. Desde o D63 há um classificador só,
+  `regra_da_resposta`, e a assimetria que o D58 guardava em duas funções mora na ORDEM das ações:
+  `suprimir` > `identidade_invalida` > `recusa`. "não preciso, pare" é blacklist (D63).
+- **Nunca** deixar um cliente nascer sem blacklist. Lista vazia não dá erro: "pare" passa batido e a
+  pessoa recebe o próximo toque. O gatilho em `tenants` semeia o padrão, e o teste o sabota (D63).
+- **Nunca** bloquear endereço fora de `esta_suprimido`. Domínio bloqueado é a mesma pergunta que o
+  roteador, o gatilho de `messages` e o despacho já fazem; um portão novo seria um caminho a mais
+  para alguém esquecer (D63).
+- **Nunca** mandar `DROP` junto com o resto pelo MCP do Supabase. O DROP espera a confirmação de uma
+  pessoa e o chamado inteiro estoura o tempo sem aplicar nada; a migration que apaga vai separada,
+  e o que ela apaga precisa estar sem chamador antes (D63).
+- **Nunca** isentar uma tabela de um meta-teste antes de conferir de QUAL pergunta ela está sendo
+  isenta. `recusa_termos` é catálogo e não tem `tenant_id` com razão — mas a mesma lista a isentava
+  também do teste de RLS, e ela precisava de RLS. Quem pegou foi o advisor (D58).
+- **Sempre** reler o que as TELAS afirmam depois de ligar uma automação nova. A coluna
+  "Oportunidade" dizia "nenhuma automação move cards para cá ainda" e ficou falsa no mesmo dia em
+  que o classificador entrou. Texto de tela envelhece como número escrito à mão (D58).
+- **Sempre** conferir se um teste antigo codifica o mundo ANTES da mudança. `tests/funil.sql` usava
+  "tenho interesse" como resposta que para em `respondeu`; com o classificador, ela vai para
+  `oportunidade` — o teste estava certo ontem e errado hoje, e o conserto é o texto do cenário,
+  não a asserção (D58).
+- **Nunca** deixar uma credencial ser do produto quando ela é do cliente. Cada licença é um tenant e
+  cada tenant traz o CRM que já usa: um `client_id` de Pipefy fixo no código seria o produto inteiro
+  escrevendo no CRM de um cliente só. O padrão já existia duas vezes (chip, chave de modelo) e o CRM
+  era o vão (D59).
+- **Nunca** supor que tabela nova herda a grade estreitada das vizinhas. `privado.estreitar_escrita_do_cliente`
+  é nominal, tabela por tabela: `crm_connections` nasceu com INSERT, UPDATE e DELETE de tabela
+  inteira para `authenticated`, e o RLS segurava a linha enquanto o privilégio soltava a coluna —
+  o D54 outra vez, achado por CONFERIR a grade no projeto depois de aplicar (D59).
+- **Nunca** deixar o cliente escrever à mão um ponteiro de Vault. `credencial_secret_id`,
+  `chave_secret_id` e `admin_secret_id` não devolvem segredo a ninguém — fazem o worker chamar o
+  provedor com a credencial de outra conexão, que é a pior forma de errar, porque parece funcionar.
+  O ponteiro nasce de `guardar_segredo` ou não nasce (D59).
+- **Nunca** escrever um `CREATE OR REPLACE FUNCTION` a partir de uma cópia antiga do corpo. Ele troca
+  o corpo INTEIRO e não faz merge: partir do D54 para acrescentar duas linhas apagou as revogações
+  de `deals` do D57 e o `SET search_path` da corretiva do D54. Quem pegou foi `tests/funil.sql`, com
+  uma asserção sobre um assunto que a migration não mencionava — e a lição é que o teste vermelho de
+  um arquivo que você não tocou é informação, não ruído (D59).
+- **Nunca** deixar uma tela guardar credencial sem dizer que ela ainda não é usada. Vincular
+  plataforma grava no Vault e nada mais: `tem_adapter` é falso nas oito, a `outbox` segue
+  enfileirando para lugar nenhum, e o aviso vem ANTES da lista, porque quem abre a tela vem vincular
+  e descobrir depois de colar a credencial é a ordem errada — é o D55 por escolha (D59).
+- **Nunca** deixar o link de "definir senha" virar acesso sem troca de senha. O Supabase avisa
+  `PASSWORD_RECOVERY` num `setTimeout`, depois de gravar a sessão: quem depende só do aviso pode
+  montar tarde e mandar a pessoa direto ao painel. O fragmento da URL é lido **antes** de criar o
+  cliente, e o portão segura o painel até a senha nova ser gravada (D60).
+- **Nunca** confundir o nome do produto com o protocolo. "SMTP Locaweb" tem API HTTP, e é por ela
+  que o adapter fala; o protocolo SMTP continua fora de `adapters/` pelo D30 (D61).
+- **Nunca** aceitar conta de e-mail que não recebe resposta sem um `Reply-To` para um inbound que o
+  motor lê. A pessoa responde, ninguém processa, e a cadência segue — a invariante 4 furada sem
+  erro. Na Locaweb o campo é obrigatório no catálogo (D61).
+- **Nunca** ler corpo de webhook só como JSON. Formulário virava `{}` sem erro, e o bounce respondia
+  200 sem virar evento. Quem decide é o `Content-Type` (D61).
+
+- **Nunca** reivindicar um fato que não tem para onde ir. Sem plataforma ativa que saiba escrevê-lo,
+  o dreno queimaria as oito tentativas e mandaria para `falha` um fato que só esperava o cliente
+  vincular o CRM: `reivindicar_writebacks` pergunta pelo destino antes de pegar (D64).
+- **Nunca** procurar o card de alguém pelo telefone. Sem vínculo (`crm_vinculos`) não há onde
+  escrever, e "achar" o card pelo número escreve no card de outra pessoa com o mesmo número. O fato
+  sai da fila com o motivo escrito em `outbox.resultado` (D64).
+- **Nunca** deixar "saiu da fila" passar por "o CRM sabe". Desde o D64 um fato pode sair sem
+  escrever nada; "Entregues — o CRM já sabe" ficou falso no dia, e a tela passou a mostrar o que cada
+  um fez (D64).
+- **Nunca** dar ao CRM uma ação que não aguenta ser repetida. O dreno repete tudo quando a tentativa
+  anterior falhou no meio: mover confere a fase antes, preencher sobrescreve, e comentar ou criar
+  card ficam de fora até terem chave de idempotência (D64).
+- **Nunca** inscrever pela fonte sem a prévia. A fonte roda sozinha, a cada intervalo, sem ninguém
+  olhando: o card sem canal da cadência entra como contato, NÃO é inscrito, e o resumo da fonte conta
+  quantos — é o D35 com o operador fora da sala (D64).
+- **Nunca** ler card com uma regra que a planilha não usa. `adapters/leitura.ts` saiu de dentro de
+  `planilha.ts` quando a segunda fonte chegou: o mesmo celular entrando como WhatsApp por uma porta e
+  sumindo pela outra seria a segunda normalização do D32 (D64).
+- **Nunca** oferecer como alvo de ação um campo que a plataforma só deixa ler. O contato do
+  ProfitCare entra na estrutura para a fonte mapear; como ação, a API recusaria sempre e o dreno
+  queimaria as oito tentativas num fato que nunca chega. A marca é `somenteLeitura` (D70).
+
+- **Nunca** confiar só na instrução para frear o agente. O modelo pode desobedecer o que a
+  instrução pede; o freio em código confere o texto composto (proibido, tamanho, dado sensível,
+  escalar) e barra o rascunho, com o motivo (D66).
+- **Nunca** compor rascunho para quem está suprimido. Rascunho pronto é convite a uma pessoa
+  mandar; `respostas_para_rascunhar` exclui a pessoa e o endereço, como o despacho faz (D66).
+- **Nunca** deixar "sem rascunho" ser silêncio. Recusa, limite de trocas, falta de credencial,
+  freio, escalar e erro do provedor são situações com nome, gravadas e mostradas na tela — e erro
+  transitório não vira linha, para a próxima passada tentar de novo (D66).
+- **Nunca** deixar a mensagem do agente passar pelo gate do D40 por ser "do agente". O critério é
+  positivo e é um só: `rascunho_id` E resposta à ÚLTIMA mensagem da pessoa. Tirar o `rascunho_id` do
+  critério deixa a cadência voltar a falar com quem respondeu, e o teste do §8 existe para pegar
+  exatamente isso (D69).
+- **Nunca** rebalancear a mensagem do agente. Outro chip escrevendo no meio da conversa é outra
+  conversa; conta fora do ar segura a mensagem, e a janela de 24h decide quando ela deixa de valer
+  (D69).
+- **Nunca** deixar "foi para a fila" passar por "saiu". A tela lê o status da mensagem, e o que o
+  motor não mandou volta para uma pessoa com o motivo e o texto (D69).
+
+- **Nunca** deixar o assistente executar o que a pessoa não autorizou. Desde o D73, por decisão do
+  usuário, no setup por chat DAR a informação é o pedido: cada peça é feita quando a conversa chega
+  nela, e a conversa diz o que fez e o resultado. O que não muda: a escrita sai com o JWT de quem
+  conversa (o RLS decide), e fora do chat o plano continua esperando o clique (D67, D73).
+- **Nunca** pedir chave de API fora de Configurações, da tela do canal ou do campo protegido do setup
+  por chat (D73) — e os três chamam a MESMA função de banco, que é quem separa Vault de `config`.
+  Uma quarta porta com a sua própria regra seria o segredo em N lugares (D68).
+- **Nunca** pôr na pessoa compartilhada o que é decisão de cada campanha. O agente é uma persona que
+  várias campanhas dividem; a conta de IA mora em `campaigns.ai_credential_id` e vale sobre a do
+  agente — trocar a dele numa campanha trocaria em todas (D68).
+- **Nunca** dizer "saiu" do que foi simulado. No painel, simulado vira "Mensagens simuladas" e a
+  taxa de resposta vira "—": taxa sobre envio que não houve é número com cara de resultado (D71).
+- **Nunca** pôr duas grandezas de escala diferente no mesmo eixo Y, nem dar a um gráfico um segundo
+  eixo. Mensagens e respostas são dois painéis com o mesmo tempo (D71).
+- **Nunca** escolher cor de gráfico no olho. `--g-*` passaram pelo validador de paleta nos dois
+  temas; cor nova entra pelo mesmo validador (D71).
+- **Nunca** deixar a chave da plataforma ter porta na tela. Ela é do produto, não do cliente, e por
+  decisão do usuário só se troca, revoga ou apaga pelo backend: a tela pergunta se ela EXISTE
+  (`agente_de_setup_disponivel`, que devolve boolean de propósito) e nada mais (D72).
+- **Nunca** deixar o agente de configuração responder pela pessoa nem escolher o próximo passo. O que
+  ele devolve é sugestão: entra pelo `valida` do roteiro e pelo `aceitarValor` do condutor, não troca
+  resposta que a pessoa já deu, e quem decide a ordem e executa é código (`setupChat.ts` e a tela).
+  Modelo que escolhe o passo esquece campo obrigatório sem erro (D72, D73).
+- **Nunca** deixar chave colada no TEXTO LIVRE da conversa sair do navegador. Chave entra pelo campo
+  protegido que o passo mostra; fora dele, a tela barra antes de enviar e de guardar, o agente barra
+  de novo antes do modelo, e as duas usam `adapters/segredo.ts` — a chave do CLIENTE indo para a
+  OpenAI pela chave da PLATAFORMA é o pior jeito de vazar, porque parece ajuda (D72, D73).
+- **Nunca** deixar segredo entrar no estado da conversa. `aceitarValor` recusa campo marcado como
+  segredo, o condutor só sabe QUE ele foi digitado, e o valor mora num ref que vai direto para a
+  função de banco e morre com a página — nem memória do navegador, nem histórico, nem modelo. Erro
+  ao conectar esquece a chave e a pede de novo (D73).
+- **Nunca** confiar em estado do React para não executar duas vezes. Em desenvolvimento o efeito roda
+  duas vezes seguidas, antes de `ocupado` mudar: a conta seria conectada duas vezes. A trava do setup
+  por chat é um ref (D73).
+- **Nunca** deixar um passo que fala com o mundo de fora repetir sozinho depois de um erro. O setup
+  por chat voltava a `conectar` a cada render enquanto a coleta estava completa, e o provedor cria a
+  instância ANTES de o banco gravar a conta: doze instâncias órfãs na UAZAPI em dois minutos, na
+  primeira conversa de verdade. Depois do erro o passo é `falhou`, e só a pessoa decide (D73).
+- **Nunca** pedir ao provedor um chip com um número que já é chip do cliente, em qualquer pool. Um
+  número é um chip só; a pergunta vem ANTES de falar com o provedor, no chat, na tela do canal e na
+  edge function, que é a única que a tela não contorna. E o que o provedor criou e o banco recusou é
+  apagado na hora: 56 instâncias órfãs ficaram no painel antes disso (D73).
+- **Nunca** pôr um teto novo em um dos lugares que comparam o contador e esquecer os outros. São
+  QUATRO: a reserva, o pool e os dois adiamentos. Com o teto só no pool, a reserva recusa o que o
+  pool ofereceu; com ele só na reserva, o passo é adiado por uma hora em vez de para amanhã, e volta
+  de hora em hora para ouvir o mesmo não (D75).
+- **Nunca** deixar shadow mode aquecer chip. Em `simulado` o motor escolhe e reserva remetente igual
+  (D36), mas nada sai — e reputação de número se constrói com mensagem que chegou. Por isso a rampa
+  anda por `enviados_reais_na_janela`, que só `registrar_resultado_envio(ok)` escreve, e não por
+  `enviados_na_janela`, que a reserva infla em simulado. Dia de calendário também não serve: chip
+  parado uma semana não aqueceu nada (D75).
+- **Nunca** dar à tela a coluna que mede o ANDAMENTO de um freio. `rampa_dias` e `rampa_inicial` são
+  a decisão de quem opera e estão na grade; `rampa_dia` e `enviados_reais_na_janela` não — com eles
+  abertos, zerar o aquecimento ou fazer a rampa andar sem envio fica a uma chamada de PostgREST. É o
+  D54 na coluna nova (D75).
+- **Nunca** somar quota onde o que vale é o teto de hoje. "Capacidade diária 500" com um chip em
+  rampa anuncia o que o motor não entrega, e o percentual da linha mostrava folga (17%) onde o
+  despacho já recusava (100%). Quem achou foi olhar a tela depois de pronta, não o teste (D75).
+- **Nunca** nomear um segredo do Vault por um dado que pode voltar. Nome de segredo é único no projeto
+  inteiro e arquivar não apaga o segredo: nomeado pelo número, o chip removido ocupava para sempre o
+  nome que o chip novo precisava, e a recusa vinha DEPOIS de a instância existir. O nome leva o id da
+  conta, como o cadastro manual já fazia desde o D26 (D74).
+- **Nunca** filtrar chave de um pedido por um padrão que não foi posto contra as chaves reais. O
+  filtro de `lerPedido` era só minúsculas e jogava fora `porDia` em silêncio; quem achou foi mandar o
+  pedido montado pelo código ao modelo de verdade, não o teste (D72).
+- **Nunca** guardar o progresso do assistente numa tabela. "O que está pronto" é lido do banco a cada
+  vez; uma coluna "configurado" mentiria no dia em que alguém configurasse pela tela (D67).
+- **Nunca** aceitar uma resposta que nenhuma pergunta seguinte lê. Foi o laço infinito que a
+  sabotagem do D67 achou: canal escolhível que o assistente não configura (D67).
+
+- **Nunca** deixar a escolha da pessoa valer só para o que ainda vai nascer. A campanha que escolhe
+  o provedor de e-mail é respeitada pelo agendador E pelo despachante, e o despachante confere a
+  mensagem que já está na fila — escolher num e rebalancear no outro é o D40 (D62).
+- **Nunca** apagar conta que já mandou alguma coisa. `messages` cai em cascata e leva os eventos;
+  remover é arquivar (`removido_em`), e a função recusa enquanto alguma campanha a escolheu (D62).
+- **Nunca** deixar uma edge function chamada pela tela decidir o alcance com a chave do serviço. A
+  chave passa por cima do RLS: o alvo é lido primeiro com o JWT de quem pediu, e quem responde é a
+  política, que tem teste (D62).
+- **Nunca** dar INSERT de tabela inteira numa tabela que guarda ponteiro de Vault. Por coluna, sem
+  o ponteiro — o D59 vale para toda tabela de credencial, e `sender_accounts` é uma delas (D62).
 
 ---
 
@@ -99,15 +530,275 @@ e elas têm teste automatizado obrigatório.**
 
 ## Fase atual
 
-> **Fase 0 — inventário (read-only).**
-> Mapear toda edge function, tabela, cron e dependência externa dos projetos existentes
-> (`sdr-resgate-evolution`, `nina-sdr-evolution`, `AqueceJá`, `ProfitCare`), classificando cada item
-> em **migra / adapta / descarta**. Identificar integrações duplicadas — especialmente WhatsApp,
-> que provavelmente existe em mais de um lugar.
+> **Fase 2 — schema central.**
+> O schema das 12 tabelas existe em `supabase/migrations/`, com as quatro invariantes garantidas
+> por constraint e trigger, não por convenção. O agendador e o roteador existem
+> (`processar_vencidos`), decidem e reivindicam sem enviar — o que torna a Fase 3 possível sem
+> nenhum adapter. O mapa de status do backfill está fechado em `backfill/mapa_status.sql`.
 >
-> **Não alterar código nesta fase.**
+> A Fase 1 tem sete adapters em `adapters/` (Gupshup, Meta Cloud, UAZAPI, Evolution, Comtele, Resend e
+> SMTP Locaweb — este pela API HTTP do produto, não pelo protocolo, D61) com a
+> superfície de despacho em SQL (`reivindicar_pendentes`, `registrar_resultado_envio`,
+> `registrar_evento_provedor`). O Instagram ainda não tem adapter, e o registro declara isso; `smtp`
+> segue no catálogo sem adapter de propósito, porque socket não cabe num diretório que só usa
+> `fetch` (D30).
+> Cada chip tem a sua URL de webhook (D24), e a UAZAPI cria instância pela própria plataforma (D25).
+>
+> O worker existe (`supabase/functions/motor-worker`), roda em `simulado` por padrão, e com ele a
+> **Fase 3 está completa de ponta a ponta**: agendador, roteador, adapters e despacho rodam sem
+> enviar nada.
+>
+> A **entrada** existe desde o D32: `ingerir_contato` em SQL, `ContactSource` em `adapters/fonte.ts`
+> e a primeira implementação em `adapters/planilha.ts`, sobre um leitor de CSV próprio
+> (`adapters/csv.ts`) — biblioteca não entra aqui pela mesma regra que vale para os adapters.
+> Colher é **puro**: a fonte lê e normaliza, não escreve e não sabe o que é tenant, e é isso que
+> torna a prévia da importação possível antes de qualquer gravação (D33).
+>
+> A **tela de importação** fecha o caminho (D34): lê o arquivo, mostra o que cada coluna virou,
+> chama `prever_ingestao` — que diz o que aconteceria sem gravar nada — e só então grava, uma
+> chamada por linha. `app/` importa `adapters/` por alias; copiar seria a segunda normalização.
+> Puxar `adapters/` para dentro do `tsc` do app revelou que **`adapters/` e `motor/` nunca tinham
+> sido checados por tipo**: `--experimental-strip-types` apaga o tipo em vez de conferi-lo. Agora há
+> `tsconfig.json` na raiz e `tests/run.sh` roda o `tsc` antes dos testes.
+>
+> A **tela de contatos** (D35) lista, busca por nome ou número, e inscreve em campanha — também com
+> prévia (`prever_inscricao`), porque aqui o erro é silencioso: inscrever quem não tem identidade no
+> canal dos passos não dá erro, dá uma campanha "concluída" sem mensagem nenhuma.
+>
+> A **rampa de volume por chip** existe desde o **D75**: chip novo manda pouco no primeiro dia e
+> cresce até a quota, que continua sendo o alvo configurado — ela não é reescrita, o teto de hoje é
+> DERIVADO dela por `privado.teto_da_rampa`. É opt-in (`rampa_dias IS NULL` é o comportamento de
+> sempre) e vale nos quatro lugares que comparam o contador com a quota: `reservar_envio`,
+> `remetentes_disponiveis` e os dois `proximo_horario_*`. A rampa anda em dia de ENVIO REAL, contado
+> em `enviados_reais_na_janela` por `registrar_resultado_envio(ok)` — em `simulado` o motor reserva
+> remetente igual, mas nada sai, então nada aquece, e a tela diz isso em voz alta. A tela do canal
+> mostra dia da rampa, teto de hoje e envios reais, com o percentual da linha e o KPI do topo contra
+> o TETO e não contra a quota; `rampa_dos_chips` devolve o teto já calculado, para a tela não
+> reproduzir a reta (D55). O que NÃO tem aqui: nada que simule uso humano — o que sobe é o volume de
+> mensagem real da cadência.
+>
+> O **e-mail** mora em Configurações desde o **D62**: o cliente cadastra quantos provedores quiser,
+> verifica a conexão pela tela (a edge function `verificar-remetente` pergunta ao provedor com o
+> segredo do Vault) e remove arquivando. Cada campanha escolhe um em `remetente_email_id`, e o
+> roteador respeita a escolha nas duas pontas — agendador e despachante. `NULL` é o rodízio de antes.
+>
+> A **tela da campanha** (D36) fecha o laço: o que o motor fez, contado no banco
+> (`resumo_da_campanha`) e lido de `message_events` (`eventos_da_campanha`). É ela que torna o
+> shadow mode legível — sem ela, "rodou tudo e não enviou nada" é igual a "está quebrado".
+>
+> As **plataformas vinculadas** existem desde o **D59**, e são o princípio de licença virando
+> schema: cada tenant traz o CRM dele, com a credencial dele. `crm_provider_catalog` e
+> `crm_connections` são o TERCEIRO uso do padrão que já valia para chip (`salvar_credencial_remetente`)
+> e chave de modelo (`salvar_credencial_ia`) — catálogo declara os campos, a função separa Vault de
+> `config`, e a tela não conhece CRM nenhum (D28). Oito plataformas, com o esquema de autenticação de
+> cada uma lido da documentação e a página registrada em `docs_url`: ProfitCare, Pipefy, HubSpot,
+> Pipedrive, RD Station CRM, Ploomes, Salesforce e Zoho CRM. A linha do ProfitCare se chamava
+> "Softcare" e tinha campos supostos até o **D70**, quando se descobriu que o CRM da casa não tinha
+> porta para fora — e ela foi construída do lado de lá (`crm-integracao`, chave por cliente).
+>
+> **Desde o D64 o Pipefy escreve; as outras sete guardam a credencial e nada mais**, e a tela diz
+> qual é qual antes da lista (D55). O meio entre o fato e o CRM é configuração do cliente, em
+> Plataformas vinculadas ▸ Fatos e fontes: `crm_estruturas` guarda o que a plataforma tem (lido pela
+> edge function `crm-descobrir`, que tem o segredo), `crm_acoes` diz o que cada fato faz por pipe
+> (mover de fase, preencher campo — só ações que aguentam repetição), `crm_vinculos` liga pessoa a
+> card, e `crm_fontes` traz cards como contatos pela MESMA leitura da planilha
+> (`adapters/leitura.ts`), inscrevendo pela prévia do D35. O dreno só pega fato de quem tem destino;
+> sem card, o fato sai com o motivo em `outbox.resultado`. O ProfitCare tem adapter
+> (`adapters/profitcare.ts`, D70) e ainda não escreve: a API dele não está publicada em produção,
+> então o adapter não está em `criarCrm` e `tem_adapter` segue falso. Sem Vault no Postgres de teste, `tests/plataformas.sql` vai até a
+> borda e para lá — `feature_not_supported` é a prova de que o destino do segredo é o Vault e não uma
+> coluna, e o arquivo diz em voz alta o que não cobre.
+>
+> A segunda migration do D59 é a que o D54 exigia: aplicar e **conferir a grade no projeto** mostrou
+> que tabela nova nasce larga e não herda a estreitada de ontem. `ai_credentials`, `crm_connections`,
+> `provider_servers` e os três catálogos deixaram de aceitar INSERT e DELETE de `authenticated`, e o
+> UPDATE das duas de credencial é só de `ativo`. A primeira tentativa dessa migration reescreveu
+> `estreitar_escrita_do_cliente` a partir do corpo do D54 e apagou o `deals` do D57 — quem pegou foi
+> `tests/funil.sql`.
+>
+> A resposta é **classificada** desde o **D58**: a pergunta é "é recusa?", nunca "é positiva?", e o
+> que não for recusa vira `oportunidade` no funil, marcado como decisão de classificador (`ia`).
+> `recusa_termos` é a lista, com a assimetria INVERTIDA em relação ao opt-out do D48 — lá o erro
+> caro é suprimir quem queria comprar, aqui é não entregar um lead bom. Foi ao pôr as duas listas
+> lado a lado que apareceu o defeito: "nao tenho interesse" e "sem interesse" estavam no opt-out
+> valendo sozinhos, suprimindo para sempre quem só tinha recusado a oferta.
+>
+> O **funil** existe desde o **D57**: `pipelines`, `pipeline_stages`, `deals` e `deal_activities`,
+> com Kanban na tela. O desenho veio da nota `Padrão - Kanban e Pipeline` da base de conhecimento
+> do grupo, que cataloga o padrão em sete projetos anteriores — estágio por `slug` e nunca por
+> nome, `mover_deal` como porta única (DEFINER, com o UPDATE de `deals` revogado do cliente),
+> automação que não tira card de `ganho` nem de `perdido`, e `sem_resposta` do tipo `aberto` para
+> que uma campanha nova reabra o lead. O motor move nos fatos que já produzia; `oportunidade`
+> nasce sem produtor **de propósito**, e a tela diz isso.
+>
+> A **blacklist** é do cliente desde o **D63**: `blacklist_termos` (termo, contexto e AÇÃO —
+> suprimir, endereço errado ou recusa) e `blacklist_dominios`, por tenant, editáveis em
+> Configurações ▸ Blacklist. Todo cliente nasce com o padrão do produto, que é a união das listas
+> do D48 e do D58 — com a recusa SUPRIMINDO, por decisão de operação que reverteu o D58. Domínio
+> bloqueado entra em `esta_suprimido`, então vale no roteador e no despacho.
+>
+> As **respostas** ganharam tela no **D56**, e a falta era grave: o texto era gravado desde o D48 e
+> o único leitor era o classificador de opt-out. A pessoa respondia, a invariante 4 encerrava a
+> cadência dela em todas as campanhas, e ninguém no produto conseguia ler o que ela disse — lead
+> perdido com tudo funcionando como projetado. `respostas_recebidas` traz o texto com a mensagem
+> que o provocou (resposta curta sem a pergunta não quer dizer nada) e com a marca de supressão
+> (quem abre a caixa pode estar prestes a ligar para quem acabou de pedir para sair). É leitura:
+> não há "lida" nem atribuição, porque seriam colunas sem quem as escreva.
+>
+> Os **agentes** compõem desde o **D66** e **respondem sozinhos desde o D69**, por decisão do
+> usuário. Quando o contato responde, o agente do canal da campanha compõe com a conta de IA escolhida
+> (`adapters/ia.ts`: Claude e a família "chat completions"; o Gemini fica sem adapter, dito em
+> `tem_adapter`). Os freios em `motor/agente.ts` conferem o texto composto: proibido, tamanho, pedido
+> de CPF ou cartão, e a marca de escalar. O texto que passa vira mensagem por `enfileirar_resposta`,
+> pelo MESMO caminho de envio da cadência — supressão no gatilho e no despacho, pool, quota — e pela
+> conta que conversa com a pessoa, que nunca é trocada (D37 não vale para conversa). A invariante 4
+> continua absoluta: a cadência não volta. O gate do D40 ganhou um critério positivo e só um — passa a
+> mensagem com `rascunho_id` que responde à ÚLTIMA resposta. A idempotência da conversa é
+> `UNIQUE (rascunho_id)`; `messages.step_id` é nulo só nela. A autonomia é por agente
+> (`agents.autonomo`, ligada por padrão), a janela de 24h vale no WhatsApp e no Instagram, e há teto
+> diário de composições por cliente (`tenants.teto_agente_dia`). O que o motor não manda volta a uma
+> pessoa com o motivo em `rascunhos.envio_motivo`, e a tela de Respostas diz o que aconteceu com cada
+> texto. `respostas_para_rascunhar` ficou sem chamador (a fila nova é `respostas_para_o_agente`) e sai
+> numa migration própria, pelo SQL Editor (D63).
+>
+> A **identidade visual** é a da referência escolhida pelo usuário desde o **D71**: Anek Latin e
+> Roboto empacotadas no build, escuro por padrão com o claro guardado por pessoa, item ativo em
+> pílula, cores de gráfico conferidas pelo validador nos dois temas. O **Início** virou painel de
+> resultados (`telas/Painel.tsx`): primeiro o que o motor não fez (modo simulado, configuração
+> pendente), depois os números do período contra o anterior, o ritmo dia a dia em dois painéis com o
+> mesmo tempo e escalas próprias (nunca dois eixos Y), funil, quem respondeu e campanhas. Lê
+> `messages` e `message_events` pelo RLS, com o cliente explícito em cada leitura, sem função nova.
+>
+> O **assistente de configuração** existe desde o **D67** e mora em `/configurar` desde o D71: pergunta canais, tipo de lista,
+> volume por dia, provedor, IA, CRM e primeira campanha, e devolve um plano de cartões que só roda
+> com "Autorizar". É um roteiro, não um modelo de linguagem — no primeiro acesso não há chave de IA, e
+> ela é do cliente (D59). A lógica é pura (`app/src/assistente.ts`, `tests/assistente.test.ts`) e o
+> estado é o banco. Desde o **D68** ele **não pede chave nenhuma**: para IA, pergunta qual provedor e
+> depois qual das contas conectadas; para canal e CRM, o mesmo. Sem conta, o cartão leva à tela onde
+> conectar, e a conversa continua quando a conta aparece. O Hub de campanhas mudou para `/campanhas`.
+>
+> Desde o **D72** o assistente é o **Setup rápido**, em `/setup` (o botão com o raio fica no topo de
+> toda tela), e desde o **D73** ele é **uma conversa**: o condutor (`app/src/setupChat.ts`, puro e
+> testado) decide o próximo passo — pergunta do roteiro, campo a pedir, conta a conectar, ação do
+> plano —, e a tela executa cada peça assim que a informação chega, dizendo o resultado na conversa
+> (inclusive a verificação da conta com o provedor, o QR do chip criado e o modelo escolhido da lista
+> que a chave alcança). Chave entra por um campo protegido, vai do navegador direto para a função de
+> banco e nunca passa pelo modelo nem pela memória. O **agente de configuração** entende o texto
+> livre e devolve respostas e valores SUGERIDOS, que entram pelo mesmo `valida` de um clique
+> (`aplicarSugestao`) e pelo mesmo `aceitarValor` de quem digita. O agente roda na edge function `agente-setup` com a **chave OpenAI da
+> plataforma**, a primeira chave que é do produto e não do cliente: ela existe antes de o cliente ter
+> conta nenhuma. Mora só no Vault (`openai_agente_setup`), sai só para o service_role
+> (`segredo_do_agente_setup`), e a tela só pergunta se ela existe (`agente_de_setup_disponivel`).
+> Trocar, revogar ou apagar é pelo backend, nunca pela tela. O atalho de IA abre ali o MESMO
+> formulário de Configurações, que desde o D72 **busca os modelos** que a chave alcança
+> (`ia-modelos`) e os mostra numa lista.
+>
+> As **contas de IA** são várias por provedor desde sempre (`ai_credentials` é única por nome, não por
+> provedor), e desde o **D68** a tela de Provedores de IA as mostra agrupadas, com ligar e desligar. A
+> campanha escolhe uma em `campaigns.ai_credential_id`, que vale sobre a do agente em
+> `respostas_para_rascunhar` — o worker não mudou.
+>
+> As **cadências** ganharam tela no **D55**: até então, a única forma de existir um `flow_version`
+> era instanciar um dos sete modelos do catálogo — o schema inteiro sem porta, que é o D41 da
+> supressão outra vez. `publicar_versao_de_flow` só INSERE (editar é publicar a seguinte, D9), não
+> reponta campanha nenhuma (repontar é `definir_flow_da_campanha`, uma a uma, onde mora a
+> conferência do D47) e a tela mostra quantas campanhas ficaram na versão anterior, porque
+> "correto e silencioso" é a combinação a evitar. `variaveis_disponiveis` conta as chaves que a
+> base do cliente tem, e `tests/variaveis_para_sql.ts` põe a leitura de marcação do SQL contra a
+> do TypeScript — a terceira ponte do suite, pelo motivo do D32. E `criar_campanha` fecha o par:
+> campanha em branco, com tipo, base legal e canais próprios, apontando a cadência **na mesma
+> transação** — inserir aqui e apontar lá fora seria a campanha órfã do D54 pelo outro caminho.
+>
+> E desde o **D54** a tela da campanha também **manda**: ligar e desligar a campanha, pausar e retomar as
+> inscrições, apontar qual cadência a campanha roda (o trio do D47, que existia sem consumidor) e
+> atribuir agente por canal. Tirar chip do pool é na tela do canal. Nenhuma dessas escritas ganhou
+> função em `public` — o RLS já autoriza, e pelo D41 repetir a política em PL/pgSQL é o que não se
+> faz. O que mudou por baixo foi o privilégio: `authenticated` deixou de ter `UPDATE` de tabela
+> inteira em `campaigns`, `enrollments` e `sender_accounts` (agora é por coluna) e deixou de
+> escrever em `messages`, `message_events` e `outbox`, que são do worker. `tests/run.sh` chama
+> `privado.estreitar_escrita_do_cliente()` pelo NOME depois de imitar o `GRANT ALL` do Supabase,
+> senão o suite conferiria uma superfície mais larga que a real.
+>
+> O **backfill** tem a primeira parte desde o **D65**: pessoas e supressão, com prévia, contra o
+> schema REAL do legado `gtivnngoeccqbvfjiyne` — reconstruído das 97 migrations do repositório
+> `sdr-resgate-evolution`, porque o banco dele continua sem acesso. O dado chega por exportação
+> (`backfill/RODAR.md`), a normalização é a do TypeScript (D32), e a supressão não depende de a
+> ingestão dar certo. Falta da Fase 2: levar cadências, enrollments, mensagens e eventos — o que
+> depende de decidir o que fazer com quem o legado ainda cadenciava —, e com isso a comparação
+> contra o Disparador.
+>
+> O schema é **multi-tenant desde a primeira migration** (D18): `tenant_id` em toda tabela de
+> domínio, chaves estrangeiras compostas `(tenant_id, id)` e RLS por papel. `tests/tenants.sql`
+> entra na pele de dois clientes diferentes e confere o SQLSTATE de cada recusa, e três meta-testes
+> **derivados do schema** cobram `tenant_id`, RLS e FK composta de toda tabela nova — lista escrita
+> à mão envelhece sem avisar, e essa já tinha perdido a `provider_servers` (D31).
+>
+> O schema está **aplicado no projeto `hucuwjvihqgftdjpnych`** (64 migrations no repositório, 73
+> registros no projeto — a 55ª, que só apaga os dois classificadores sem chamador do D63, entrou em
+> 05/10 pelo SQL Editor, porque o DROP pelo MCP espera uma confirmação que não chega à sessão remota
+> (D63) — duas corretivas de texto, uma separação, duas do D46 (superfície e
+> tenant explícito), o bootstrap do tenant de teste, a corretiva de `search_path` do D54 e a do
+> corpo da função no D59, ver D32, D39, D46, D53, D54 e D59; as duas do D59 entraram em 26/09 (mais
+> a corretiva, que é o terceiro registro e não existe como arquivo — o repositório já traz o corpo
+> certo na 51ª), e o `get_advisors` entre uma e outra não achou nada novo — `salvar_credencial_crm` entra na mesma família WARN das outras três
+> funções de credencial, que é a porta da tela checando `pode_administrar` em código, e
+> `segredo_da_conexao_crm` NÃO aparece, que é o que prova que `authenticated` não a alcança.
+> Quem achou o furo foi CONFERIR a grade no projeto depois de aplicar: tabela nova nasce com a
+> grade larga do Supabase e **não herda a estreitada de ontem**, porque a estreitada é nominal
+> por tabela), conferido por digest estrutural contra o banco de teste — colunas, constraints, índices, políticas, corpos de
+> função e a grade de privilégios batem byte a byte.
+>
+> Esse "30" tinha ficado em "21" por nove migrations, aqui no arquivo que instrui toda sessão nova.
+> É a mesma classe de defeito do parágrafo de cima — número escrito à mão envelhece sem avisar — e
+> agora ele é cobrado: `tests/run.sh` conta os arquivos de `supabase/migrations/` e falha se esta
+> linha discordar. O do projeto não dá para conferir do suite (precisa de rede), então quem mexer
+> no schema confere pelo `list_migrations` junto com o `get_advisors` que já é obrigatório.
+>
+> As edge functions são sete desde o D72 (`ia-modelos` v1 e `agente-setup` v4, chamadas pela TELA
+> como `verificar-remetente`). Eram cinco desde o D64. `motor-worker` está na **versão 7** desde 06/10, com o
+> dreno da outbox e a leitura das fontes de CRM (D64), os rascunhos do agente (D66) e o envio da
+> resposta pelo agente autônomo (D69) — a migration do D69 entrou antes dele, porque o v7 chama as
+> funções novas e o v6 seguia funcionando sobre as antigas. A migration
+> do D66 entrou antes dele, e aqui a ordem do D31 não se inverte: o `tem_adapter` de IA promete
+> RASCUNHO, que só o worker novo produz e que não sai para ninguém — antes dele, a promessa só
+> não era cumprida, sem efeito errado. A migration que liga o `tem_adapter` do
+> Pipefy só entrou depois do v5, para o catálogo nunca prometer um adapter que o worker não tinha
+> (D31). `crm-descobrir` está na **versão 1**, chamada pela TELA como `verificar-remetente`, com o
+> alvo lido pelo JWT de quem pediu. `canal-webhook` segue na **versão 4** (D61), `verificar-remetente`
+> (**versão 1**) segue do D62, e `provisionar-instancia` está na **versão 7** desde 08/10, com o número
+> perguntado ao banco ANTES do provedor, a instância apagada se o banco recusar a conta (D73) e o
+> número de chip removido livre para virar chip de novo (D74) —
+> a porta do CRM mora em arquivos próprios (`motor/porta-crm.ts`, `_shared/banco-crm.ts`)
+> justamente para as três não mudarem de bundle — e a do agente (`motor/porta-agente.ts`,
+> `_shared/banco-agente.ts`) pelo mesmo motivo. O `motor-worker` v6 foi lido de volta pela
+> resposta que a MCP salvou em arquivo, e comparado SEM transcrição (26/26); o `crm-descobrir`,
+> 6/6; o `motor-worker` v7, 26/26. Quem responde pela pergunta daqui para frente são os dois
+> verificadores — `conferir-publicado.py`, no suite, pelo digest do que cada function empacota, e
+> `conferir-contra-projeto.py`, fora do suite porque precisa de rede, pela comparação com o que o
+> projeto tem. `LIGAR.md` é o procedimento de ligar o motor, com a conferência do D44 entre guardar
+> a chave e agendar.
+>
+> Toda mudança de schema roda `tests/run.sh` antes do commit. Teste vermelho é bloqueio, não aviso.
+> Toda mudança aplicada no projeto roda `get_advisors` depois: o suite não enxerga o que só existe
+> no Supabase (default privileges, superfície do PostgREST) — foi assim que D19 apareceu.
+> O produto roda em `app/` (React + Vite, deploy na Vercel); `ui/console.html` é o protótipo onde
+> o design foi decidido e vai morrer quando o app cobrir tudo.
+> `demo/gerar.sh` roda o motor num cenário completo, injeta o resultado em `ui/console.html` por
+> `demo/injetar.py` e o console mostra — foi assim que D15 apareceu, um erro que teste unitário
+> nenhum pegava. O dado do console **não** se cola à mão: colar à mão foi como as constantes de
+> canal sumiram do arquivo sem ninguém notar. O cenário encena a janela entre criar a mensagem e
+> despachá-la, que é onde o D37, o D39 e o D40 vivem, e `demo/conferir.py` recusa o `preview.json`
+> que deixar de acionar qualquer um deles: passar pelo portão não é o mesmo que tocá-lo (D43).
 
-Fases seguintes em `DECISOES.md`.
+**Fase 0 concluída** — inventário em `INVENTARIO-FASE-0.md`: 83 edge functions e 52 tabelas
+classificadas em migra/adapta/descarta. Leitura obrigatória antes de propor qualquer migração de
+código antigo; várias suposições do `DECISOES.md` foram corrigidas lá (em especial: UAZAPI não
+existia na base, e o WhatsApp não-oficial que rodava era Evolution API). **D22 revisou isso:** o
+compromisso com UAZAPI existe fora do código, então UAZAPI é o não-oficial de agora e Evolution
+continua no catálogo por causa dos chips do legado.
+
+A Fase 1 (`ChannelAdapter`) vem depois do schema — ver D12 em `DECISOES.md`.
+Demais fases em `DECISOES.md`.
 
 ---
 
@@ -120,4 +811,5 @@ Fases seguintes em `DECISOES.md`.
 | **Sender account** | Remetente físico: inbox, chip, número oficial. Tem quota e health score. |
 | **Tipo de campanha** | Morna (base própria, opt-in) ou fria. Define base legal, canais e pool permitidos. |
 | **Resgate** | Reativação de oportunidade antiga da base própria. |
-| **Supressão** | Lista global e imutável de quem não pode receber nada. Acima de qualquer regra. |
+| **Supressão** | Lista imutável, **por tenant**, de quem não pode receber nada. Acima de qualquer regra do cliente — e o opt-out dado a um cliente não é fato de outro. |
+| **Tenant** | Cliente do produto. Dono dos seus contatos, campanhas, remetentes e agentes. Papéis: dono, admin, operador, leitor. |
