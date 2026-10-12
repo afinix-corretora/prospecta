@@ -19,6 +19,8 @@ import { aplicarFreios, ehCanal, montarPedido, tokensParaCompor } from '../adapt
 import type { EntradaDoPrompt } from '../adapters/prompt-do-agente.ts';
 
 export interface ContaParaTeste {
+  /** De que cliente é a conta: é a blacklist DELE que o teste consulta. */
+  readonly tenant_id: string;
   readonly provedor: string;
   readonly modelo: string;
   readonly ativo: boolean;
@@ -32,6 +34,8 @@ export interface PortaTeste {
   credencialVisivel(id: string): Promise<ContaParaTeste | null>;
   /** O blob do Vault (JSON), pela chave do serviço. */
   segredo(id: string): Promise<string | null>;
+  /** O que a blacklist do cliente faz com este texto (`testar_blacklist`, com o JWT de quem pede). */
+  regraDaBlacklist(tenantId: string, texto: string): Promise<{ termo: string; acao: string } | null>;
 }
 
 export type PedidoTeste = {
@@ -40,7 +44,7 @@ export type PedidoTeste = {
 
 export type ResultadoTeste =
   | { ok: true; situacao: 'pronto'; texto: string; modelo: string }
-  | { ok: true; situacao: 'escalar' | 'bloqueado' | 'erro'; motivo: string; modelo: string };
+  | { ok: true; situacao: 'escalar' | 'bloqueado' | 'erro' | 'blacklist' | 'recusa'; motivo: string; modelo: string };
 
 export type RespostaTeste =
   | { status: 200; corpo: ResultadoTeste }
@@ -57,10 +61,15 @@ function texto(v: unknown, max: number): string {
   return typeof v === 'string' ? v.trim().slice(0, max) : '';
 }
 
-function textos(v: unknown): Record<string, string> {
+function textos(v: unknown, limites?: { chaves: number; chave: number; valor: number }): Record<string, string> {
   if (!v || typeof v !== 'object' || Array.isArray(v)) return {};
   const r: Record<string, string> = {};
-  for (const [k, x] of Object.entries(v as Record<string, unknown>)) if (typeof x === 'string' && x.trim()) r[k] = x.trim();
+  for (const [k, x] of Object.entries(v as Record<string, unknown>)) {
+    if (limites && Object.keys(r).length >= limites.chaves) break;
+    if (typeof x === 'string' && x.trim()) {
+      r[limites ? k.slice(0, limites.chave) : k] = limites ? x.trim().slice(0, limites.valor) : x.trim();
+    }
+  }
   return r;
 }
 
@@ -96,7 +105,7 @@ export function entradaDoPedido(agente: unknown, canal: string, fala: string): E
       .map((p) => p.trim().slice(0, 200)).filter(Boolean).slice(0, 50),
     tamanho_maximo: tam,
     contato_nome: texto(a.contato_nome, 80) || null,
-    metadados: textos(a.metadados),
+    metadados: textos(a.metadados, { chaves: 30, chave: 60, valor: 500 }),
     campanha: texto(a.campanha, 120) || 'Teste',
     historico,
   };
@@ -122,6 +131,21 @@ export async function testarDoPedido(
   if (!conta.ativo) return recusa(409, 'esta conta de IA está desligada');
   if (!(PROVEDORES_IA_COM_ADAPTER as readonly string[]).includes(conta.provedor)) {
     return recusa(409, `${conta.provedor} ainda não tem adapter de composição`);
+  }
+
+  // Antes do modelo, o que o worker faz antes dele: a blacklist do cliente lê
+  // a resposta. Pedido de saída que ela reconhece suprime a pessoa no webhook,
+  // e o agente nem chega a vê-la; recusa não chama modelo. Sem isto, o teste
+  // mostraria o agente respondendo — ou o motivo falso "palavras que a
+  // blacklist não reconhece" — para uma fala que em produção nunca chega a ele.
+  const regra = await porta.regraDaBlacklist(conta.tenant_id, fala);
+  if (regra && (regra.acao === 'suprimir' || regra.acao === 'identidade_invalida')) {
+    return { status: 200, corpo: { ok: true, situacao: 'blacklist', modelo: conta.modelo,
+      motivo: `em produção esta resposta suprime a pessoa pela blacklist (termo "${regra.termo}"): o agente nem chega a vê-la` } };
+  }
+  if (regra && regra.acao === 'recusa') {
+    return { status: 200, corpo: { ok: true, situacao: 'recusa', modelo: conta.modelo,
+      motivo: `a blacklist lê esta resposta como recusa da oferta (termo "${regra.termo}"): o agente não insiste` } };
   }
 
   const credenciais = textos(conta.config);

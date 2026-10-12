@@ -13,6 +13,7 @@ import {
   aplicarSugestao, cumprida, impedimento, mapaDeRespostas, montarPlano, NAO, roteiro, situacao, USAR, voltarPara,
 } from '../app/src/assistente.ts';
 import type { Acao, Foto, Respostas } from '../app/src/assistente.ts';
+import { nomeDeApresentacao } from '../adapters/prompt-do-agente.ts';
 
 const campo = (chave: string, segredo = false) =>
   ({ chave, rotulo: chave, tipo: segredo ? 'senha' as const : 'texto' as const, obrigatorio: true, segredo, ajuda: null });
@@ -205,7 +206,7 @@ test('agentes (D76): o setup não troca o agente do canal que já existe — exc
   };
   const ag = doTipo(montarPlano(f, COMPLETO).acoes, 'ligar_agentes')[0]!;
   // Já existe um agente de prospecção fria: é reaproveitado, nada é criado.
-  assert.deepEqual(ag.agente, { id: 'caio', nome: 'Caio' });
+  assert.deepEqual(ag.agente, { id: 'caio', nome: 'Caio', autonomo: true });
   // WhatsApp é da Ana (Resgate): o Caio responde só nesta campanha. E-mail já é do Caio: herda.
   assert.deepEqual(ag.canaisDaCampanha, ['whatsapp']);
   assert.deepEqual(ag.canaisDoCanal, []);
@@ -213,19 +214,46 @@ test('agentes (D76): o setup não troca o agente do canal que já existe — exc
   assert.ok(ag.efeitos.some((e) => /Caio já responde aqui/.test(e)));
 });
 
-test('agentes (D76): criar de novo não colide no nome, e o contexto diz a empresa e a campanha', () => {
+test('agentes (D76): criar de novo não colide no nome, e nome e contexto são o que o contato pode ver', () => {
   const f: Foto = {
     ...FOTO, empresa: 'Afinix Corretora',
-    agentes: [{ id: 'x', nome: 'Assistente de prospecção fria', canal: null, tenant_id: 't', objetivo: 'resgate', ativo: true }],
+    agentes: [{ id: 'x', nome: 'Assistente Afinix — Prospecção fria', canal: null, tenant_id: 't', objetivo: 'resgate', ativo: true }],
+    modelos: FOTO.modelos.map((m) => ({ ...m, descricao: 'Lista fria em três toques, sem insistir depois do terceiro.' })),
   };
   const ag = doTipo(montarPlano(f, COMPLETO).acoes, 'ligar_agentes')[0]!;
   assert.ok('novo' in ag.agente);
   if (!('novo' in ag.agente)) return;
-  assert.equal(ag.agente.nome, 'Assistente de prospecção fria 2');
+  assert.equal(ag.agente.nome, 'Assistente Afinix — Prospecção fria 2');
+  // O contato ouve "Assistente Afinix": o objetivo fica depois do travessão.
+  assert.equal(nomeDeApresentacao(ag.agente.nome), 'Assistente Afinix');
   assert.match(ag.agente.contexto, /^Falamos em nome de Afinix Corretora\./);
+  // A descrição do modelo é texto interno: o agente a repetiria ao contato.
+  assert.doesNotMatch(ag.agente.contexto, /três toques/);
+  assert.ok(ag.agente.contexto.length >= 40, 'o banco exige 40 caracteres de contexto no agente novo');
+  // Sem nome de empresa, o contexto ainda passa da trava e não inventa um.
+  const sem = doTipo(montarPlano({ ...f, empresa: undefined }, COMPLETO).acoes, 'ligar_agentes')[0]!;
+  assert.ok('novo' in sem.agente && sem.agente.contexto.length >= 40 && !/undefined/.test(sem.agente.contexto + sem.agente.nome));
   // Agente desligado não é reaproveitado.
   const g: Foto = { ...f, agentes: [{ id: 'y', nome: 'Velho', canal: null, tenant_id: 't', objetivo: 'prospeccao_fria', ativo: false }] };
   assert.ok('novo' in doTipo(montarPlano(g, COMPLETO).acoes, 'ligar_agentes')[0]!.agente);
+});
+
+test('agentes (D76): o agente do canal desligado continua desligado — o setup responde só nesta campanha', () => {
+  const f: Foto = {
+    ...FOTO, empresa: 'Afinix Corretora',
+    agentes: [
+      { id: 'ana', nome: 'Ana', canal: null, tenant_id: 't', objetivo: 'resgate', ativo: false },
+      { id: 'caio', nome: 'Caio', canal: null, tenant_id: 't', objetivo: 'prospeccao_fria', ativo: true, autonomo: false },
+    ],
+    agentesPorCanal: [{ canal: 'whatsapp', agent_id: 'ana' }],
+  };
+  const ag = doTipo(montarPlano(f, COMPLETO).acoes, 'ligar_agentes')[0]!;
+  assert.deepEqual(ag.canaisDaCampanha, ['whatsapp'], 'o freio de quem opera não é solto no canal inteiro');
+  assert.deepEqual(ag.canaisDoCanal, ['email']);
+  assert.ok(ag.efeitos.some((e) => /Ana, o agente do canal, está desligado e continua desligado/.test(e)), ag.efeitos.join('\n'));
+  // O Caio é de rascunho: o setup não promete que ele responde sozinho.
+  assert.ok(ag.efeitos.some((e) => /Caio não responde sozinho/.test(e)));
+  assert.ok(!ag.efeitos.some((e) => /responde sozinho pelo motor/.test(e)));
 });
 
 test('IA: com contas conectadas, a pergunta seguinte é qual delas — só as do provedor, só as ligadas', () => {

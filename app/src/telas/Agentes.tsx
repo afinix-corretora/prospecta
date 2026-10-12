@@ -13,7 +13,7 @@ import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useSessao } from '../sessao';
 import { mensagemDeErro } from '../supabase';
 import {
-  criarAgente, escolherAgenteDoCanal, lerAgentes, lerAgentesPorCanal,
+  criarAgente, escolherAgenteDaCampanha, escolherAgenteDoCanal, lerAgentes, lerAgentesPorCanal,
   lerCredenciaisIA, lerProvedoresIA, salvarAgente, testarAgente,
 } from '../dados';
 import type { Agente, AgenteDoCanal, CredencialIA, ProvedorIA, ResultadoDoTeste } from '../dados';
@@ -152,7 +152,17 @@ export function ConfigAgentes() {
 // O construtor
 // ---------------------------------------------------------------------------
 
+/** O rascunho é estado da tela: trocar de cliente, de agente ou de campanha
+ *  sem remontar levaria o texto de um para o outro — e "Salvar" gravaria o
+ *  agente de um cliente com o rascunho de outro. A chave remonta. */
 export function ConstrutorDeAgente() {
+  const { id } = useParams();
+  const [busca] = useSearchParams();
+  const { tenant } = useSessao();
+  return <Construtor key={`${tenant?.tenant_id ?? ''}|${id ?? ''}|${busca.toString()}`} />;
+}
+
+function Construtor() {
   const nav = useNavigate();
   const { id } = useParams();
   const [busca] = useSearchParams();
@@ -193,6 +203,7 @@ export function ConstrutorDeAgente() {
           && !dados.porCanal.some((p) => p.canal === c))));
       } else if (canalDaCampanha && (CANAIS_DO_AGENTE as readonly string[]).includes(canalDaCampanha)) {
         setCanais(new Set([canalDaCampanha as CanalDoAgente]));
+        setCanalDaPrevia(canalDaCampanha as CanalDoAgente);
       }
     } else if (agente) {
       setR(rascunhoDe(agente));
@@ -203,6 +214,14 @@ export function ConstrutorDeAgente() {
 
   if (carregando && !dados) return <div className="wrap"><p className="vazio">Carregando…</p></div>;
   const voltar = () => nav(campanha ? `/campanhas/${campanha}` : '/config/agentes');
+  if (!dados) {
+    // Erro ao ler: sem isto, a tela ficava em "Carregando…" para sempre.
+    return (
+      <Pagina titulo="Agente" voltar={{ rotulo: campanha ? 'Campanha' : 'Agentes', aoClicar: voltar }}>
+        <Aviso tipo="erro">{erro || 'Não foi possível ler os agentes deste cliente.'}</Aviso>
+      </Pagina>
+    );
+  }
   if (!novo && !agente) {
     return (
       <Pagina titulo="Agente" voltar={{ rotulo: 'Agentes', aoClicar: voltar }}>
@@ -213,7 +232,12 @@ export function ConstrutorDeAgente() {
   if (!r || !dados) return <div className="wrap"><p className="vazio">Carregando…</p></div>;
 
   const legado = !!agente?.canal;
-  const servidos = canaisQueServe({ canal: agente?.canal ?? null });
+  // Vindo da campanha, o canal é o da URL e só ele: oferecer os quatro seria
+  // gravar exceção em canal que a campanha nem usa (o banco recusa) ou que
+  // ninguém pediu.
+  const daCampanha = campanha && canalDaCampanha
+    && (CANAIS_DO_AGENTE as readonly string[]).includes(canalDaCampanha) ? canalDaCampanha as CanalDoAgente : null;
+  const servidos = canaisQueServe({ canal: agente?.canal ?? null }).filter((c) => !campanha || c === daCampanha);
   const falta = oQueFalta(r, { novo });
   const contas = dados.contas;
   const escolhida = contas.find((c) => c.id === r.ai_credential_id);
@@ -248,10 +272,15 @@ export function ConstrutorDeAgente() {
         // Os canais são uma segunda escrita aqui, e está certo: o agente já
         // existe e responde onde respondia; o que muda é cada canal, um fato
         // por canal. Na criação é que as duas formam um só (D55).
-        const antes = new Set(dados!.porCanal.filter((p) => p.agent_id === agente.id).map((p) => p.canal));
-        for (const c of servidos) {
-          if (canais.has(c) && !antes.has(c) && CANAIS[c].recebeResposta) await escolherAgenteDoCanal(t, c, agente.id);
-          if (!canais.has(c) && antes.has(c)) await escolherAgenteDoCanal(t, c, null);
+        if (campanha) {
+          // Vindo da campanha, marcar é a exceção DELA — nunca o canal inteiro.
+          for (const c of escolhidos) await escolherAgenteDaCampanha(t, campanha, c, agente.id);
+        } else {
+          const antes = new Set(dados!.porCanal.filter((p) => p.agent_id === agente.id).map((p) => p.canal));
+          for (const c of servidos) {
+            if (canais.has(c) && !antes.has(c) && CANAIS[c].recebeResposta) await escolherAgenteDoCanal(t, c, agente.id);
+            if (!canais.has(c) && antes.has(c)) await escolherAgenteDoCanal(t, c, null);
+          }
         }
       }
       voltar();
@@ -294,7 +323,7 @@ export function ConstrutorDeAgente() {
 
       <div className="painel">
         <Campo id="ag-nome" rotulo="Nome com que ele se apresenta" valor={r.nome} placeholder="Ex.: Ana"
-               aoMudar={(v) => mudar({ nome: v })}
+               aoMudar={(v) => mudar({ nome: v })} desabilitado={!opera}
                ajuda="É o nome que ele usa na conversa e na assinatura do e-mail. Ele não diz que é uma pessoa: se perguntarem, diz que é o assistente virtual da equipe." />
 
         <Secao titulo="Persona" nota="como ele fala" />
@@ -352,7 +381,7 @@ export function ConstrutorDeAgente() {
               no caso abaixo ou quando alguém pedir para sair.</span>
           </div>
           <Campo id="ag-escalar" rotulo="Passa para uma pessoa quando" valor={r.escalar_quando}
-                 aoMudar={(v) => mudar({ escalar_quando: v })}
+                 aoMudar={(v) => mudar({ escalar_quando: v })} desabilitado={!opera}
                  ajuda="Nesses casos o agente não escreve nada: a resposta aparece marcada em Respostas, e a pessoa fica sem resposta até alguém da equipe escrever." />
           <div className="campo">
             <label htmlFor="ag-proib">Nunca escrever</label>
@@ -362,9 +391,10 @@ export function ConstrutorDeAgente() {
               e barra — não manda — o que contiver uma delas.</span>
           </div>
           <Campo id="ag-lim" rotulo="Limite de trocas" valor={r.limite_trocas} aoMudar={(v) => mudar({ limite_trocas: v })}
+                 desabilitado={!opera}
                  ajuda="Depois de tantas respostas na mesma conversa, o agente para e diz que é hora de uma pessoa." />
           <Campo id="ag-tam" rotulo="Tamanho máximo" obrigatorio={false} valor={r.tamanho_maximo}
-                 aoMudar={(v) => mudar({ tamanho_maximo: v })}
+                 aoMudar={(v) => mudar({ tamanho_maximo: v })} desabilitado={!opera}
                  ajuda="Em branco vale o de cada canal: WhatsApp 700, E-mail 2000, SMS 160, Instagram 800. Preenchido, só encurta — nunca passa do canal. Texto maior é barrado, não cortado." />
         </details>
 
@@ -389,7 +419,7 @@ export function ConstrutorDeAgente() {
             : 'Esta conta está desligada'}: com ela o agente não compõe.</Aviso>
         )}
 
-        <label className="marca">
+        <label className="caixa-marca">
           <input type="checkbox" checked={r.autonomo} disabled={!opera} onChange={(e) => mudar({ autonomo: e.target.checked })} />
           Responde sozinho
         </label>
@@ -408,7 +438,7 @@ export function ConstrutorDeAgente() {
           const atual = dados.porCanal.find((p) => p.canal === c);
           const outro = atual && atual.agent_id !== agente?.id ? dados.agentes.find((a) => a.id === atual.agent_id) : null;
           return (
-            <label key={c} className={`marca${info.recebeResposta ? '' : ' desligada'}`}>
+            <label key={c} className={`caixa-marca${info.recebeResposta ? '' : ' desligada'}`}>
               <input type="checkbox" disabled={!opera || !info.recebeResposta}
                      checked={info.recebeResposta && canais.has(c)}
                      onChange={(e) => {
@@ -454,7 +484,7 @@ export function ConstrutorDeAgente() {
             ({conversaDeExemplo(r.objetivo).map((h) => `"${h.texto}"`).join(' → ')}).</p>
         </details>
 
-        <Testar r={r} canais={servidos} conta={escolhida ?? null} administra={administra} />
+        {servidos.length > 0 && <Testar r={r} canais={servidos} conta={escolhida ?? null} administra={administra} />}
 
         {msg && <Aviso tipo={msg.tipo}>{msg.texto}</Aviso>}
         {falta.length > 0 && opera && <p className="nota-tela">Para salvar, falta: {falta.join('; ')}.</p>}
@@ -521,8 +551,8 @@ function Testar({ r, canais, conta, administra }: {
           <div className="campo" style={{ marginTop: 12 }}>
             <label htmlFor="ag-teste">O que a pessoa escreveu</label>
             <textarea id="ag-teste" rows={2} value={texto} onChange={(e) => setTexto(e.target.value)} />
-            <span className="ajuda">Experimente também "quanto custa?", "quem passou meu número?" e "para de me
-              mandar mensagem".</span>
+            <span className="ajuda">Experimente também "quanto custa?", "quem passou meu número?" e "não quero mais
+              saber disso" — este último a blacklist não pega, e é o agente quem precisa passar a conversa adiante.</span>
           </div>
           <button className="btn" type="button" disabled={rodando || !texto.trim()} onClick={() => void testar()}>
             {rodando ? 'Escrevendo…' : `Testar com ${conta.nome}`}</button>
@@ -532,7 +562,9 @@ function Testar({ r, canais, conta, administra }: {
             ? <div className="balao-teste"><b>{r.nome || 'O agente'} escreveria:</b><p>{res.texto}</p>
                 <span className="nota-tela">{res.texto?.length} caracteres · passou pelos freios</span></div>
             : <Aviso tipo={res.situacao === 'erro' ? 'erro' : 'neutro'}>
-                {res.situacao === 'escalar' ? 'Passaria para uma pessoa: ' : res.situacao === 'bloqueado' ? 'Um freio barraria: ' : 'Não deu: '}
+                {res.situacao === 'escalar' ? 'Passaria para uma pessoa: '
+                  : res.situacao === 'bloqueado' ? 'Um freio barraria: '
+                  : res.situacao === 'blacklist' || res.situacao === 'recusa' ? 'Não chegaria ao agente: ' : 'Não deu: '}
                 {res.motivo}</Aviso>)}
         </>
       )}
@@ -560,6 +592,9 @@ export function QuemRespondeNoCanal({ canal }: { canal: CanalDoAgente }) {
   const info = CANAIS[canal];
   const atual = dados?.porCanal.find((p) => p.canal === canal);
   const escolhido = dados?.agentes.find((a) => a.id === atual?.agent_id);
+  // O limite é o do agente quando ele encurta o do canal: a tela não promete
+  // 700 de quem foi configurado para 300.
+  const formato = oQueMudaNoCanal(canal, escolhido?.tamanho_maximo ?? null);
   const candidatos = (dados?.agentes ?? []).filter((a) => a.ativo && canaisQueServe(a).includes(canal));
 
   async function escolher(agente: string | null) {
@@ -596,14 +631,16 @@ export function QuemRespondeNoCanal({ canal }: { canal: CanalDoAgente }) {
             <span className="ajuda">
               {escolhido && !escolhido.ativo
                 ? `${escolhido.nome} está desligado: ninguém responde aqui.`
-                : `Aqui ele escreve no formato do ${info.nome}: até ${info.limite} caracteres, ${info.regras[0]!.replace(/\.$/, '').toLowerCase()}. `
+                : `Aqui ele escreve no formato do ${formato.nome}, com até ${formato.limite} caracteres. ${formato.regras[0]!} `
                   + 'Vale para a próxima resposta que chegar; a campanha que quiser outro escolhe na tela dela.'}
             </span>
           </div>
         )}
         {msg && <Aviso tipo={msg.tipo}>{msg.texto}</Aviso>}
-        <button className="link" type="button" onClick={() => nav(candidatos.length ? '/config/agentes' : '/config/agentes/novo')}>
-          {candidatos.length ? 'Criar ou ajustar agentes em Configurações ▸ Agentes' : 'Criar o primeiro agente'}</button>
+        {opera && (
+          <button className="link" type="button" onClick={() => nav(candidatos.length ? '/config/agentes' : '/config/agentes/novo')}>
+            {candidatos.length ? 'Criar ou ajustar agentes em Configurações ▸ Agentes' : 'Criar o primeiro agente'}</button>
+        )}
       </div>
     </>
   );

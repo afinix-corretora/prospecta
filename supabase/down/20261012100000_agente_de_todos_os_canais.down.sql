@@ -2,6 +2,9 @@
 -- as funções novas, a tabela e as colunas — nenhum corpo fica apontando para o
 -- que não existe.
 --
+-- Antes do down, o worker volta ao v7: o v8 chama `fila_do_agente`, que sai
+-- daqui. E o down vai pelo SQL Editor, não pelo MCP: ele tem DROP (D63).
+--
 -- O agente de todos os canais não tem para onde voltar: antes do D76 todo
 -- agente tinha canal. Este down RECUSA enquanto existir um — apagá-lo em
 -- silêncio seria tirar um agente de campanhas que contam com ele. Quem quiser
@@ -110,18 +113,22 @@ DROP FUNCTION IF EXISTS public.criar_agente(uuid, text, text, text, text, text, 
 DROP FUNCTION IF EXISTS public.quem_responde(uuid, uuid);
 DROP FUNCTION IF EXISTS privado.agente_que_responde(uuid, uuid, canal);
 
-ALTER POLICY campaign_agents_del ON campaign_agents USING (privado.pode_administrar(tenant_id));
-
 DROP TRIGGER IF EXISTS campaign_agents_vigencia ON campaign_agents;
+DROP TRIGGER IF EXISTS agents_ativo_desde ON agents;
 DROP TABLE IF EXISTS agentes_por_canal;
 DROP FUNCTION IF EXISTS privado.renovar_vigencia_do_agente();
+DROP FUNCTION IF EXISTS privado.vigencia_da_excecao();
+DROP FUNCTION IF EXISTS privado.renovar_ativo_desde();
 DROP FUNCTION IF EXISTS privado.validar_agente_do_canal();
 
--- "Ninguém nesta campanha" não existia: a linha sai, e sem linha ninguém
--- responde — que é o mesmo efeito de antes.
+-- "Ninguém nesta campanha" e "o agente do canal" não existiam: a linha sai,
+-- e sem linha ninguém responde — que é o efeito de antes nos dois casos,
+-- porque antes do D76 não havia agente do canal para herdar.
 DELETE FROM campaign_agents WHERE agent_id IS NULL;
 ALTER TABLE campaign_agents ALTER COLUMN agent_id SET NOT NULL;
+ALTER TABLE campaign_agents DROP COLUMN IF EXISTS herda;
 ALTER TABLE campaign_agents DROP COLUMN IF EXISTS vigente_desde;
+COMMENT ON COLUMN campaign_agents.agent_id IS NULL;
 
 UPDATE agents SET tamanho_maximo = 700 WHERE tamanho_maximo IS NULL;
 ALTER TABLE agents
@@ -133,6 +140,7 @@ ALTER TABLE agents
   DROP COLUMN IF EXISTS objetivo,
   DROP COLUMN IF EXISTS tom,
   DROP COLUMN IF EXISTS contexto,
+  DROP COLUMN IF EXISTS ativo_desde,
   ALTER COLUMN tamanho_maximo SET NOT NULL,
   ALTER COLUMN canal SET NOT NULL;
 
@@ -140,10 +148,25 @@ COMMENT ON COLUMN agents.canal IS NULL;
 COMMENT ON COLUMN agents.tamanho_maximo IS NULL;
 
 -- A grade volta à do D75: as colunas do D76 deixam de existir, o DELETE de
--- agents e a escrita de tabela inteira de campaign_agents voltam.
+-- agents e a escrita de tabela inteira de campaign_agents voltam. O REVOKE
+-- vem antes do GRANT porque revogar da tabela leva junto a grade por coluna;
+-- sem ele, a de coluna ficaria ao lado da de tabela.
 GRANT DELETE ON agents TO authenticated;
-GRANT INSERT, UPDATE ON campaign_agents TO authenticated;
+REVOKE INSERT, UPDATE ON campaign_agents FROM authenticated;
+GRANT INSERT, UPDATE, DELETE ON campaign_agents TO authenticated;
 GRANT INSERT, UPDATE, DELETE ON opt_out_termos, recusa_termos TO authenticated;
+
+-- E a escrita de anon volta ao que era: a do Supabase em toda tabela, menos
+-- nas sete que já tinham tirado tudo dele (D63, D64, D66).
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'anon') THEN
+    GRANT INSERT, UPDATE, DELETE, TRUNCATE ON ALL TABLES IN SCHEMA public TO anon;
+    REVOKE ALL ON blacklist_termos, blacklist_dominios, crm_vinculos, crm_estruturas,
+                  crm_acoes, crm_fontes, rascunhos FROM anon;
+  END IF;
+END;
+$$;
 
 CREATE OR REPLACE FUNCTION privado.estreitar_escrita_do_cliente()
 RETURNS void

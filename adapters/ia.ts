@@ -54,13 +54,23 @@ export function criarIa(provedor: string, buscar: Buscador = fetch): ModeloIA {
 }
 
 /**
- * Modelo de raciocínio da OpenAI (gpt-5, o1, o3, o4…), direto ou pelo
- * OpenRouter ("openai/gpt-5…"). Ele gasta parte do orçamento de tokens
- * pensando: sem folga, devolve vazio com `finish_reason = length`.
+ * Modelo de raciocínio da OpenAI (gpt-5, o1, o3, o4…), que aceita
+ * `reasoning_effort`. Os "-chat" (gpt-5-chat-latest) não são de raciocínio e
+ * RECUSAM o campo com 400 — que viraria erro definitivo em toda composição.
  */
 export function ehModeloDeRaciocinio(modelo: string): boolean {
-  return /^(openai\/)?(gpt-5|o\d)/i.test(modelo.trim());
+  const m = modelo.trim().toLowerCase();
+  return /^(openai\/)?(gpt-5|o\d)/.test(m) && !/chat/.test(m);
 }
+
+/**
+ * Folga de tokens acima do que o texto precisa. O teto de tokens só limita
+ * CUSTO: quem limita o tamanho é o freio. Modelo que raciocina — e pelo
+ * OpenRouter o Gemini 2.5, o DeepSeek R1 e o Sonar Reasoning raciocinam
+ * sempre — gasta o orçamento pensando antes de escrever; sem folga, devolve
+ * vazio com `finish_reason = length` e o raciocínio já cobrado.
+ */
+export const FOLGA_DE_TOKENS = 3000;
 
 /** 401, 403, 404 e 400 não melhoram sozinhos; o resto pode melhorar. */
 function definitivoPorStatus(status: number): boolean {
@@ -85,6 +95,10 @@ const CORTADO: Composicao = {
   erro: 'o modelo não terminou dentro do limite de tokens (texto cortado no meio não é mandado)',
 };
 const VAZIO: Composicao = { ok: false, definitivo: true, erro: 'o modelo devolveu uma resposta sem texto' };
+const PENSOU_DEMAIS: Composicao = {
+  ok: false, definitivo: true,
+  erro: 'o modelo gastou o limite de tokens raciocinando e não escreveu a resposta — escolha um modelo sem raciocínio para o agente',
+};
 
 class ClaudeIA implements ModeloIA {
   readonly provedor = 'anthropic';
@@ -150,8 +164,8 @@ class ChatCompletionsIA implements ModeloIA {
     // continuam no nome antigo, que é o que eles documentam.
     const raciocina = ehModeloDeRaciocinio(p.modelo);
     const teto = this.provedor === 'openai'
-      ? { max_completion_tokens: raciocina ? p.maxTokens + 3000 : p.maxTokens }
-      : { max_tokens: raciocina ? p.maxTokens + 3000 : p.maxTokens };
+      ? { max_completion_tokens: p.maxTokens + FOLGA_DE_TOKENS }
+      : { max_tokens: p.maxTokens + FOLGA_DE_TOKENS };
 
     try {
       const r = await this.buscar(`${base}/chat/completions`, {
@@ -177,8 +191,8 @@ class ChatCompletionsIA implements ModeloIA {
       if (typeof escolha?.message?.refusal === 'string' && escolha.message.refusal) {
         return { ok: false, erro: 'o modelo recusou compor esta resposta', definitivo: true };
       }
-      if (escolha?.finish_reason === 'length') return CORTADO;
       const texto = typeof escolha?.message?.content === 'string' ? escolha.message.content.trim() : '';
+      if (escolha?.finish_reason === 'length') return texto ? CORTADO : PENSOU_DEMAIS;
       return texto ? { ok: true, texto } : VAZIO;
     } catch (e) {
       return { ok: false, erro: e instanceof Error ? e.message : String(e), definitivo: false };

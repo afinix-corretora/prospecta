@@ -43,38 +43,87 @@ export function semAcento(s: string): string {
  * Pedidos de dado que nenhum rascunho faz, seja qual for a instrução do
  * cliente. Pedir CPF ou cartão por mensagem é o golpe que o contato aprendeu
  * a temer — e o primeiro passo para o chip ser denunciado.
+ *
+ * O freio olha FRASE A FRASE e só barra a frase que PEDE: pergunta, ou verbo
+ * de pedido, e sem negação. "Por aqui não pedimos CPF nem senha" é o agente
+ * tranquilizando a pessoa — barrar isso com o motivo "pede dado sensível" foi
+ * o que a sonda ao vivo mostrou na primeira versão (D76).
  */
-const DADO_SENSIVEL = /\b(cpf|rg|senha|cartao de credito|numero do cartao|dados do cartao|codigo de seguranca|cvv|dados bancarios|numero da conta)\b/;
-
-/** Termos de saúde: dado sensível pela LGPD (art. 5º, II). Perguntar sobre
- *  isso por mensagem não é papel do agente — é da equipe, com a pessoa. */
-const SAUDE = /\b(doencas?|preexistentes?|cirurgias?|tratamentos?|diagnosticos?|medicamentos?|internac\w*|gravidez|gestante|peso e altura|cid)\b/;
-
-/** Dinheiro escrito: "R$ 289,90", "289 reais". */
-const DINHEIRO = /r\$\s*\d|\b\d[\d.]*(,\d{2})?\s*reais\b/;
-
-/** Carência prometida — a promessa que mais vira reclamação em plano de saúde. */
-const SEM_CARENCIA = /\b(sem carencias?|carencia zero|isencao de carencias?|isento de carencias?|zero de carencia)\b/;
+const DADO_SENSIVEL = /\b(cpf|rg|senha|cartao de credito|(numero|dados) d[oa] (seu |sua )?cartao|codigo de seguranca|cvv|dados bancarios|numero da (sua )?conta)\b/;
+const PEDIDO = /\?|\b(me )?(manda|mande|envia|envie|passa|passe|informa|informe|digita|digite|confirma|confirme|diga|fala)\b|\b(preciso|precisamos|precisaria) d[oa]\b/;
+const NEGACAO = /\b(nao|nunca|jamais|nem)\b/;
 
 /**
- * Metadado que não vai ao modelo: documento, cartão, banco e saúde. A
- * planilha vira metadado TODA coluna que o motor não entende — e o pedido ao
- * provedor de IA não é lugar para CPF nem diagnóstico (D76).
+ * Pergunta sobre a saúde DA PESSOA: dado sensível pela LGPD (art. 5º, II), e
+ * conversa da equipe, não do agente. O que é COBERTURA do plano — internação,
+ * acomodação, atendimento a gestante, tratamento odontológico — é produto, e a
+ * frase que fala de plano não é barrada.
  */
-const PALAVRA_SENSIVEL = /^(cpf|rg|cnh|documento|cartao|senha|banco|bancari|agencia|pix|saude|doenca|cid|diagnostic|tratament|medicament|cirurgi|peso|altura|gravid|nascimento|renda|salario)/;
-const PARECE_CPF = /^\s*\d{3}\.?\d{3}\.?\d{3}-?\d{2}\s*$/;
+const SAUDE_DA_PESSOA = /\b(doencas?|doente|problemas? de saude|condic(ao|oes) de saude|preexistentes?|cirurgias?|operad[oa]|gravida|gestante|gravidez|remedios?|medicamentos?|pressao alta|hipertens\w*|diabet\w*|fuma|fumante|tratamento medico|diagnosticos?|internad[oa]s?|seu peso|sua altura|peso e altura)\b/;
+const FALA_DO_PLANO = /\b(cobertura|coberturas|cobre|cobrem|plano|planos|inclui|incluem|coparticipacao|acomodacao|enfermaria|apartamento|carencias?|rede)\b/;
 
-/** A chave é sensível se alguma PALAVRA dela começa por um desses termos —
- *  por palavra, para "cidade" não cair por conter "cid". */
+/**
+ * O agente confirmando uma remoção que ninguém gravou. Os agentes de antes do
+ * D76 têm "confirme em uma frase e encerre" na instrução, e quem decide entre
+ * isso e o [SAIR] da regra é só o cabeçalho. A confirmação vira escalada: a
+ * pessoa vai continuar recebendo da próxima campanha se ninguém a suprimir.
+ */
+const CONFIRMA_SAIDA = /\b(nao (vamos|vou|iremos|vai) mais (te |lhe )?(contatar|contactar|mandar|enviar|incomodar|chamar|escrever|procurar)|remov(i|emos|ido|ida|endo)\b.{0,30}\b(lista|cadastro|numero|contato|base)|descadastr\w*|nao (recebera|vai receber|recebe) mais|nao vai mais receber|(seu|teu) (numero|contato|e-?mail) (foi|esta|sera) (removido|excluido|retirado))/;
+
+/** Carência prometida — a promessa que mais vira reclamação em plano de saúde. */
+const PROMESSA_DE_CARENCIA = /\b(sem carencias?|carencia zero|isencao de carencias?|isent[oa] de carencias?|zero de carencia|carencia reduzida|carencias? reduzidas?|carencia de \d+ (dias|meses))\b/g;
+
+/**
+ * Valores em dinheiro escritos no texto: "R$ 289,90", "289 reais", "1 mil
+ * reais", "289,90", "189/mês". Devolve o valor, para comparar com o que o
+ * cliente escreveu — não a presença de um valor qualquer.
+ */
+function valoresEmDinheiro(normal: string): number[] {
+  const achados: number[] = [];
+  const num = (t: string) => Number(t.replace(/\./g, '').replace(',', '.'));
+  const padroes: [RegExp, (m: RegExpExecArray) => number][] = [
+    [/r\$\s*(\d+(?:\.\d{3})*(?:,\d{1,2})?)(\s*mil\b)?/g, (m) => num(m[1]!) * (m[2] ? 1000 : 1)],
+    [/\b(\d+(?:\.\d{3})*(?:,\d{1,2})?)\s*(mil\s+)?reais\b/g, (m) => num(m[1]!) * (m[2] ? 1000 : 1)],
+    [/\bmil reais\b/g, () => 1000],
+    [/(?<![\d.,$])\b(\d{1,3}(?:\.\d{3})*,\d{2})\b/g, (m) => num(m[1]!)],
+    [/\b(\d{2,}(?:,\d{1,2})?)\s*(\/\s*mes|por mes|ao mes|mensais)\b/g, (m) => num(m[1]!)],
+  ];
+  for (const [re, valor] of padroes) {
+    for (let m = re.exec(normal); m; m = re.exec(normal)) achados.push(valor(m));
+  }
+  return achados;
+}
+
+/** Todo número escrito numa fonte, para dizer se um valor está lá. */
+function numerosEscritos(normal: string): Set<number> {
+  const s = new Set<number>();
+  for (const m of normal.matchAll(/\d+(?:\.\d{3})*(?:,\d{1,2})?/g)) {
+    const v = Number(m[0].replace(/\./g, '').replace(',', '.'));
+    s.add(v);
+    if (/\bmil\b/.test(normal.slice(m.index! + m[0].length, m.index! + m[0].length + 5))) s.add(v * 1000);
+  }
+  return s;
+}
+
+/**
+ * Metadado que não vai ao modelo: documento, cartão, banco, saúde, e o texto
+ * livre de anotação ("obs" é onde corretora anota a condição de saúde). A
+ * planilha vira metadado TODA coluna que o motor não entende — e o pedido ao
+ * provedor de IA não é lugar para CPF nem diagnóstico (D76). Por palavra da
+ * chave, e também pelo VALOR: CPF ou termo de saúde no meio do texto.
+ */
+const PALAVRA_SENSIVEL = /^(cpf|rg|cnh|documento|carteirinha|cartao|senha|banco|bancari|agencia|pix|saude|doenca|comorbid|condic|cid\d*$|diagnostic|tratament|medicament|cirurgi|peso|altura|gravid|gestant|nasc|renda|rendiment|salario|obs|observ|nota|notas|anotac|coment)/;
+const VALOR_SENSIVEL = /\d{3}\.\d{3}\.\d{3}-\d{2}|\bcpf\b|\b(diabet\w*|hipertens\w*|cancer|hemodialise|gravida|gestante|doenca|cirurgia|internad[oa]|cid ?[a-z]\d|depress\w*|hiv|preexistente)\b/;
+
 function chaveSensivel(k: string): boolean {
-  return semAcento(k).split(/[^a-z0-9]+/).some((p) => p && PALAVRA_SENSIVEL.test(p) && !(p.startsWith('cid') && p !== 'cid'));
+  return semAcento(k).split(/[^a-z0-9]+/).some((p) => p !== '' && PALAVRA_SENSIVEL.test(p));
 }
 
 /** O que do contato vai ao modelo: só texto, e sem o que é sensível. A tela mostra a mesma lista. */
 export function metadadosParaOModelo(m: Record<string, unknown> | null | undefined): [string, string][] {
   return Object.entries(m ?? {})
     .filter((e): e is [string, string] => typeof e[1] === 'string' && e[1].trim() !== '')
-    .filter(([k, v]) => !chaveSensivel(k) && !PARECE_CPF.test(v));
+    .filter(([k, v]) => !chaveSensivel(k) && !VALOR_SENSIVEL.test(semAcento(v)));
 }
 
 // ---------------------------------------------------------------------------
@@ -542,22 +591,24 @@ export function normalizarSaida(texto: string, canal: string): string {
   return m ? [`Assunto: ${m[1]!.replace(/^[*_]+|[*_]+$/g, '').trim()}`, ...resto].join('\n') : limpo;
 }
 
-/** Frases que terminam em pergunta: é onde um pedido de dado mora. */
-function perguntas(texto: string): string[] {
-  return texto.split(/(?<=[.!?\n])/).map((x) => x.trim()).filter((x) => x.endsWith('?'));
+/** O texto em frases: é na frase que se decide se há pedido, pergunta ou negação. */
+function frases(texto: string): string[] {
+  return texto.split(/(?<=[.!?\n])/).map((x) => x.trim()).filter(Boolean);
 }
 
 /**
  * O que vale conferir no texto que o modelo devolveu. A instrução diz ao
  * modelo o que não fazer; o freio confere que ele não fez (D66).
  *
- * `escrito` é o texto do próprio agente (o que faz e o contexto): valor e
- * condição que o cliente escreveu ali o agente pode repetir; o que não está
- * lá, ele inventou.
+ * Valor e carência: o que o CLIENTE escreveu sobre a oferta (o contexto, e o
+ * que se sabe do contato) o agente pode repetir — o MESMO valor, a mesma
+ * condição. O que não está lá, ele inventou. Nos agentes de antes do D76 a
+ * instrução inteira é do cliente e conta também; nos novos, a instrução é o
+ * roteiro do produto, cheio de "nunca cite valor", e não conta.
  */
 export function aplicarFreios(
   texto: string, r: Pick<EntradaDoPrompt, 'proibido' | 'tamanho_maximo' | 'canal'>
-    & Partial<Pick<EntradaDoPrompt, 'instrucoes' | 'contexto'>>,
+    & Partial<Pick<EntradaDoPrompt, 'instrucoes' | 'contexto' | 'objetivo' | 'metadados'>>,
 ): Freio {
   const limpo = normalizarSaida(texto, r.canal);
   // A marca escrita sem colchetes ("ESCALAR") também é marca: sairia para a pessoa como texto.
@@ -575,20 +626,34 @@ export function aplicarFreios(
     return { situacao: 'bloqueado', motivo: `passou do tamanho máximo (${limpo.length} de ${limite} caracteres)` };
   }
   const normal = semAcento(limpo);
+  if (CONFIRMA_SAIDA.test(normal)) {
+    return { situacao: 'escalar', motivo: 'o agente ia confirmar uma remoção que ninguém gravou: se a pessoa pediu '
+      + 'para sair, suprima o contato em Supressão e acrescente o termo em Configurações ▸ Blacklist' };
+  }
   const proibida = r.proibido.find((p) => p.trim() && normal.includes(semAcento(p.trim())));
   if (proibida) return { situacao: 'bloqueado', motivo: `contém uma expressão proibida: "${proibida}"` };
-  if (DADO_SENSIVEL.test(normal)) {
+  const fs = frases(normal);
+  if (fs.some((f) => DADO_SENSIVEL.test(f) && PEDIDO.test(f) && !NEGACAO.test(f))) {
     return { situacao: 'bloqueado', motivo: 'pede dado sensível (CPF, RG, senha, cartão ou dados bancários)' };
   }
-  if (perguntas(normal).some((p) => SAUDE.test(p))) {
-    return { situacao: 'bloqueado', motivo: 'pergunta sobre saúde — isso é conversa da equipe com a pessoa, não do agente' };
+  if (fs.some((f) => f.endsWith('?') && SAUDE_DA_PESSOA.test(f) && !FALA_DO_PLANO.test(f))) {
+    return { situacao: 'bloqueado', motivo: 'pergunta sobre a saúde da pessoa — isso é conversa da equipe com ela, não do agente' };
   }
-  const escrito = semAcento(`${r.instrucoes ?? ''}\n${r.contexto ?? ''}`);
-  if (DINHEIRO.test(normal) && !DINHEIRO.test(escrito)) {
-    return { situacao: 'bloqueado', motivo: 'cita valor em dinheiro que não está no texto do agente' };
+  const fonte = semAcento([
+    r.contexto ?? '',
+    ...(r.objetivo ? [] : [r.instrucoes ?? '']),
+    ...Object.values(r.metadados ?? {}).filter((v): v is string => typeof v === 'string'),
+  ].join('\n'));
+  const escritos = numerosEscritos(fonte);
+  const inventado = valoresEmDinheiro(normal).find((v) => !escritos.has(v));
+  if (inventado !== undefined) {
+    return { situacao: 'bloqueado', motivo: `cita um valor (${inventado.toLocaleString('pt-BR')}) que não está no que o cliente escreveu sobre a oferta` };
   }
-  if (SEM_CARENCIA.test(normal) && !SEM_CARENCIA.test(escrito)) {
-    return { situacao: 'bloqueado', motivo: 'promete carência que não está no texto do agente' };
+  const linhasAfirmadas = fonte.split('\n').filter((l) => !NEGACAO.test(l)).join('\n');
+  const carencia = [...normal.matchAll(PROMESSA_DE_CARENCIA)].map((m) => m[0])
+    .find((frase) => !linhasAfirmadas.includes(frase));
+  if (carencia) {
+    return { situacao: 'bloqueado', motivo: `promete carência ("${carencia}") que não está no que o cliente escreveu sobre a oferta` };
   }
   return { situacao: 'pronto', texto: limpo };
 }

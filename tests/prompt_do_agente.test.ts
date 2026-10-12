@@ -224,3 +224,85 @@ test('o que do contato vai ao modelo: nem documento, nem saúde, nem CPF disfar�
 test('o nome da campanha vai marcado como interno', () => {
   assert.match(montarPedido(ANA).mensagem, /^Campanha \(nome interno, não cite para a pessoa\): Resgate Outubro\./);
 });
+
+// ---------------------------------------------------------------------------
+// D76, revisão: os freios nos dois sentidos — o que tem de barrar e o que não pode
+// ---------------------------------------------------------------------------
+
+test('dinheiro: valor a valor contra o que o cliente escreveu, e preço sem "R$" também conta', () => {
+  const comPreco = { ...ANA, proibido: [], contexto: ANA.contexto + ' Planos a partir de R$ 189,90 por mês.' };
+  assert.equal(aplicarFreios('Os planos começam em R$ 189,90.', comPreco).situacao, 'pronto');
+  assert.equal(aplicarFreios('O familiar para quatro sai por R$ 749,00 por mês.', comPreco).situacao, 'bloqueado');
+  for (const t of ['A mensalidade fica em 289,90.', 'A partir de 189/mês.', 'Fica perto de 1 mil reais.', 'Uns mil reais por mês.']) {
+    assert.equal(aplicarFreios(t, { ...ANA, proibido: [] }).situacao, 'bloqueado', t);
+  }
+  // A proibição escrita no roteiro não libera o valor: o roteiro do agente novo não conta.
+  const proibindo = { ...ANA, proibido: [], instrucoes: ANA.instrucoes + ' Nunca cite valores como R$ 300.' };
+  assert.equal(aplicarFreios('O plano sai por R$ 300 por mês.', proibindo).situacao, 'bloqueado');
+  // Número que não é dinheiro passa.
+  assert.equal(aplicarFreios('A ligação leva 15 minutos. Pode ser às 14h?', { ...ANA, proibido: [] }).situacao, 'pronto');
+  // O valor que está nas informações do contato (renovação) pode ser repetido.
+  assert.equal(aplicarFreios('Hoje você paga R$ 412,30.', { ...ANA, proibido: [], metadados: { mensalidade: 'R$ 412,30' } }).situacao, 'pronto');
+});
+
+test('carência: só a que o cliente AFIRMOU no contexto, nunca a da proibição', () => {
+  const sem = { ...ANA, proibido: [] };
+  const proibindo = { ...sem, instrucoes: sem.instrucoes + ' Nunca diga que o plano é sem carência.' };
+  assert.equal(aplicarFreios('Ótima notícia: nosso plano é sem carência!', proibindo).situacao, 'bloqueado');
+  assert.equal(aplicarFreios('A carência de 30 dias vale para consultas.', sem).situacao, 'bloqueado');
+  const afirmando = { ...sem, contexto: sem.contexto + '\nPlanos empresariais acima de 30 vidas são sem carência.' };
+  assert.equal(aplicarFreios('Para empresas acima de 30 vidas, o plano é sem carência.', afirmando).situacao, 'pronto');
+  const negando = { ...sem, contexto: sem.contexto + '\nNão temos plano sem carência.' };
+  assert.equal(aplicarFreios('Temos plano sem carência!', negando).situacao, 'bloqueado');
+});
+
+test('dado sensível: barra o pedido, não a frase que tranquiliza', () => {
+  const sem = { ...ANA, proibido: [] };
+  for (const t of ['Pode me mandar o número do seu cartão?', 'Me informa os dados do seu cartão.', 'Qual o seu CPF?',
+                   'Preciso do seu RG para seguir.']) {
+    assert.equal(aplicarFreios(t, sem).situacao, 'bloqueado', t);
+  }
+  for (const t of ['Entendo sua preocupação. Por aqui não vamos pedir senha nem dado de cartão.',
+                   'Fique tranquila: nunca pedimos CPF por mensagem.', 'Não pedimos CPF nem dados bancários.',
+                   'Aceitamos pagamento no cartão de crédito.']) {
+    assert.equal(aplicarFreios(t, sem).situacao, 'pronto', t);
+  }
+});
+
+test('saúde: barra a pergunta sobre a pessoa, não a pergunta sobre a cobertura', () => {
+  const sem = { ...ANA, proibido: [] };
+  for (const t of ['Alguém da família tem algum problema de saúde?', 'Você ou seus dependentes têm alguma condição de saúde?',
+                   'Você está grávida?', 'Você toma algum remédio controlado?', 'Você fuma? Tem pressão alta ou diabetes?',
+                   'Você tem alguma doença preexistente?']) {
+    assert.equal(aplicarFreios(t, sem).situacao, 'bloqueado', t);
+  }
+  for (const t of ['Você precisa de cobertura internacional?', 'Prefere um plano com ou sem coparticipação em internações?',
+                   'O plano inclui atendimento para gestante?', 'Quer cobertura para tratamentos odontológicos?',
+                   'Enfermaria ou apartamento nas internações?', 'Cid, qual o melhor horário para conversarmos?']) {
+    assert.equal(aplicarFreios(t, sem).situacao, 'pronto', t);
+  }
+});
+
+test('saída: o agente que CONFIRMA uma remoção escala — ninguém a gravou', () => {
+  // A cópia da Ana tem "confirme em uma frase e encerre" na instrução: o freio é que segura.
+  const antiga = { ...ANA, objetivo: null, instrucoes: 'Se a pessoa pedir para não ser mais contatada, confirme em uma frase e encerre.' };
+  for (const t of ['Certo, não vamos mais te contatar.', 'Tudo bem, removi seu número da nossa lista.',
+                   'Você não receberá mais mensagens nossas.', 'Pronto, você foi descadastrada.']) {
+    const f = aplicarFreios(t, antiga);
+    assert.equal(f.situacao, 'escalar', t);
+    assert.match((f as { motivo: string }).motivo, /Supressão/);
+  }
+  assert.equal(aplicarFreios('Sem problema! Se mudar de ideia, é só chamar.', antiga).situacao, 'pronto');
+});
+
+test('metadados: pelo nome e pelo valor — texto livre de anotação não vai, celular não some', () => {
+  const m = {
+    observacao: 'Paciente diabético, faz hemodiálise', comorbidades: 'x', condicao_medica: 'y', cid10: 'E11',
+    gestante: 'sim', 'dt nasc': '01/01/1980', carteirinha: '123', rendimento: '5000', obs: 'CPF 123.456.789-00',
+    telefone2: '11999999999', nota_interna: 'cliente difícil',
+    cidade: 'Rio Preto', empresa: 'ACME', cargo: 'RH', plano: 'Amil', operadora: 'Amil', vidas: '4',
+    idade_titular: '42', cnpj: '12.345.678/0001-90', comentario_livre: 'qualquer',
+  };
+  assert.deepEqual(metadadosParaOModelo(m).map(([k]) => k).sort(),
+    ['cargo', 'cidade', 'cnpj', 'empresa', 'idade_titular', 'operadora', 'plano', 'telefone2', 'vidas']);
+});

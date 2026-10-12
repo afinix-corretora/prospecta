@@ -54,10 +54,11 @@ DO \$\$ BEGIN
 END \$\$;
 GRANT USAGE ON SCHEMA public TO anon, authenticated;
 GRANT ALL ON ALL TABLES IN SCHEMA public TO authenticated;
--- Como no Supabase: anon tem o privilégio de SELECT, e quem nega é o RLS.
--- Se o privilégio faltasse, o teste passaria por "permission denied" e não
--- provaria nada sobre as políticas.
-GRANT SELECT ON ALL TABLES IN SCHEMA public TO anon;
+-- Como no Supabase: anon recebe o MESMO ALL de tabela que authenticated, e
+-- quem nega é o RLS — até a grade estreita revogar a escrita (D76). Até o D76
+-- o suite dava só SELECT a anon, e conferia uma grade mais estreita que a de
+-- produção, onde anon tinha INSERT, UPDATE e DELETE em 30 tabelas.
+GRANT ALL ON ALL TABLES IN SCHEMA public TO anon;
 GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO authenticated;
 -- E logo em seguida estreita de volta. No Supabase o GRANT ALL acima vem do
 -- default privilege e acontece no CREATE TABLE, então o REVOKE da migration

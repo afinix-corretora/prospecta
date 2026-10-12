@@ -28,14 +28,16 @@ const AGENTE = {
   historico: [{ de: 'nos', texto: 'Oi Marina, ainda faz sentido retomar?' }, { de: 'pessoa', texto: 'exemplo' }],
 };
 
-function porta(o: { logada?: boolean; conta?: ContaParaTeste | null } = {}) {
+function porta(o: { logada?: boolean; conta?: ContaParaTeste | null; regra?: { termo: string; acao: string } } = {}) {
   let segredos = 0;
   const p: PortaTeste = {
     async pessoaLogada() { return o.logada ?? true; },
     async credencialVisivel() {
-      return o.conta === undefined ? { provedor: 'openai', modelo: 'gpt-5.5', ativo: true, config: { organizacao: 'org-1' } } : o.conta;
+      return o.conta === undefined
+        ? { tenant_id: 't1', provedor: 'openai', modelo: 'gpt-5.5', ativo: true, config: { organizacao: 'org-1' } } : o.conta;
     },
     async segredo() { segredos += 1; return JSON.stringify({ api_key: 'sk-segredo-que-nao-volta' }); },
+    async regraDaBlacklist() { return o.regra ?? null; },
   };
   return { p, segredos: () => segredos };
 }
@@ -90,8 +92,8 @@ test('sem pessoa, sem conta alcançável ou com pedido ruim: nem segredo, nem mo
     [{}, pedido({ texto: '   ' }), 400],
     [{}, pedido({ agente: { ...AGENTE, instrucoes: 'curto' } }), 400],
     [{ conta: null }, pedido(), 404],
-    [{ conta: { provedor: 'openai', modelo: 'm', ativo: false, config: {} } }, pedido(), 409],
-    [{ conta: { provedor: 'google', modelo: 'm', ativo: true, config: {} } }, pedido(), 409],
+    [{ conta: { tenant_id: 't1', provedor: 'openai', modelo: 'm', ativo: false, config: {} } }, pedido(), 409],
+    [{ conta: { tenant_id: 't1', provedor: 'google', modelo: 'm', ativo: true, config: {} } }, pedido(), 409],
   ] as const) {
     const { p, segredos } = porta(o as Parameters<typeof porta>[0]);
     const ia = new IaFalsa({ ok: true, texto: 'oi' });
@@ -108,4 +110,23 @@ test('o que não é string não vira texto no prompt (o D48 aqui)', async () => 
   }), undefined, () => ia);
   assert.doesNotMatch(ia.pedidos[0]!.sistema, /object Object/);
   assert.match(ia.pedidos[0]!.sistema, /nunca mais de 700\)/, 'tamanho fora da faixa é ignorado: vale o do canal');
+});
+
+test('a blacklist do cliente lê a fala antes do modelo, como no worker', async () => {
+  const sai = porta({ regra: { termo: 'para de me mandar', acao: 'suprimir' } });
+  const ia = new IaFalsa({ ok: true, texto: 'oi' });
+  const r = await testarDoPedido(sai.p, pedido({ texto: 'para de me mandar mensagem' }), undefined, () => ia);
+  assert.ok(r.corpo.ok && r.corpo.situacao === 'blacklist' && /suprime a pessoa/.test(r.corpo.motivo));
+  assert.equal(ia.pedidos.length + sai.segredos(), 0, 'nem o segredo é lido');
+  const recusa = await testarDoPedido(porta({ regra: { termo: 'não tenho interesse', acao: 'recusa' } }).p,
+    pedido({ texto: 'não tenho interesse' }), undefined, () => new IaFalsa({ ok: true, texto: 'oi' }));
+  assert.ok(recusa.corpo.ok && recusa.corpo.situacao === 'recusa');
+});
+
+test('metadados com teto: 5000 chaves enormes não viram um pedido de 5 MB', async () => {
+  const ia = new IaFalsa({ ok: true, texto: 'Oi!' });
+  const enorme: Record<string, string> = {};
+  for (let i = 0; i < 5000; i++) enorme['k' + i] = 'v'.repeat(1000);
+  await testarDoPedido(porta().p, pedido({ agente: { ...AGENTE, metadados: enorme } }), undefined, () => ia);
+  assert.ok(ia.pedidos[0]!.mensagem.length < 20_000, String(ia.pedidos[0]!.mensagem.length));
 });

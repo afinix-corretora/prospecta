@@ -636,9 +636,9 @@ function Agentes({ campanha, agentes, quem, doCanal, contasIA, provedoresIA, pod
                       : q?.origem === 'campanha' ? 'O agente escolhido para esta campanha está desligado: ninguém responde — a conversa não passa para o agente do canal.'
                       : doCanalAqui && !doCanalAqui.ativo ? `O agente do canal (${doCanalAqui.nome}) está desligado: ninguém responde.`
                       : 'Nenhum agente escolhido para este canal: a resposta fica para uma pessoa, em Respostas.'}
-                    {' '}<button className="link" type="button"
+                    {podeOperar && <>{' '}<button className="link" type="button"
                       onClick={() => nav(`/config/agentes/novo?campanha=${campanha.id}&canal=${canal}&objetivo=${objetivoDaCampanha}`)}>
-                      Criar um agente para esta campanha</button>
+                      Criar um agente para esta campanha</button></>}
                   </span>
                   {conflito && (
                     <Aviso tipo="neutro">{responde!.nome} é de {OBJETIVOS.find((o) => o.slug === responde!.objetivo)?.nome}

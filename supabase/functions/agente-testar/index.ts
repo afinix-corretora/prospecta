@@ -15,7 +15,12 @@ Deno.serve(async (req) => {
   if (req.method !== 'POST') return responder({ ok: false, erro: 'use POST' }, 405);
 
   try {
-    const pedido = (await req.json().catch(() => ({}))) as PedidoTeste;
+    // O pedido vem da tela, com o texto do agente: 64 KB cabem com folga, e
+    // corpo maior não é tela, é alguém mandando lixo ao modelo do cliente.
+    const bruto = await req.text();
+    if (bruto.length > 64_000) return responder({ ok: false, erro: 'pedido grande demais' }, 413);
+    let pedido: PedidoTeste;
+    try { pedido = JSON.parse(bruto || '{}') as PedidoTeste; } catch { pedido = {}; }
     const doUsuario = clienteDoUsuario(req);
     const admin = clienteAdmin();
 
@@ -30,12 +35,19 @@ Deno.serve(async (req) => {
       },
       async credencialVisivel(id) {
         const { data, error } = await doUsuario
-          .from('ai_credentials').select('provedor, modelo, ativo, config').eq('id', id).maybeSingle();
+          .from('ai_credentials').select('tenant_id, provedor, modelo, ativo, config').eq('id', id).maybeSingle();
         if (error) throw new Error(`conta de IA ${id}: ${error.message}`);
         return data ? {
-          provedor: data.provedor, modelo: data.modelo, ativo: data.ativo,
+          tenant_id: data.tenant_id, provedor: data.provedor, modelo: data.modelo, ativo: data.ativo,
           config: (data.config ?? {}) as Record<string, unknown>,
         } : null;
+      },
+      async regraDaBlacklist(tenantId, texto) {
+        // Com o JWT de quem pede: `testar_blacklist` confere que ele pertence ao cliente.
+        const { data, error } = await doUsuario.rpc('testar_blacklist', { p_tenant: tenantId, p_texto: texto });
+        if (error) throw new Error(`testar_blacklist: ${error.message}`);
+        const linha = ((data ?? []) as { termo: string; acao: string }[])[0];
+        return linha ? { termo: linha.termo, acao: linha.acao } : null;
       },
       async segredo(id) {
         const { data, error } = await admin.rpc('segredo_da_credencial_ia', { p_credencial_id: id });

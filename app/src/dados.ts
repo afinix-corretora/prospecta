@@ -711,7 +711,8 @@ export async function buscarModelosIA(pedido:
 /** O que "Testar" devolve (D76): o texto que o agente escreveria e passou
  *  pelos freios, ou por que não sairia. Nada foi gravado nem enviado. */
 export interface ResultadoDoTeste {
-  situacao: 'pronto' | 'escalar' | 'bloqueado' | 'erro';
+  /** `blacklist` e `recusa`: em produção a resposta nem chegaria ao agente. */
+  situacao: 'pronto' | 'escalar' | 'bloqueado' | 'erro' | 'blacklist' | 'recusa';
   texto?: string;
   motivo?: string;
   modelo?: string;
@@ -809,14 +810,16 @@ export async function atribuirAgente(campanha: string, agente: string) {
 
 export interface AgenteDaCampanha {
   canal: ProvedorCanal['canal'];
-  /** NULL: "ninguém responde nesta campanha, neste canal" (D76). */
+  /** NULL sem `herda`: "ninguém responde nesta campanha, neste canal" (D76). */
   agent_id: string | null;
+  /** A campanha voltou ao agente do canal: o NULL aqui NÃO é "ninguém". */
+  herda: boolean;
 }
 
 export async function lerAgentesDaCampanha(campanha: string): Promise<AgenteDaCampanha[]> {
   const { data, error } = await sb
     .from('campaign_agents')
-    .select('canal, agent_id')
+    .select('canal, agent_id, herda')
     .eq('campaign_id', campanha);
   if (error) throw error;
   return (data ?? []) as AgenteDaCampanha[];
@@ -1660,21 +1663,20 @@ export async function quemResponde(tenant: string, campanha: string): Promise<Qu
 }
 
 /** A exceção da campanha: um agente, "ninguém" (`null`) ou de volta ao do
- *  canal (`'canal'`, que apaga a exceção). */
+ *  canal (`'canal'`, que marca `herda` e dá data à volta). */
 export async function escolherAgenteDaCampanha(
   tenant: string, campanha: string, canal: string, escolha: string | null | 'canal',
 ) {
-  if (escolha === 'canal') {
-    const { error } = await sb.from('campaign_agents').delete().eq('campaign_id', campanha).eq('canal', canal);
-    if (error) throw error;
-    return;
-  }
-  const { data, error } = await sb.from('campaign_agents').update({ agent_id: escolha })
+  // Voltar ao agente do canal é uma LINHA (`herda`), não um DELETE: a volta
+  // tem data, e o agente do canal só responde nesta campanha o que chegar
+  // dali em diante (D76). Sem linha nenhuma, a campanha já usa o do canal.
+  const linha = escolha === 'canal' ? { agent_id: null, herda: true } : { agent_id: escolha, herda: false };
+  const { data, error } = await sb.from('campaign_agents').update(linha)
     .eq('campaign_id', campanha).eq('canal', canal).select('canal');
   if (error) throw error;
-  if ((data ?? []).length) return;
+  if ((data ?? []).length || escolha === 'canal') return;
   const ins = await sb.from('campaign_agents')
-    .insert({ tenant_id: tenant, campaign_id: campanha, canal, agent_id: escolha });
+    .insert({ tenant_id: tenant, campaign_id: campanha, canal, ...linha });
   if (ins.error) throw ins.error;
 }
 

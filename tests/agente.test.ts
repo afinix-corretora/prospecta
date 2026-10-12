@@ -291,7 +291,7 @@ test('chat completions: endpoint por provedor, Bearer e system + user', async ()
 test('openai: max_completion_tokens (o gpt-5.5 recusa max_tokens com 400); os outros, max_tokens', async () => {
   const comum = buscador(200, { choices: [{ message: { content: 'oi' } }] });
   await criarIa('openai', comum.buscar).compor({ ...PEDIDO, modelo: 'gpt-4.1' });
-  assert.equal(comum.chamadas[0]!.corpo.max_completion_tokens, 350);
+  assert.equal(comum.chamadas[0]!.corpo.max_completion_tokens, 3350, 'o teto só limita custo: o freio limita o tamanho');
   assert.equal('max_tokens' in comum.chamadas[0]!.corpo, false);
   assert.equal('reasoning_effort' in comum.chamadas[0]!.corpo, false);
 
@@ -301,12 +301,28 @@ test('openai: max_completion_tokens (o gpt-5.5 recusa max_tokens com 400); os ou
   assert.equal(pensa.chamadas[0]!.corpo.max_completion_tokens, 3350);
   assert.equal(pensa.chamadas[0]!.corpo.reasoning_effort, 'low');
 
-  for (const prov of ['deepseek', 'openrouter', 'perplexity'] as const) {
+  // Os "-chat" não são de raciocínio e recusam o campo com 400.
+  for (const m of ['gpt-5-chat-latest', 'gpt-5.1-chat-latest']) {
     const b = buscador(200, { choices: [{ message: { content: 'oi' } }] });
-    await criarIa(prov, b.buscar).compor(PEDIDO);
-    assert.equal(b.chamadas[0]!.corpo.max_tokens, 350, prov);
-    assert.equal('max_completion_tokens' in b.chamadas[0]!.corpo, false, prov);
+    await criarIa('openai', b.buscar).compor({ ...PEDIDO, modelo: m });
+    assert.equal('reasoning_effort' in b.chamadas[0]!.corpo, false, m);
   }
+
+  // Pelo OpenRouter, Gemini e R1 raciocinam sempre: a folga vale para todos.
+  for (const [prov, m] of [['deepseek', 'deepseek-reasoner'], ['openrouter', 'google/gemini-2.5-pro'],
+                           ['openrouter', 'deepseek/deepseek-r1'], ['perplexity', 'sonar-reasoning-pro']] as const) {
+    const b = buscador(200, { choices: [{ message: { content: 'oi' } }] });
+    await criarIa(prov, b.buscar).compor({ ...PEDIDO, modelo: m });
+    assert.equal(b.chamadas[0]!.corpo.max_tokens, 3350, `${prov} ${m}`);
+    assert.equal('max_completion_tokens' in b.chamadas[0]!.corpo, false, prov);
+    assert.equal('reasoning_effort' in b.chamadas[0]!.corpo, false, prov);
+  }
+});
+
+test('chat completions: orçamento gasto pensando é dito como tal', async () => {
+  const r = await criarIa('openrouter', buscador(200, { choices: [{ message: { content: '' }, finish_reason: 'length' }] }).buscar)
+    .compor({ ...PEDIDO, modelo: 'google/gemini-2.5-pro' });
+  assert.ok(!r.ok && r.definitivo && /raciocinando/.test(r.erro));
 });
 
 test('chat completions: cortado (finish_reason length) e vazio são definitivos', async () => {

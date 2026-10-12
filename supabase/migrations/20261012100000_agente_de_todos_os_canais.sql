@@ -28,11 +28,16 @@
 --                   (agent_id nulo) quer dizer ninguém — sem cair para o
 --                   agente do canal. Desligar um agente é o freio, e o freio
 --                   que entrega a conversa a outro agente não freia (D54).
---   vigente_desde   o agente do canal responde o que chegar DEPOIS de ser
---                   escolhido. Sem isso, marcar um agente no WhatsApp faria
+--   vigente_desde   o agente responde o que chegar DEPOIS de passar a
+--                   responder. Sem isso, marcar um agente no WhatsApp faria
 --                   ele responder de uma vez os sete dias de respostas de toda
 --                   campanha que não tinha agente — no e-mail, dias depois, a
---                   uma conversa que uma pessoa pode já ter atendido.
+--                   uma conversa que uma pessoa pode já ter atendido. São
+--                   QUATRO os momentos em que alguém passa a responder, e os
+--                   quatro renovam: escolher o agente do canal, escolher a
+--                   exceção da campanha, a campanha voltar ao agente do canal
+--                   (`herda`, uma linha e não um DELETE — apagar não deixaria
+--                   data nenhuma) e o agente ser religado (`ativo_desde`).
 --
 -- A regra de quem responde mora numa função só, `privado.agente_que_responde`,
 -- que a fila e a tela (`quem_responde`) usam: o despachante discordar do
@@ -40,8 +45,11 @@
 -- TypeScript é o D55.
 --
 -- A fila nova tem nome novo porque o tipo de retorno muda (D63: sem DROP).
--- `respostas_para_o_agente` fica sem chamador quando o worker v8 entrar, e até
--- lá devolve 700 onde o tamanho é nulo, para o v7 seguir sendo rollback seguro.
+-- `respostas_para_o_agente` fica sem chamador quando o worker v8 entrar. Até
+-- lá ela só enxerga os agentes de ANTES (canal preenchido) e devolve 700 onde
+-- o tamanho é nulo: o v7 não sabe montar o prompt do agente novo (sem tom,
+-- sem contexto, sem o bloco do canal), então com ele o agente novo não compõe
+-- — que é o que torna o v7 um rollback seguro de verdade.
 --
 -- O que NÃO muda aqui, de propósito: o INSERT de `agents` continua de tabela
 -- inteira, porque `atribuir_agente` é INVOKER e a cópia do catálogo grava
@@ -67,7 +75,10 @@ ALTER TABLE agents
   -- nenhuma, e é o produto quem as põe. Um agente de antes sem canal
   -- responderia no SMS com as regras do WhatsApp escritas na instrução.
   ADD CONSTRAINT agents_sem_canal_tem_objetivo CHECK (canal IS NOT NULL OR objetivo IS NOT NULL),
-  ADD CONSTRAINT agents_contexto_do_agente_novo CHECK (objetivo IS NULL OR length(trim(contexto)) >= 40);
+  ADD CONSTRAINT agents_contexto_do_agente_novo CHECK (objetivo IS NULL OR length(trim(contexto)) >= 40),
+  -- Os agentes que já existem valem para tudo, como sempre valeram.
+  ADD COLUMN ativo_desde timestamptz NOT NULL DEFAULT '-infinity';
+ALTER TABLE agents ALTER COLUMN ativo_desde SET DEFAULT now();
 
 COMMENT ON COLUMN agents.canal IS
   'NULL: o agente de todos os canais (D76), e o que muda por canal é do produto. '
@@ -81,6 +92,29 @@ COMMENT ON COLUMN agents.contexto IS
   'Sobre a empresa e a oferta: o que só o cliente sabe. Obrigatório no agente novo.';
 COMMENT ON COLUMN agents.tamanho_maximo IS
   'O agente pode encurtar o que o canal permite; nunca alongar. NULL = o do canal (D76).';
+COMMENT ON COLUMN agents.ativo_desde IS
+  'Quando o agente foi ligado pela última vez. Religado, ele responde só o que chegar dali em diante: '
+  'o que chegou com o freio puxado ficou com uma pessoa (D76). Escrito pelo gatilho, não pela tela.';
+
+CREATE FUNCTION privado.renovar_ativo_desde() RETURNS trigger
+LANGUAGE plpgsql
+SET search_path TO 'public', 'privado'
+AS $$
+BEGIN
+  IF TG_OP = 'INSERT' THEN
+    NEW.ativo_desde := now();
+  ELSIF NEW.ativo AND NOT OLD.ativo THEN
+    NEW.ativo_desde := now();
+  ELSE
+    NEW.ativo_desde := OLD.ativo_desde;
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+CREATE TRIGGER agents_ativo_desde
+  BEFORE INSERT OR UPDATE ON agents
+  FOR EACH ROW EXECUTE FUNCTION privado.renovar_ativo_desde();
 
 -- ---------------------------------------------------------------------------
 -- Quem responde em cada canal
@@ -155,13 +189,24 @@ CREATE TRIGGER agentes_por_canal_valida
 -- o canal está habilitado na campanha continua conferindo.
 ALTER TABLE campaign_agents ALTER COLUMN agent_id DROP NOT NULL;
 
+-- Voltar ao agente do canal é uma LINHA, não um DELETE: a volta tem data, e é
+-- a partir dela que o agente do canal responde nesta campanha. Apagar a
+-- exceção faria valer a data antiga do canal, e o agente responderia sozinho
+-- o que chegou enquanto a campanha estava em "ninguém".
+ALTER TABLE campaign_agents
+  ADD COLUMN herda boolean NOT NULL DEFAULT false,
+  ADD CONSTRAINT campaign_agents_herda_sem_agente CHECK (NOT herda OR agent_id IS NULL);
+
+COMMENT ON COLUMN campaign_agents.herda IS
+  'Verdadeiro: esta campanha usa o agente do canal, a partir de vigente_desde (D76).';
+
 -- As linhas que já existem valem para tudo, como sempre valeram: toda resposta
 -- dessas campanhas já ganhou rascunho. As novas valem a partir de agora.
 ALTER TABLE campaign_agents ADD COLUMN vigente_desde timestamptz NOT NULL DEFAULT '-infinity';
 ALTER TABLE campaign_agents ALTER COLUMN vigente_desde SET DEFAULT now();
 
 COMMENT ON COLUMN campaign_agents.agent_id IS
-  'NULL: ninguém responde nesta campanha, neste canal — nem o agente do canal (D76).';
+  'NULL sem herda: ninguém responde nesta campanha, neste canal — nem o agente do canal (D76).';
 
 CREATE FUNCTION privado.renovar_vigencia_do_agente() RETURNS trigger
 LANGUAGE plpgsql
@@ -182,14 +227,33 @@ $$;
 CREATE TRIGGER agentes_por_canal_vigencia
   BEFORE INSERT OR UPDATE ON agentes_por_canal
   FOR EACH ROW EXECUTE FUNCTION privado.renovar_vigencia_do_agente();
+
+-- A exceção: a vigência renova quando o agente OU a herança muda. E quem
+-- escolhe um agente deixa de herdar — `atribuir_agente`, que é de antes e não
+-- conhece `herda`, grava o agente por cima de uma linha que herdava, e sem
+-- isto o CHECK recusaria a tela que está no ar.
+CREATE FUNCTION privado.vigencia_da_excecao() RETURNS trigger
+LANGUAGE plpgsql
+SET search_path TO 'public', 'privado'
+AS $$
+BEGIN
+  IF NEW.agent_id IS NOT NULL THEN
+    NEW.herda := false;
+  END IF;
+  IF TG_OP = 'INSERT' THEN
+    NEW.vigente_desde := now();
+  ELSIF NEW.agent_id IS DISTINCT FROM OLD.agent_id OR NEW.herda IS DISTINCT FROM OLD.herda THEN
+    NEW.vigente_desde := now();
+  ELSE
+    NEW.vigente_desde := OLD.vigente_desde;
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
 CREATE TRIGGER campaign_agents_vigencia
   BEFORE INSERT OR UPDATE ON campaign_agents
-  FOR EACH ROW EXECUTE FUNCTION privado.renovar_vigencia_do_agente();
-
--- Voltar ao agente do canal é apagar a exceção, e quem escolhe a exceção é o
--- operador. Com DELETE só para admin, o operador conseguia trocar o agente
--- (UPDATE) e não conseguia desfazer a troca.
-ALTER POLICY campaign_agents_del ON campaign_agents USING (privado.pode_operar(tenant_id));
+  FOR EACH ROW EXECUTE FUNCTION privado.vigencia_da_excecao();
 
 -- ---------------------------------------------------------------------------
 -- Quem responde: uma regra, um lugar
@@ -200,18 +264,23 @@ RETURNS TABLE (agent_id uuid, origem text, vigente_desde timestamptz)
 LANGUAGE sql STABLE
 SET search_path TO 'public', 'privado'
 AS $$
-  -- A exceção da campanha, quando existe, decide sozinha — inclusive o nulo,
-  -- que é "ninguém". Sem exceção, o agente do canal. Se o agente escolhido
-  -- está desligado, quem lê isto não junta o agente: ninguém responde.
-  SELECT CASE WHEN ca.campaign_id IS NOT NULL THEN ca.agent_id ELSE apc.agent_id END,
-         -- 'ninguem': a campanha disse "ninguém aqui". 'sem_agente': nem a
-         -- campanha nem o canal escolheram. Os dois dão ninguém respondendo; a
-         -- tela precisa saber qual, para mostrar a escolha certa.
-         CASE WHEN ca.campaign_id IS NOT NULL
+  -- A exceção da campanha, quando existe e não herda, decide sozinha —
+  -- inclusive o nulo, que é "ninguém". Herdando, ou sem exceção, vale o agente
+  -- do canal; herdando, só a partir da volta (a mais recente das duas datas).
+  -- Se o agente escolhido está desligado, quem lê isto não junta o agente:
+  -- ninguém responde.
+  --
+  -- 'ninguem': a campanha disse "ninguém aqui". 'sem_agente': nem a campanha
+  -- nem o canal escolheram. Os dois dão ninguém respondendo; a tela precisa
+  -- saber qual, para mostrar a escolha certa.
+  SELECT CASE WHEN ca.campaign_id IS NOT NULL AND NOT ca.herda THEN ca.agent_id ELSE apc.agent_id END,
+         CASE WHEN ca.campaign_id IS NOT NULL AND NOT ca.herda
                 THEN CASE WHEN ca.agent_id IS NULL THEN 'ninguem' ELSE 'campanha' END
               WHEN apc.agent_id IS NOT NULL THEN 'canal'
               ELSE 'sem_agente' END,
-         CASE WHEN ca.campaign_id IS NOT NULL THEN ca.vigente_desde ELSE apc.vigente_desde END
+         CASE WHEN ca.campaign_id IS NOT NULL AND NOT ca.herda THEN ca.vigente_desde
+              WHEN ca.campaign_id IS NOT NULL THEN greatest(ca.vigente_desde, apc.vigente_desde)
+              ELSE apc.vigente_desde END
     FROM (SELECT 1) AS um
     LEFT JOIN campaign_agents ca
            ON ca.tenant_id = p_tenant AND ca.campaign_id = p_campaign_id AND ca.canal = p_canal
@@ -220,7 +289,7 @@ AS $$
 $$;
 
 COMMENT ON FUNCTION privado.agente_que_responde IS
-  'A regra de quem responde (D76): a exceção da campanha decide sozinha; sem ela, o agente do canal. '
+  'A regra de quem responde (D76): a exceção da campanha decide sozinha; herdando ou sem ela, o agente do canal. '
   'Lida pela fila do worker e pela tela (quem_responde), para as duas nunca discordarem.';
 
 -- A tela pergunta, e a resposta é a mesma da fila.
@@ -309,9 +378,9 @@ BEGIN
       RAISE EXCEPTION 'campanha % não é deste cliente', p_campanha USING ERRCODE = 'restrict_violation';
     END IF;
     FOREACH v_canal IN ARRAY p_canais_da_campanha LOOP
-      INSERT INTO campaign_agents (tenant_id, campaign_id, canal, agent_id)
-      VALUES (p_tenant, p_campanha, v_canal, v_id)
-      ON CONFLICT (campaign_id, canal) DO UPDATE SET agent_id = EXCLUDED.agent_id;
+      INSERT INTO campaign_agents (tenant_id, campaign_id, canal, agent_id, herda)
+      VALUES (p_tenant, p_campanha, v_canal, v_id, false)
+      ON CONFLICT (campaign_id, canal) DO UPDATE SET agent_id = EXCLUDED.agent_id, herda = false;
     END LOOP;
   END IF;
 
@@ -400,8 +469,9 @@ AS $$
     LEFT JOIN ai_provider_catalog pc ON pc.slug = ac.provedor
     JOIN contact_identities ci ON ci.tenant_id = r.tenant_id AND ci.id = r.contact_identity_id
    WHERE r.n = 1
-     -- O agente responde o que chegou depois de ser escolhido (D76).
-     AND r.ocorrido_em >= q.vigente_desde
+     -- O agente responde o que chegou depois de passar a responder: escolhido
+     -- no canal, na campanha, de volta ao canal, ou religado (D76).
+     AND r.ocorrido_em >= greatest(q.vigente_desde, a.ativo_desde)
      AND NOT EXISTS (SELECT 1 FROM rascunhos x WHERE x.tenant_id = r.tenant_id AND x.message_event_id = r.id)
      -- Nem rascunho para quem pediu para sair: um texto pronto é convite a
      -- uma pessoa mandar — e agora ao motor. A pessoa inteira e o endereço.
@@ -482,6 +552,9 @@ AS $$
     JOIN campaigns camp ON camp.tenant_id = r.tenant_id AND camp.id = r.campaign_id
     JOIN campaign_agents ca ON ca.tenant_id = r.tenant_id AND ca.campaign_id = r.campaign_id AND ca.canal = r.canal
     JOIN agents a     ON a.tenant_id = r.tenant_id AND a.id = ca.agent_id AND a.ativo
+                     -- D76: o v7 não sabe montar o prompt do agente de todos os
+                     -- canais. Com ele, o agente novo não compõe.
+                     AND a.canal IS NOT NULL
     -- A conta escolhida na campanha vale sobre a do agente (D68): o agente é
     -- uma persona que várias campanhas dividem, e a conta é decisão de cada uma.
     LEFT JOIN ai_credentials ac ON ac.tenant_id = a.tenant_id
@@ -509,7 +582,9 @@ BEGIN
   FOREACH alvo IN ARRAY ARRAY[
     'public.fila_do_agente(integer)',
     'privado.validar_agente_do_canal()',
-    'privado.renovar_vigencia_do_agente()'
+    'privado.renovar_vigencia_do_agente()',
+    'privado.vigencia_da_excecao()',
+    'privado.renovar_ativo_desde()'
   ] LOOP
     EXECUTE format('REVOKE ALL ON FUNCTION %s FROM PUBLIC, anon', alvo);
     IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'authenticated') THEN
@@ -548,10 +623,11 @@ $$;
 -- A grade
 -- ---------------------------------------------------------------------------
 
--- A grade estreita, regenerada a partir do corpo do D75 (D59). Quatro
+-- A grade estreita, regenerada a partir do corpo do D75 (D59). Cinco
 -- mudanças: o agente ganha as colunas do D76 no UPDATE e perde o DELETE;
--- campaign_agents e agentes_por_canal ficam por coluna; e os dois catálogos de
--- vocabulário saem da escrita de quem usa a tela.
+-- campaign_agents (sem DELETE) e agentes_por_canal ficam por coluna; os dois
+-- catálogos de vocabulário saem da escrita de quem usa a tela; e anon deixa de
+-- ter escrita em qualquer tabela.
 CREATE OR REPLACE FUNCTION privado.estreitar_escrita_do_cliente()
 RETURNS void
 LANGUAGE plpgsql
@@ -659,8 +735,11 @@ BEGIN
   -- D76: quem responde. A tela escolhe o agente e o canal; a vigência é do
   -- gatilho, e o dono da linha não muda.
   REVOKE INSERT, UPDATE ON campaign_agents, agentes_por_canal FROM authenticated;
-  GRANT INSERT (tenant_id, campaign_id, canal, agent_id) ON campaign_agents TO authenticated;
-  GRANT UPDATE (agent_id) ON campaign_agents TO authenticated;
+  GRANT INSERT (tenant_id, campaign_id, canal, agent_id, herda) ON campaign_agents TO authenticated;
+  GRANT UPDATE (agent_id, herda) ON campaign_agents TO authenticated;
+  -- Sem DELETE: apagar a exceção faria valer a data antiga do agente do canal.
+  -- Voltar ao do canal é `herda`, que tem data.
+  REVOKE DELETE ON campaign_agents FROM authenticated;
   GRANT INSERT (tenant_id, canal, agent_id) ON agentes_por_canal TO authenticated;
   GRANT UPDATE (agent_id) ON agentes_por_canal TO authenticated;
 
@@ -668,6 +747,15 @@ BEGIN
   -- parece ter sido composto pelo agente com os freios dele, sem ter sido —
   -- e, desde o D69, um `envio = 'fila'` sem mensagem nenhuma.
   REVOKE INSERT, UPDATE, DELETE ON rascunhos FROM authenticated;
+
+  -- D76: anon não escreve em tabela nenhuma. O RLS já recusa (nenhuma
+  -- política de escrita aceita quem não entrou), mas o Supabase dá a anon o
+  -- mesmo ALL de tabela que dá a authenticated: a política segurava enquanto o
+  -- privilégio soltava, que é o D54 — e o suite, que concedia só SELECT a anon,
+  -- conferia uma grade mais estreita que a de produção.
+  IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'anon') THEN
+    REVOKE INSERT, UPDATE, DELETE, TRUNCATE ON ALL TABLES IN SCHEMA public FROM anon;
+  END IF;
 END;
 $function$;
 

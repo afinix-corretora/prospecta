@@ -444,9 +444,26 @@ SELECT tn.confere('o motor não é API: worker só por service_role',
      WHERE n.nspname = 'public'
        AND p.proname IN ('processar_vencidos','reivindicar_pendentes','proximos_vencidos',
                          'registrar_resultado_envio','registrar_evento_provedor',
-                         'reservar_envio','registrar_falha_remetente','encerrar_enrollment')
+                         'reservar_envio','registrar_falha_remetente','encerrar_enrollment',
+                         -- D76: as quatro do agente também são do worker.
+                         'fila_do_agente','respostas_para_o_agente','enfileirar_resposta',
+                         'registrar_rascunho')
        AND (has_function_privilege('anon', p.oid, 'EXECUTE')
          OR has_function_privilege('authenticated', p.oid, 'EXECUTE'))));
+
+-- D76: com o ALL de tabela que o Supabase dá a anon (o run.sh imita), quem
+-- tira a escrita é a grade estreita. Sem ela, o RLS segurava a linha enquanto
+-- o privilégio soltava a tabela — o D54 em quem nem entrou.
+SELECT tn.confere('anon não escreve em tabela nenhuma de public',
+  NOT EXISTS (
+    SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+     WHERE n.nspname = 'public' AND c.relkind = 'r'
+       AND (has_table_privilege('anon', c.oid, 'INSERT') OR has_table_privilege('anon', c.oid, 'UPDATE')
+         OR has_table_privilege('anon', c.oid, 'DELETE') OR has_table_privilege('anon', c.oid, 'TRUNCATE'))),
+  (SELECT string_agg(c.relname, ', ') FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+    WHERE n.nspname = 'public' AND c.relkind = 'r'
+      AND (has_table_privilege('anon', c.oid, 'INSERT') OR has_table_privilege('anon', c.oid, 'UPDATE')
+        OR has_table_privilege('anon', c.oid, 'DELETE'))));
 
 SELECT tn.confere('anon não chama absolutamente nada em public',
   NOT EXISTS (

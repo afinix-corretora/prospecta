@@ -5,9 +5,12 @@
 --   1. quem responde: a exceção da campanha decide sozinha — inclusive
 --      "ninguém" e o agente desligado, que NÃO caem para o agente do canal
 --      (desligar é o freio, e o freio que entrega a conversa a outro não freia);
---   2. vigência: o agente do canal responde só o que chegou depois de ser
---      escolhido — sem isso, marcar um canal responderia de uma vez a semana
---      de respostas de toda campanha sem agente;
+--   2. vigência: o agente responde só o que chegou depois de passar a
+--      responder — escolhido no canal, escolhido na campanha, a campanha de
+--      volta ao agente do canal (`herda`) e o agente religado. Sem isso,
+--      marcar um canal responderia de uma vez a semana de respostas de toda
+--      campanha sem agente, e religar responderia o que chegou com o freio
+--      puxado;
 --   3. dois clientes, cada um com o seu agente e a sua conta de IA: cada linha
 --      da fila sai com os do PRÓPRIO cliente (o worker não tem RLS);
 --   4. a fila, a tela (`quem_responde`) e `agente_do_canal` dão a mesma resposta;
@@ -15,10 +18,13 @@
 --      escolhido; o de outro cliente não entra;
 --   6. `criar_agente` cria e escolhe numa transação só, e exige o que o agente
 --      novo precisa (persona, objetivo, contexto);
---   7. a grade: a tela cria, escolhe, desfaz a exceção e edita o texto; não
---      apaga agente, não muda canal, não mexe na vigência, não lê a fila — e a
---      cópia do catálogo por `atribuir_agente` continua funcionando, que é a
---      tela que está no ar.
+--   7. a grade: a tela cria, escolhe, volta a campanha ao agente do canal e
+--      edita o texto; não apaga agente nem exceção, não muda canal, não mexe
+--      na vigência, não lê a fila — e a cópia do catálogo por
+--      `atribuir_agente` continua funcionando, que é a tela que está no ar;
+--   8. a fila: supressão, só a última resposta, rascunho que já existe, e a
+--      vigência renovada em cada um dos quatro momentos, conferida pela FILA
+--      e não só pela coluna.
 
 \set ON_ERROR_STOP on
 SET client_min_messages = warning;
@@ -58,6 +64,8 @@ GRANT EXECUTE ON FUNCTION adc.sqlstate_de(text) TO authenticated, anon;
 \set c3    '\'ad000000-0000-0000-0000-0000000000c3\''
 \set c4    '\'ad000000-0000-0000-0000-0000000000c4\''
 \set c5    '\'ad000000-0000-0000-0000-0000000000c5\''
+\set c6    '\'ad000000-0000-0000-0000-0000000000c6\''
+\set c7    '\'ad000000-0000-0000-0000-0000000000c7\''
 \set cb1   '\'ad000000-0000-0000-0000-0000000000cb\''
 
 INSERT INTO tenants (id, nome, slug) VALUES
@@ -104,6 +112,8 @@ INSERT INTO campaigns (id, tenant_id, nome, tipo, base_legal, canais_habilitados
   (:c3, :ta, 'Ninguém aqui', 'morna', 'opt-in', '{whatsapp}', 'ad000000-0000-0000-0000-0000000000f2'),
   (:c4, :ta, 'Exceção desligada', 'morna', 'opt-in', '{whatsapp}', 'ad000000-0000-0000-0000-0000000000f2'),
   (:c5, :ta, 'Exceção nova', 'morna', 'opt-in', '{whatsapp}', 'ad000000-0000-0000-0000-0000000000f2'),
+  (:c6, :ta, 'Ninguém, depois agente', 'morna', 'opt-in', '{whatsapp}', 'ad000000-0000-0000-0000-0000000000f2'),
+  (:c7, :ta, 'Ninguém, depois o do canal', 'morna', 'opt-in', '{whatsapp}', 'ad000000-0000-0000-0000-0000000000f2'),
   (:cb1, :tb, 'Do B', 'morna', 'opt-in', '{whatsapp}', 'ad000000-0000-0000-0000-0000000000e2');
 
 INSERT INTO sender_accounts (id, tenant_id, canal, provedor, identificador, apelido, tipo_permitido, quota_diaria) VALUES
@@ -119,16 +129,25 @@ INSERT INTO campaign_agents (tenant_id, campaign_id, canal, agent_id) VALUES
   (:ta, :c2, 'whatsapp', :lia),
   (:ta, :c3, 'whatsapp', NULL),
   (:ta, :c4, 'whatsapp', :bruno),
-  (:ta, :c5, 'whatsapp', :ana);
+  (:ta, :c5, 'whatsapp', :ana),
+  (:ta, :c6, 'whatsapp', NULL),
+  (:ta, :c7, 'whatsapp', NULL);
 ALTER TABLE agentes_por_canal DISABLE TRIGGER agentes_por_canal_vigencia;
 ALTER TABLE campaign_agents DISABLE TRIGGER campaign_agents_vigencia;
+ALTER TABLE agents DISABLE TRIGGER agents_ativo_desde;
 UPDATE agentes_por_canal SET vigente_desde = now() - interval '2 days';
 UPDATE campaign_agents SET vigente_desde = now() - interval '2 days'
- WHERE campaign_id IN (:c2, :c3, :c4, :c5);
+ WHERE campaign_id IN (:c2, :c3, :c4, :c5, :c6, :c7);
+-- Os agentes também foram ligados há dois dias: senão o "ligado agora" do
+-- INSERT esconderia o que a vigência da escolha decide.
+UPDATE agents SET ativo_desde = now() - interval '2 days' WHERE tenant_id IN (:ta, :tb);
 ALTER TABLE agentes_por_canal ENABLE TRIGGER agentes_por_canal_vigencia;
 ALTER TABLE campaign_agents ENABLE TRIGGER campaign_agents_vigencia;
+ALTER TABLE agents ENABLE TRIGGER agents_ativo_desde;
 -- Desligar o agente da exceção depois de escolhido: é o freio.
 UPDATE agents SET ativo = false WHERE id = :bruno;
+SELECT adc.confere('desligar não mexe em ativo_desde (só religar renova)',
+  (SELECT ativo_desde < now() - interval '1 day' FROM agents WHERE id = :bruno));
 
 -- Uma pessoa por caso: contato, identidade, inscrição, o toque e a resposta.
 CREATE FUNCTION adc.pessoa(p_tenant uuid, p_n int, p_campanha uuid, p_canal canal, p_ha interval)
@@ -168,6 +187,22 @@ SELECT adc.pessoa(:ta, 5, :c4, 'whatsapp', interval '1 hour');   -- exceção de
 SELECT adc.pessoa(:ta, 6, :c1, 'email',    interval '1 hour');   -- e-mail sem agente
 SELECT adc.pessoa(:ta, 7, :c5, 'whatsapp', interval '1 hour');   -- exceção com agente novo
 SELECT adc.pessoa(:tb, 8, :cb1, 'whatsapp', interval '1 hour');  -- o outro cliente
+SELECT adc.pessoa(:ta, 9, :c6, 'whatsapp', interval '1 hour');   -- "ninguém" que vira agente
+SELECT adc.pessoa(:ta, 10, :c7, 'whatsapp', interval '1 hour');  -- "ninguém" que volta ao do canal
+SELECT adc.pessoa(:ta, 11, :c1, 'whatsapp', interval '1 hour');  -- herda Ana, até o canal trocar
+
+-- A pessoa responde de novo, agora, na mesma conversa.
+CREATE FUNCTION adc.responde(p_n int, p_texto text) RETURNS uuid LANGUAGE plpgsql AS $$
+DECLARE v_m uuid; v_t uuid; v_ev uuid;
+BEGIN
+  SELECT m.id, m.tenant_id INTO v_m, v_t FROM messages m JOIN enrollments e ON e.tenant_id = m.tenant_id AND e.id = m.enrollment_id
+   WHERE e.contact_id = ('ad000000-0000-0000-0000-0000000001' || lpad(p_n::text, 2, '0'))::uuid
+   ORDER BY m.criado_em DESC LIMIT 1;
+  INSERT INTO message_events (tenant_id, message_id, tipo, payload, ocorrido_em)
+  VALUES (v_t, v_m, 'respondido', jsonb_build_object('texto', p_texto), clock_timestamp())
+  RETURNING id INTO v_ev;
+  RETURN v_ev;
+END; $$;
 
 CREATE TABLE adc.fila AS SELECT * FROM fila_do_agente(100);
 
@@ -232,8 +267,17 @@ SELECT adc.confere('a fila traz tom, contexto, objetivo e o tamanho nulo',
           AND tamanho_maximo IS NULL FROM adc.fila WHERE contact_id = adc.c(1)));
 SELECT adc.confere('o agente de antes vem sem objetivo (o título da instrução depende disso)',
   (SELECT objetivo IS NULL AND tamanho_maximo = 700 FROM adc.fila WHERE contact_id = adc.c(3)));
+-- O v7 não sabe montar o prompt do agente de todos os canais (sem tom, sem
+-- contexto, sem o bloco do canal): com ele, o agente novo não compõe.
+SELECT adc.confere('a fila antiga (v7) não compõe com o agente de todos os canais',
+  NOT EXISTS (SELECT 1 FROM respostas_para_o_agente(100) WHERE contact_id = adc.c(7))
+  AND EXISTS (SELECT 1 FROM respostas_para_o_agente(100) WHERE contact_id = adc.c(3)));
+-- O agente de antes também pode ficar com o tamanho nulo ("o do canal") pela
+-- tela nova; o v7 só conhece número.
+UPDATE agents SET tamanho_maximo = NULL WHERE id = :lia;
 SELECT adc.confere('a fila antiga (v7) devolve 700 onde o tamanho é nulo',
-  (SELECT tamanho_maximo FROM respostas_para_o_agente(100) WHERE contact_id = adc.c(7)) = 700);
+  (SELECT tamanho_maximo FROM respostas_para_o_agente(100) WHERE contact_id = adc.c(3)) = 700);
+UPDATE agents SET tamanho_maximo = 700 WHERE id = :lia;
 SELECT adc.confere('e a fila antiga não sabe do agente do canal (o v8 é quem sabe)',
   NOT EXISTS (SELECT 1 FROM respostas_para_o_agente(100) WHERE contact_id = adc.c(1)));
 
@@ -373,13 +417,24 @@ SET request.jwt.claims = '{"sub":"ad000000-0000-0000-0000-0000000000a2"}';
     AND adc.sqlstate_de($q$UPDATE campaign_agents SET vigente_desde = now() - interval '30 days'$q$) = '42501');
   SELECT adc.confere('não move a escolha para outro cliente',
     adc.sqlstate_de($q$UPDATE agentes_por_canal SET tenant_id = 'ad000000-0000-0000-0000-0000000000b0'$q$) = '42501');
-  SELECT adc.confere('o operador desfaz a exceção (volta ao do canal)',
-    adc.sqlstate_de($q$DELETE FROM campaign_agents WHERE campaign_id = 'ad000000-0000-0000-0000-0000000000c3'$q$) = 'sem erro');
-  SELECT adc.confere('e a exceção some de fato',
-    NOT EXISTS (SELECT 1 FROM campaign_agents WHERE campaign_id = 'ad000000-0000-0000-0000-0000000000c3'));
+  -- Apagar a exceção faria valer a data antiga do agente do canal: ele
+  -- responderia sozinho o que chegou enquanto a campanha tinha outro (ou
+  -- ninguém). Voltar ao do canal é uma linha, com data.
+  SELECT adc.confere('o operador não apaga a exceção',
+    adc.sqlstate_de($q$DELETE FROM campaign_agents WHERE campaign_id = 'ad000000-0000-0000-0000-0000000000c3'$q$) = '42501');
+  SELECT adc.confere('volta a campanha ao agente do canal (herda)',
+    adc.sqlstate_de($q$UPDATE campaign_agents SET agent_id = NULL, herda = true
+      WHERE campaign_id = 'ad000000-0000-0000-0000-0000000000c3' AND canal = 'whatsapp'$q$) = 'sem erro');
+  SELECT adc.confere('e quem responde passa a ser o do canal',
+    (SELECT origem = 'canal' AND agent_id = 'ad000000-0000-0000-0000-0000000000a9' AND responde
+       FROM quem_responde('ad000000-0000-0000-0000-0000000000a0', 'ad000000-0000-0000-0000-0000000000c3')
+      WHERE canal = 'whatsapp'));
   SELECT adc.confere('e marca "ninguém" na campanha',
-    adc.sqlstate_de($q$INSERT INTO campaign_agents (tenant_id, campaign_id, canal, agent_id)
-      VALUES ('ad000000-0000-0000-0000-0000000000a0', 'ad000000-0000-0000-0000-0000000000c3', 'whatsapp', NULL)$q$) = 'sem erro');
+    adc.sqlstate_de($q$UPDATE campaign_agents SET herda = false
+      WHERE campaign_id = 'ad000000-0000-0000-0000-0000000000c3' AND canal = 'whatsapp'$q$) = 'sem erro');
+  SELECT adc.confere('e quem responde é ninguém, por escolha da campanha',
+    (SELECT origem FROM quem_responde('ad000000-0000-0000-0000-0000000000a0', 'ad000000-0000-0000-0000-0000000000c3')
+      WHERE canal = 'whatsapp') = 'ninguem');
   SELECT adc.confere('a tela pergunta quem responde',
     (SELECT count(*) FROM quem_responde('ad000000-0000-0000-0000-0000000000a0', 'ad000000-0000-0000-0000-0000000000c1')) = 2);
   SELECT adc.confere('e não enxerga a resposta de outro cliente',
@@ -397,6 +452,81 @@ SET request.jwt.claims = '{"sub":"ad000000-0000-0000-0000-0000000000a2"}';
       (SELECT id FROM agents WHERE tenant_id IS NULL AND canal = 'whatsapp' ORDER BY nome LIMIT 1))) = 'sem erro');
 RESET role;
 RESET request.jwt.claims;
+
+-- ===========================================================================
+-- 8. A fila
+-- ===========================================================================
+
+-- (a) A campanha volta ao agente do canal: a volta tem data. O "ninguém" dela
+-- valia havia dois dias, e o agente do canal também; sem renovar, a pessoa 10
+-- (uma hora atrás) seria respondida sozinha pelo agente do canal.
+UPDATE campaign_agents SET herda = true WHERE campaign_id = :c7 AND canal = 'whatsapp';
+SELECT adc.confere('herdar: quem responde é o do canal',
+  (SELECT origem = 'canal' AND agent_id = :ana FROM quem_responde(:ta, :c7) WHERE canal = 'whatsapp'));
+SELECT adc.confere('e o que chegou antes da volta não entra na fila',
+  NOT EXISTS (SELECT 1 FROM fila_do_agente(100) WHERE contact_id = adc.c(10)));
+SELECT adc.responde(10, 'e agora, como fica?');
+SELECT adc.confere('e o que chega depois entra, com o agente do canal',
+  (SELECT agent_id FROM fila_do_agente(100) WHERE contact_id = adc.c(10)) = :ana);
+
+-- (b) "Ninguém" que vira agente: escolher é passar a responder.
+UPDATE campaign_agents SET agent_id = :ana WHERE campaign_id = :c6 AND canal = 'whatsapp';
+SELECT adc.confere('escolher o agente da campanha não responde o que chegou antes',
+  NOT EXISTS (SELECT 1 FROM fila_do_agente(100) WHERE contact_id = adc.c(9)));
+
+-- (c) Religar o agente: o que chegou com o freio puxado ficou com uma pessoa.
+UPDATE agents SET ativo = true WHERE id = :bruno;
+SELECT adc.confere('religado, o agente volta a responder na exceção',
+  (SELECT origem = 'campanha' AND responde FROM quem_responde(:ta, :c4) WHERE canal = 'whatsapp'));
+SELECT adc.confere('mas não o que chegou enquanto estava desligado',
+  NOT EXISTS (SELECT 1 FROM fila_do_agente(100) WHERE contact_id = adc.c(5)));
+SELECT adc.responde(5, 'oi, ainda estão aí?');
+SELECT adc.confere('e o que chega depois de religado entra',
+  (SELECT agent_id FROM fila_do_agente(100) WHERE contact_id = adc.c(5)) = :bruno);
+
+-- (d) O agente do canal trocado: o novo responde só dali em diante.
+SELECT adc.confere('antes da troca, a pessoa 11 está na fila com o agente do canal',
+  (SELECT agent_id FROM fila_do_agente(100) WHERE contact_id = adc.c(11)) = :ana);
+UPDATE agentes_por_canal SET agent_id = :lia WHERE tenant_id = :ta AND canal = 'whatsapp';
+SELECT adc.confere('trocar o agente do canal não responde o que chegou antes',
+  NOT EXISTS (SELECT 1 FROM fila_do_agente(100) WHERE contact_id = adc.c(11)));
+
+-- (e) Só a última resposta da pessoa: duas linhas seriam dois textos.
+SELECT adc.responde(3, 'e para três pessoas?');
+SELECT adc.confere('uma linha por pessoa, com a resposta mais recente',
+  (SELECT count(*) FROM fila_do_agente(100) WHERE contact_id = adc.c(3)) = 1
+  AND (SELECT texto FROM fila_do_agente(100) WHERE contact_id = adc.c(3)) = 'e para três pessoas?');
+
+-- (f) A resposta que já tem rascunho não volta à fila.
+INSERT INTO rascunhos (tenant_id, message_event_id, contact_id, agent_id, resposta_em, situacao, motivo)
+SELECT tenant_id, message_event_id, contact_id, agent_id, resposta_em, 'escalar', 'teste'
+  FROM fila_do_agente(100) WHERE contact_id = adc.c(3);
+SELECT adc.confere('resposta com rascunho não volta à fila',
+  NOT EXISTS (SELECT 1 FROM fila_do_agente(100) WHERE contact_id = adc.c(3)));
+
+-- (g) Supressão: a pessoa inteira, e só o endereço.
+SELECT adc.confere('antes da supressão, as duas estão na fila',
+  EXISTS (SELECT 1 FROM fila_do_agente(100) WHERE contact_id = adc.c(5))
+  AND EXISTS (SELECT 1 FROM fila_do_agente(100) WHERE contact_id = adc.c(8)));
+INSERT INTO suppression (tenant_id, contact_id, motivo) VALUES (:ta, adc.c(5), 'pediu para sair');
+INSERT INTO suppression (tenant_id, canal, valor_norm, motivo) VALUES (:tb, 'whatsapp', '5511980000308', 'pediu para sair');
+SELECT adc.confere('pessoa suprimida não entra na fila',
+  NOT EXISTS (SELECT 1 FROM fila_do_agente(100) WHERE contact_id = adc.c(5)));
+SELECT adc.confere('endereço suprimido também não',
+  NOT EXISTS (SELECT 1 FROM fila_do_agente(100) WHERE contact_id = adc.c(8)));
+
+-- (h) A tela que está no ar escolhe por `atribuir_agente`, que não conhece
+-- `herda`: gravar um agente por cima de uma linha que herdava deixa de herdar,
+-- em vez de o CHECK recusar.
+UPDATE campaign_agents SET agent_id = NULL, herda = true WHERE campaign_id = :c6 AND canal = 'whatsapp';
+SET role authenticated;
+SET request.jwt.claims = '{"sub":"ad000000-0000-0000-0000-0000000000a2"}';
+  SELECT adc.confere('atribuir_agente por cima de uma linha que herdava',
+    adc.sqlstate_de($q$SELECT atribuir_agente('ad000000-0000-0000-0000-0000000000c6', 'ad000000-0000-0000-0000-0000000000a8')$q$) = 'sem erro');
+RESET role;
+RESET request.jwt.claims;
+SELECT adc.confere('e a linha deixa de herdar',
+  (SELECT agent_id = :lia AND NOT herda FROM campaign_agents WHERE campaign_id = :c6 AND canal = 'whatsapp'));
 
 SET role anon;
   -- No Supabase o anon tem SELECT de tabela por default privilege, e quem nega

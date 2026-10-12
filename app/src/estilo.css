@@ -816,9 +816,9 @@ button.resp:hover { background: var(--surface-2) }
 .nota-tela { font-size: 12.5px; color: var(--ink-3); line-height: 1.5; margin: 8px 0 12px; max-width: 80ch }
 .painel .sec { margin-top: 22px }
 .painel .opts { margin-bottom: 4px }
-.marca { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin: 6px 0; font-size: 14px }
-.marca input { width: 17px; height: 17px; accent-color: var(--accent); flex: none }
-.marca.desligada { opacity: .7 }
+.caixa-marca { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin: 6px 0; font-size: 14px }
+.caixa-marca input { width: 17px; height: 17px; accent-color: var(--accent); flex: none }
+.caixa-marca.desligada { opacity: .7 }
 .recolhe {
   border: 1px solid var(--line); border-radius: var(--r-sm); background: var(--surface-2);
   margin: 14px 0; padding: 0 16px;

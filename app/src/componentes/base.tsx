@@ -82,6 +82,8 @@ export function Campo(props: {
   vault?: string; placeholder?: string; mono?: boolean;
   /** `autocomplete` do input — sem ele o gerenciador de senhas não preenche o login. */
   autocompletar?: string;
+  /** Quem só lê vê o valor, sem poder mudá-lo. */
+  desabilitado?: boolean;
 }) {
   return (
     <div className="campo">
@@ -94,6 +96,7 @@ export function Campo(props: {
         className={props.mono ? 'mono' : undefined}
         type={props.tipo === 'senha' ? 'password' : props.tipo === 'email' ? 'email' : 'text'}
         autoComplete={props.autocompletar}
+        disabled={props.desabilitado}
         value={props.valor}
         placeholder={props.placeholder ?? (props.tipo === 'senha' ? '••••••••••••' : '')}
         onChange={(e) => props.aoMudar(e.target.value)}

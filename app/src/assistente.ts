@@ -91,7 +91,7 @@ export interface Foto {
    *  é o que o setup compara para reaproveitar em vez de criar outro. */
   readonly agentes: readonly {
     id: string; nome: string; canal: string | null; tenant_id: string | null;
-    objetivo?: string | null; persona?: string | null; ativo?: boolean;
+    objetivo?: string | null; persona?: string | null; ativo?: boolean; autonomo?: boolean;
   }[];
   /** Quem responde em cada canal do cliente (D76). */
   readonly agentesPorCanal?: readonly { canal: string; agent_id: string }[];
@@ -578,7 +578,7 @@ export type Acao =
 
 /** O agente que o setup põe na campanha: um que já existe, ou um novo, pela persona e pelo objetivo. */
 export type AgenteDoSetup =
-  | { readonly id: string; readonly nome: string }
+  | { readonly id: string; readonly nome: string; readonly autonomo: boolean }
   | { readonly novo: true; readonly nome: string; readonly persona: string; readonly objetivo: string; readonly contexto: string };
 
 /**
@@ -590,10 +590,18 @@ export type AgenteDoSetup =
  *   sem agente                 ele vira o agente do canal;
  *   agente com o mesmo objetivo  nada muda: a campanha herda;
  *   agente com outro objetivo    ele responde só nesta campanha (exceção),
- *                                e as outras campanhas não mudam de agente.
+ *                                e as outras campanhas não mudam de agente;
+ *   agente DESLIGADO             idem: exceção só nesta campanha. Desligar é
+ *                                o freio de quem opera, e o setup soltá-lo
+ *                                no canal inteiro seria religar o agente em
+ *                                toda campanha que ninguém mencionou.
  *
  * O setup nunca troca o agente do canal que já existe: a escrita seria mais
  * larga que o pedido da conversa, que é sobre UMA campanha.
+ *
+ * O agente novo leva no nome e no contexto só o que o CONTATO pode ver: o
+ * nome é o que ele diz ao se apresentar (até o travessão), e a descrição do
+ * modelo é texto interno ("lista fria, três toques") que o agente repetiria.
  */
 export function agenteParaCampanha(f: Foto, modelo: { slug: string; tipo: Pool; descricao: string; nome: string },
   canais: readonly CanalEnvio[]) {
@@ -605,16 +613,20 @@ export function agenteParaCampanha(f: Foto, modelo: { slug: string; tipo: Pool; 
 
   let agente: AgenteDoSetup;
   if (existente) {
-    agente = { id: existente.id, nome: existente.nome };
+    agente = { id: existente.id, nome: existente.nome, autonomo: existente.autonomo !== false };
   } else {
     const o = OBJETIVOS.find((x) => x.slug === objetivo)!;
-    const base = `Assistente de ${o.nome.toLowerCase()}`;
+    const empresa = (f.empresa ?? '').trim();
+    const marca = empresa.split(/\s+/)[0] ?? '';
+    // "Assistente Afinix — Resgate": o contato ouve "Assistente Afinix"
+    // (`nomeDeApresentacao` corta no travessão); quem opera lê o objetivo.
+    const base = `Assistente${marca ? ` ${marca}` : ''} — ${o.nome}`;
     let nome = base;
     for (let n = 2; f.agentes.some((a) => a.tenant_id !== null && a.nome === nome); n++) nome = `${base} ${n}`;
-    const empresa = (f.empresa ?? '').trim() || 'esta empresa';
-    const contexto = [`Falamos em nome de ${empresa}.`,
-      modelo.descricao.trim() ? `Esta conversa vem da campanha "${modelo.nome}": ${modelo.descricao.trim()}` : '']
-      .filter(Boolean).join(' ');
+    const contexto = [
+      empresa ? `Falamos em nome de ${empresa}.` : 'Falamos em nome da empresa que conduz esta conversa.',
+      'Sobre produto, preço e condições, diga só o que estiver escrito aqui; pergunta que isto não responde vai para a equipe.',
+    ].join(' ');
     agente = { novo: true, nome, persona: 'consultiva', objetivo, contexto };
   }
 
@@ -622,17 +634,19 @@ export function agenteParaCampanha(f: Foto, modelo: { slug: string; tipo: Pool; 
   const canaisDaCampanha: CanalEnvio[] = [];
   const herdados: { canal: CanalEnvio; nome: string }[] = [];
   const outros: { canal: CanalEnvio; nome: string }[] = [];
+  const desligados: { canal: CanalEnvio; nome: string }[] = [];
   const semResposta: CanalEnvio[] = [];
   for (const c of canais) {
     if (!CANAIS_DO_PROMPT[c].recebeResposta) { semResposta.push(c); continue; }
     const atual = porCanal.find((p) => p.canal === c);
     const dele = atual ? f.agentes.find((a) => a.id === atual.agent_id) : undefined;
-    if (!atual || !dele || dele.ativo === false) canaisDoCanal.push(c);
+    if (!atual || !dele) canaisDoCanal.push(c);
+    else if (dele.ativo === false) { canaisDaCampanha.push(c); desligados.push({ canal: c, nome: dele.nome }); }
     else if ('id' in agente && dele.id === agente.id) herdados.push({ canal: c, nome: dele.nome });
     else if (dele.objetivo === objetivo && dele.canal === null) herdados.push({ canal: c, nome: dele.nome });
     else { canaisDaCampanha.push(c); outros.push({ canal: c, nome: dele.nome }); }
   }
-  return { agente, objetivo, canaisDoCanal, canaisDaCampanha, herdados, outros, semResposta };
+  return { agente, objetivo, canaisDoCanal, canaisDaCampanha, herdados, outros, desligados, semResposta };
 }
 
 export interface Plano {
@@ -797,6 +811,10 @@ export function montarPlano(f: Foto, bruto: Respostas): Plano {
       const d = agenteParaCampanha(f, modelo, canais);
       const conta = credencial ? f.credenciaisIA.find((c) => c.id === credencial) : undefined;
       const obj = OBJETIVOS.find((o) => o.slug === d.objetivo)!;
+      // O agente novo nasce respondendo sozinho; o que já existe faz o que
+      // está nele — dizer "responde sozinho" de um agente de rascunho seria o
+      // setup prometendo um envio que não vai acontecer.
+      const sozinho = 'novo' in d.agente || d.agente.autonomo;
       if (d.canaisDoCanal.length + d.canaisDaCampanha.length + d.herdados.length > 0) {
         acoes.push({
           id: 'agentes', tipo: 'ligar_agentes', agente: d.agente, credencial,
@@ -808,13 +826,16 @@ export function montarPlano(f: Foto, bruto: Respostas): Plano {
               : `usa o agente "${d.agente.nome}", que já é de ${obj.nome}`,
             ...d.canaisDoCanal.map((c) => `${NOME[c]}: ele passa a responder neste canal, em toda campanha sem agente próprio`),
             ...d.outros.map((o) => `${NOME[o.canal]}: ${o.nome} continua sendo o agente do canal; nesta campanha responde ${d.agente.nome}`),
+            ...d.desligados.map((o) => `${NOME[o.canal]}: ${o.nome}, o agente do canal, está desligado e continua desligado; nesta campanha responde ${d.agente.nome}`),
             ...d.herdados.map((h) => `${NOME[h.canal]}: ${h.nome} já responde aqui e continua`),
             ...d.semResposta.map((c) => `${NOME[c]}: nenhum agente responde por aqui — ${CANAIS_DO_PROMPT[c].porQueNao}`),
             conta ? `a campanha compõe com a conta "${conta.nome}"` : 'a campanha compõe com a conta de IA que você conectar',
             ...('novo' in d.agente
-              ? ['ele sabe só o nome da empresa e o que a campanha quer: complete "Sobre a empresa e a oferta" em Configurações ▸ Agentes']
+              ? ['ele sabe só o nome da empresa: complete "Sobre a empresa e a oferta" em Configurações ▸ Agentes, senão toda pergunta sobre o produto vai para a equipe']
               : []),
-            'o agente responde sozinho pelo motor (em simulado, nada sai); o que ele não puder mandar volta para uma pessoa, na tela de Respostas',
+            sozinho
+              ? 'o agente responde sozinho pelo motor (em simulado, nada sai); o que ele não puder mandar volta para uma pessoa, na tela de Respostas'
+              : `${d.agente.nome} não responde sozinho: o texto dele fica de rascunho na tela de Respostas, para uma pessoa mandar (isso se muda em Configurações ▸ Agentes)`,
           ],
           exige: 'opera',
           dependeDe: ['campanha', ...(credencial === null ? ['config:ia'] : [])],
