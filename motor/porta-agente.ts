@@ -14,6 +14,8 @@ export interface RespostaParaRascunhar extends EntradaDoPrompt {
   readonly message_event_id: string;
   readonly tenant_id: string;
   readonly contact_id: string;
+  /** Quando a pessoa respondeu: o erro transitório tem prazo contado daqui (D76). */
+  readonly resposta_em: string;
   readonly canal: string;
   readonly texto: string;
   /** Ação da blacklist do cliente que casou com o texto, ou null. */

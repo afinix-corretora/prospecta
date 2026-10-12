@@ -10,11 +10,11 @@ import assert from 'node:assert/strict';
 
 import { criarIa, PROVEDORES_IA_COM_ADAPTER } from '../adapters/ia.ts';
 import type { ModeloIA, PedidoDeComposicao } from '../adapters/ia.ts';
-import { aplicarFreios, montarPedido, MARCA_ESCALAR, rascunharRespostas } from '../motor/agente.ts';
+import { aplicarFreios, montarPedido, MARCA_ESCALAR, PRAZO_DO_TRANSITORIO_MS, rascunharRespostas } from '../motor/agente.ts';
 import type { BancoAgente, Envio, RespostaParaRascunhar, Situacao } from '../motor/porta-agente.ts';
 
 const BASE: RespostaParaRascunhar = {
-  message_event_id: 'ev1', tenant_id: 't', contact_id: 'c', canal: 'whatsapp',
+  message_event_id: 'ev1', tenant_id: 't', contact_id: 'c', canal: 'whatsapp', resposta_em: '2026-10-12T10:00:00Z',
   texto: 'Quanto fica para mim e minha esposa?', regra: null,
   agent_id: 'a1', agente_nome: 'Lia', papel: 'SDR de resgate', descricao: 'Reativa quem já cotou.',
   // Um agente de antes do D76: instrução num texto só, sem persona nem objetivo.
@@ -163,6 +163,27 @@ test('saídas: erro definitivo fica gravado; transitório não vira linha', asyn
   assert.equal(r.adiadas, 1);
 });
 
+test('transitório tem prazo: depois de 6 horas vira erro com o motivo, e sai da fila (D76)', async () => {
+  const agora = Date.parse(BASE.resposta_em) + PRAZO_DO_TRANSITORIO_MS + 60_000;
+  const velho = banco([BASE]);
+  const r = await rascunharRespostas(velho.b, 10, {
+    criar: () => new IaFalsa({ ok: false, erro: 'HTTP 429: insufficient_quota', definitivo: false }), agora: () => agora });
+  assert.equal(r.adiadas, 0);
+  assert.equal(velho.gravados[0]!.s, 'erro');
+  assert.match(velho.gravados[0]!.motivo ?? '', /mais de 6 horas: HTTP 429/);
+  // Dentro do prazo, segue sendo tentado.
+  const novo = banco([BASE]);
+  await rascunharRespostas(novo.b, 10, {
+    criar: () => new IaFalsa({ ok: false, erro: 'HTTP 429', definitivo: false }), agora: () => Date.parse(BASE.resposta_em) + 60_000 });
+  assert.equal(novo.gravados.length, 0);
+});
+
+test('o freio que lança não derruba a passada: bloqueado com o motivo, e o resto do lote segue', async () => {
+  const { b, gravados } = banco([{ ...BASE, message_event_id: 'x', proibido: [7 as unknown as string] }, BASE]);
+  await rascunharRespostas(b, 10, { criar: () => new IaFalsa({ ok: true, texto: 'Oi Marina! Qual a idade de vocês?' }) });
+  assert.deepEqual(gravados.map((g) => g.s), ['pronto', 'pronto'], 'número em proibido é ignorado, não lança');
+});
+
 // ---------------------------------------------------------------------------
 // Os protocolos
 // ---------------------------------------------------------------------------
@@ -291,7 +312,8 @@ test('chat completions: endpoint por provedor, Bearer e system + user', async ()
 test('openai: max_completion_tokens (o gpt-5.5 recusa max_tokens com 400); os outros, max_tokens', async () => {
   const comum = buscador(200, { choices: [{ message: { content: 'oi' } }] });
   await criarIa('openai', comum.buscar).compor({ ...PEDIDO, modelo: 'gpt-4.1' });
-  assert.equal(comum.chamadas[0]!.corpo.max_completion_tokens, 3350, 'o teto só limita custo: o freio limita o tamanho');
+  // Sem raciocínio, sem folga: muitos recusam acima de 4096, e o e-mail pedia 4200.
+  assert.equal(comum.chamadas[0]!.corpo.max_completion_tokens, 350);
   assert.equal('max_tokens' in comum.chamadas[0]!.corpo, false);
   assert.equal('reasoning_effort' in comum.chamadas[0]!.corpo, false);
 
@@ -308,7 +330,14 @@ test('openai: max_completion_tokens (o gpt-5.5 recusa max_tokens com 400); os ou
     assert.equal('reasoning_effort' in b.chamadas[0]!.corpo, false, m);
   }
 
-  // Pelo OpenRouter, Gemini e R1 raciocinam sempre: a folga vale para todos.
+  for (const [prov, m] of [['openai', 'gpt-4o-2024-05-13'], ['openrouter', 'openai/gpt-4o'], ['deepseek', 'deepseek-chat']] as const) {
+    const b = buscador(200, { choices: [{ message: { content: 'oi' } }] });
+    await criarIa(prov, b.buscar).compor({ ...PEDIDO, modelo: m, maxTokens: 1200 });
+    const corpo = b.chamadas[0]!.corpo;
+    assert.equal(corpo.max_completion_tokens ?? corpo.max_tokens, 1200, `${prov} ${m}: o e-mail cabe em 4096`);
+  }
+
+  // Pelo OpenRouter, Gemini e R1 raciocinam sempre: a folga vale para eles.
   for (const [prov, m] of [['deepseek', 'deepseek-reasoner'], ['openrouter', 'google/gemini-2.5-pro'],
                            ['openrouter', 'deepseek/deepseek-r1'], ['perplexity', 'sonar-reasoning-pro']] as const) {
     const b = buscador(200, { choices: [{ message: { content: 'oi' } }] });
@@ -326,8 +355,13 @@ test('chat completions: orçamento gasto pensando é dito como tal', async () =>
 });
 
 test('chat completions: cortado (finish_reason length) e vazio são definitivos', async () => {
-  const cortado = await criarIa('openai', buscador(200, { choices: [{ message: { content: '' }, finish_reason: 'length' }] }).buscar).compor(PEDIDO);
-  assert.deepEqual(cortado.ok ? null : [cortado.definitivo, /limite de tokens/.test(cortado.erro)], [true, true]);
+  // Texto pela metade com `length`: o CORTADO, que nunca sai — o agente autônomo mandaria "o plano custa".
+  const cortado = await criarIa('openai', buscador(200, {
+    choices: [{ message: { content: 'Olá Marina, o plano custa' }, finish_reason: 'length' }] }).buscar).compor(PEDIDO);
+  assert.deepEqual(cortado.ok ? null : [cortado.definitivo, /cortado no meio/.test(cortado.erro)], [true, true]);
+  // Vazio com `length`: gastou tudo raciocinando, e a mensagem diz isso.
+  const pensou = await criarIa('openai', buscador(200, { choices: [{ message: { content: '' }, finish_reason: 'length' }] }).buscar).compor(PEDIDO);
+  assert.deepEqual(pensou.ok ? null : [pensou.definitivo, /raciocinando/.test(pensou.erro)], [true, true]);
   const vazio = await criarIa('openai', buscador(200, { choices: [{ message: { content: '  ' }, finish_reason: 'stop' }] }).buscar).compor(PEDIDO);
   assert.deepEqual(vazio.ok ? null : vazio.definitivo, true);
 });

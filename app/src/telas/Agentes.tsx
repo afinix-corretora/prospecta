@@ -18,9 +18,9 @@ import {
 } from '../dados';
 import type { Agente, AgenteDoCanal, CredencialIA, ProvedorIA, ResultadoDoTeste } from '../dados';
 import { Aviso, Campo, LinhaIndice, NOME_CANAL, Pagina, Secao, corCanal } from '../componentes/base';
-import { CANAIS, CONTEXTO_MINIMO, OBJETIVOS, PERSONAS, montarPedido } from '@adapters/prompt-do-agente.ts';
+import { CANAIS, CONTEXTO_MINIMO, OBJETIVOS, PERSONAS, TETOS_DO_AGENTE, montarPedido } from '@adapters/prompt-do-agente.ts';
 import {
-  CANAIS_DO_AGENTE, camposParaGravar, canaisQueServe, conversaDeExemplo, entradaDaPrevia, oQueFalta,
+  CANAIS_DO_AGENTE, PEDIDO_DE_SAIDA_DO_TESTE, camposParaGravar, canaisQueServe, conversaDeExemplo, entradaDaPrevia, oQueFalta,
   oQueMudaNoCanal, rascunhoDe, rascunhoNovo, rotulo, trocarObjetivo, trocarPersona,
 } from '../agentes';
 import type { CanalDoAgente, Rascunho } from '../agentes';
@@ -356,7 +356,7 @@ function Construtor() {
 
         <div className="campo">
           <label htmlFor="ag-contexto">Sobre a empresa e a oferta</label>
-          <textarea id="ag-contexto" rows={4} value={r.contexto} disabled={!opera}
+          <textarea id="ag-contexto" rows={4} value={r.contexto} disabled={!opera} maxLength={TETOS_DO_AGENTE.contexto}
                     onChange={(e) => mudar({ contexto: e.target.value })}
                     placeholder="Falamos em nome da [empresa], em [cidade]. Oferecemos [produto] para [público]. O próximo passo de uma conversa boa é [uma ligação de 15 minutos com um especialista]. Atendemos de segunda a sexta, das 9h às 18h." />
           <span className="ajuda">O que só você sabe: nome da empresa, cidade, o que oferece e para quem, e qual é o
@@ -369,12 +369,12 @@ function Construtor() {
           <summary>Ajustar o texto <span>{resumoDoTexto}</span></summary>
           <div className="campo">
             <label htmlFor="ag-tom">Como fala</label>
-            <textarea id="ag-tom" rows={4} value={r.tom} disabled={!opera} onChange={(e) => mudar({ tom: e.target.value })} />
+            <textarea id="ag-tom" rows={4} value={r.tom} disabled={!opera} maxLength={TETOS_DO_AGENTE.tom} onChange={(e) => mudar({ tom: e.target.value })} />
             <span className="ajuda">Só a voz. Tamanho e formato são de cada canal, e a plataforma os acrescenta.</span>
           </div>
           <div className="campo">
             <label htmlFor="ag-instr">O que faz</label>
-            <textarea id="ag-instr" rows={9} value={r.instrucoes} disabled={!opera}
+            <textarea id="ag-instr" rows={9} value={r.instrucoes} disabled={!opera} maxLength={TETOS_DO_AGENTE.instrucoes}
                       onChange={(e) => mudar({ instrucoes: e.target.value })} />
             <span className="ajuda">Pelo menos 120 caracteres. Além disto, a plataforma sempre manda: não inventar
               preço, cobertura nem condição; não pedir CPF nem cartão; não perguntar de saúde; e passar para uma pessoa
@@ -437,9 +437,11 @@ function Construtor() {
           const info = CANAIS[c];
           const atual = dados.porCanal.find((p) => p.canal === c);
           const outro = atual && atual.agent_id !== agente?.id ? dados.agentes.find((a) => a.id === atual.agent_id) : null;
+          // Desligado, ele não entra em canal nenhum (o banco recusa); desmarcar continua valendo.
+          const desligadoNovo = !!agente && !agente.ativo && !canais.has(c);
           return (
-            <label key={c} className={`caixa-marca${info.recebeResposta ? '' : ' desligada'}`}>
-              <input type="checkbox" disabled={!opera || !info.recebeResposta}
+            <label key={c} className={`caixa-marca${info.recebeResposta && !desligadoNovo ? '' : ' desligada'}`}>
+              <input type="checkbox" disabled={!opera || !info.recebeResposta || desligadoNovo}
                      checked={info.recebeResposta && canais.has(c)}
                      onChange={(e) => {
                        const n = new Set(canais);
@@ -449,6 +451,7 @@ function Construtor() {
               <span style={{ color: corCanal(c), fontWeight: 600 }}>{NOME_CANAL[c]}</span>
               <span className="nota-tela" style={{ margin: 0 }}>
                 {!info.recebeResposta ? info.porQueNao
+                  : desligadoNovo ? 'ligue o agente para pô-lo num canal'
                   : campanha ? 'nesta campanha, no lugar do agente do canal'
                   : outro ? (canais.has(c) ? `substitui ${outro.nome} neste canal` : `hoje: ${outro.nome}`)
                   : atual ? 'é ele hoje' : 'hoje ninguém responde aqui'}
@@ -551,8 +554,10 @@ function Testar({ r, canais, conta, administra }: {
           <div className="campo" style={{ marginTop: 12 }}>
             <label htmlFor="ag-teste">O que a pessoa escreveu</label>
             <textarea id="ag-teste" rows={2} value={texto} onChange={(e) => setTexto(e.target.value)} />
-            <span className="ajuda">Experimente também "quanto custa?", "quem passou meu número?" e "não quero mais
-              saber disso" — este último a blacklist não pega, e é o agente quem precisa passar a conversa adiante.</span>
+            <span className="ajuda">Experimente também "quanto custa?", "quem passou meu número?" e
+              "{PEDIDO_DE_SAIDA_DO_TESTE}" — este último a blacklist padrão não pega, e é o agente quem precisa passar a
+              conversa para uma pessoa. Se o teste disser que não chegaria ao agente, é a blacklist deste cliente que
+              pega a frase.</span>
           </div>
           <button className="btn" type="button" disabled={rodando || !texto.trim()} onClick={() => void testar()}>
             {rodando ? 'Escrevendo…' : `Testar com ${conta.nome}`}</button>

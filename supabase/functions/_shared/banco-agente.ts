@@ -4,6 +4,7 @@
 
 import type { SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import type { BancoAgente, Envio, RespostaParaRascunhar } from '../../../motor/porta-agente.ts';
+import { juntarCredenciais } from '../../../adapters/ia.ts';
 
 export function bancoAgenteSupabase(sb: SupabaseClient): BancoAgente {
   const rpc = async (nome: string, args: Record<string, unknown>) => {
@@ -29,10 +30,8 @@ export function bancoAgenteSupabase(sb: SupabaseClient): BancoAgente {
       if (error) throw new Error(`credencial de IA ${credencialId}: ${error.message}`);
       const segredo = await rpc('segredo_da_credencial_ia', { p_credencial_id: credencialId });
       if (!segredo) throw new Error(`credencial de IA ${credencialId}: segredo não resolvido no Vault`);
-      const juntas: Record<string, string> = {};
-      for (const [k, v] of Object.entries((data?.config ?? {}) as Record<string, unknown>)) juntas[k] = String(v ?? '');
-      for (const [k, v] of Object.entries(JSON.parse(String(segredo)) as Record<string, unknown>)) juntas[k] = String(v ?? '');
-      return juntas;
+      // A MESMA junção do "Testar" (D76): os dois erram igual.
+      return juntarCredenciais(data?.config ?? {}, String(segredo));
     },
 
     async registrarRascunho(eventoId, agenteId, situacao, texto, motivo, modelo) {

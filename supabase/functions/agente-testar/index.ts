@@ -15,10 +15,11 @@ Deno.serve(async (req) => {
   if (req.method !== 'POST') return responder({ ok: false, erro: 'use POST' }, 405);
 
   try {
-    // O pedido vem da tela, com o texto do agente: 64 KB cabem com folga, e
-    // corpo maior não é tela, é alguém mandando lixo ao modelo do cliente.
+    // O pedido vem da tela, com o texto do agente: com os tetos de cada campo
+    // (TETOS_DO_AGENTE) ele fica abaixo de 128 KB, e corpo maior não é tela, é
+    // alguém mandando lixo ao modelo do cliente.
     const bruto = await req.text();
-    if (bruto.length > 64_000) return responder({ ok: false, erro: 'pedido grande demais' }, 413);
+    if (bruto.length > 256_000) return responder({ ok: false, erro: 'pedido grande demais' }, 413);
     let pedido: PedidoTeste;
     try { pedido = JSON.parse(bruto || '{}') as PedidoTeste; } catch { pedido = {}; }
     const doUsuario = clienteDoUsuario(req);

@@ -306,3 +306,102 @@ test('metadados: pelo nome e pelo valor — texto livre de anotação não vai, 
   assert.deepEqual(metadadosParaOModelo(m).map(([k]) => k).sort(),
     ['cargo', 'cidade', 'cnpj', 'empresa', 'idade_titular', 'operadora', 'plano', 'telefone2', 'vidas']);
 });
+
+// ---------------------------------------------------------------------------
+// D76, segunda revisão: as frases que a revisão adversarial achou, nos dois sentidos
+// ---------------------------------------------------------------------------
+
+test('dado sensível: pedir de qualquer jeito é barrado; tranquilizar e falar de pagamento, não', () => {
+  const sem = { ...ANA, proibido: [] };
+  for (const t of ['Para gerar a cotação, vou precisar do seu CPF e da data de nascimento.',
+                   'Pode me enviar o seu CPF por aqui mesmo.', 'Fico no aguardo do seu CPF para dar andamento.',
+                   'Sem o CPF não consigo cotar, me passa?', 'Se não for incômodo, me passa seu CPF?',
+                   'Não pedimos CPF, só preciso do seu RG.', 'Me passa a senha do aplicativo?',
+                   'Qual o número da sua conta?', 'Me manda sua CNH, por favor.']) {
+    assert.equal(aplicarFreios(t, sem).situacao, 'bloqueado', t);
+  }
+  for (const t of ['O especialista te passa as opções de pagamento no cartão de crédito.',
+                   'A operadora envia a senha do aplicativo por e-mail depois da assinatura.',
+                   'O pagamento pode ser no boleto ou no cartão de crédito, qual você prefere?',
+                   'Conseguiu acessar o aplicativo com a senha que a operadora mandou?',
+                   'Fique tranquila: nunca vamos pedir sua senha por mensagem.']) {
+    assert.equal(aplicarFreios(t, sem).situacao, 'pronto', t);
+  }
+});
+
+test('saúde: "plano", "carência" e "rede" na frase não liberam a pergunta sobre a pessoa', () => {
+  const sem = { ...ANA, proibido: [] };
+  for (const t of ['Para cotar o plano, alguém tem doença preexistente?',
+                   'Você toma algum medicamento contínuo que precise de cobertura?',
+                   'Alguém da família faz algum tratamento que o plano precise cobrir?',
+                   'Alguém já fez cirurgia ou está grávida, para eu ver a carência?',
+                   'Me conta se alguém da família tem doença preexistente.',
+                   'Preciso saber se você toma algum remédio controlado.']) {
+    assert.equal(aplicarFreios(t, sem).situacao, 'bloqueado', t);
+  }
+  for (const t of ['Se alguém precisar ficar internado, prefere quarto individual?',
+                   'Você teria interesse em desconto em farmácia e remédios?']) {
+    assert.equal(aplicarFreios(t, sem).situacao, 'pronto', t);
+  }
+});
+
+test('saída: as confirmações de remoção que o português usa de fato escalam', () => {
+  const antiga = { ...ANA, objetivo: null, instrucoes: 'Se a pessoa pedir para não ser mais contatada, confirme em uma frase e encerre.' };
+  for (const t of ['Tudo bem, não vamos mais entrar em contato.', 'Entendido, não entraremos mais em contato com você.',
+                   'Combinado, não enviaremos mais mensagens.', 'Pronto, tirei seu número da nossa lista.',
+                   'Certo, excluímos seu contato da nossa base.', 'Você não será mais contatada.',
+                   'Vou parar de te mandar mensagens.']) {
+    assert.equal(aplicarFreios(t, antiga).situacao, 'escalar', t);
+  }
+});
+
+test('carência: as formas naturais são barradas; a condição que o cliente afirmou, em parágrafo único, passa', () => {
+  const sem = { ...ANA, proibido: [] };
+  for (const t of ['Esse plano não tem carência para consultas.', 'E o melhor: sem nenhuma carência!',
+                   'A carência é de 30 dias para exames.', 'Consultas têm só 30 dias de carência.',
+                   'Urgência tem carência de 24 horas.', 'Você não precisa cumprir carência.',
+                   'Temos redução de carência para quem vem de outro plano.']) {
+    assert.equal(aplicarFreios(t, sem).situacao, 'bloqueado', t);
+  }
+  const paragrafo = { ...sem, contexto: 'Falamos em nome da Afinix Corretora. Planos empresariais a partir de 2 vidas '
+    + 'são sem carência. Não trabalhamos com plano individual.' };
+  assert.equal(aplicarFreios('Para empresas a partir de 2 vidas, o plano é sem carência.', paragrafo).situacao, 'pronto');
+  // A mesma fonte não libera uma carência DIFERENTE da afirmada.
+  assert.equal(aplicarFreios('A carência é de 30 dias.', paragrafo).situacao, 'bloqueado');
+  const dias = { ...sem, contexto: sem.contexto + ' Consultas com carência de 30 dias.' };
+  assert.equal(aplicarFreios('Para consultas, a carência é de 30 dias.', dias).situacao, 'pronto');
+  assert.equal(aplicarFreios('Para exames, a carência é de 24 horas.', dias).situacao, 'bloqueado');
+});
+
+test('dinheiro: número que não é preço não libera valor; "2 mil reais" é 2000; decimal com ponto do CRM conta', () => {
+  const sem = { ...ANA, proibido: [] };
+  const empresas = { ...sem, contexto: 'Falamos em nome da Afinix Corretora, há 20 anos no mercado e com mais de 500 empresas atendidas.' };
+  assert.equal(aplicarFreios('O plano individual sai por R$ 500 por mês.', empresas).situacao, 'bloqueado');
+  assert.equal(aplicarFreios('Fica uns 500 reais.', empresas).situacao, 'bloqueado');
+  // Metadado que não foi ao modelo não libera valor.
+  assert.equal(aplicarFreios('Hoje fica em R$ 5.000.', { ...sem, metadados: { renda: '5000' } }).situacao, 'bloqueado');
+  assert.equal(aplicarFreios('Sai por R$ 1.980.', { ...sem, metadados: { nascimento: '01/01/1980' } }).situacao, 'bloqueado');
+  // A proibição da instrução antiga não libera o valor que ela proíbe.
+  const antiga = { ...sem, objetivo: null, instrucoes: 'Nunca cite valores como R$ 300. Não ofereça o plano de R$ 199.' };
+  assert.equal(aplicarFreios('O plano sai por R$ 300 por mês.', antiga).situacao, 'bloqueado');
+  assert.equal(aplicarFreios('Temos o plano de R$ 199.', antiga).situacao, 'bloqueado');
+  const doisMil = { ...sem, contexto: sem.contexto + ' Planos empresariais a partir de R$ 2.000 por mês.' };
+  assert.equal(aplicarFreios('Os empresariais começam em 2 mil reais por mês.', doisMil).situacao, 'pronto');
+  const milEMeio = { ...sem, contexto: sem.contexto + ' O familiar sai por R$ 1.500.' };
+  assert.equal(aplicarFreios('O familiar fica em 1,5 mil reais.', milEMeio).situacao, 'pronto');
+  assert.equal(aplicarFreios('Hoje você paga R$ 412,30.', { ...sem, metadados: { mensalidade: '412.30' } }).situacao, 'pronto');
+  // Preço sem "R$" numa frase que fala de preço conta como escrito.
+  const semCifrao = { ...sem, contexto: sem.contexto + ' Mensalidade a partir de 289 por pessoa.' };
+  assert.equal(aplicarFreios('A mensalidade começa em R$ 289.', semCifrao).situacao, 'pronto');
+});
+
+test('metadados: CPF sem máscara em coluna de nome neutro, RG e saúde por outros nomes não vão ao modelo', () => {
+  const m = { id_cliente: '52998224725', doc: '123', identidade: '12.345.678-9', patologia: 'asma e colesterol alto',
+    'histórico médico': 'infarto em 2020', alergias: 'dipirona', celular: '11987654321', cidade: 'Rio Preto' };
+  assert.deepEqual(metadadosParaOModelo(m).map(([k]) => k).sort(), ['celular', 'cidade']);
+});
+
+test('proibido com elemento que não é texto não derruba o freio', () => {
+  const f = aplicarFreios('Oi, Marina! Podemos conversar?', { ...ANA, proibido: [null as unknown as string, 'garantimos'] });
+  assert.equal(f.situacao, 'pronto');
+});

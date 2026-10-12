@@ -206,6 +206,13 @@ END; $$;
 
 CREATE TABLE adc.fila AS SELECT * FROM fila_do_agente(100);
 
+-- Uma vez de cada cliente: as respostas do cliente A são mais antigas que a do
+-- B, e com LIMIT 2 a fila por `ocorrido_em` puro traria duas do A. Respostas
+-- presas de um cliente não podem parar o agente dos outros.
+SELECT adc.confere('a fila reparte o LIMIT entre os clientes',
+  (SELECT count(DISTINCT tenant_id) FROM fila_do_agente(2)) = 2
+  AND (SELECT count(*) FROM adc.fila WHERE tenant_id = :ta) >= 2);
+
 -- ===========================================================================
 -- 1. Quem responde
 -- ===========================================================================
@@ -278,6 +285,15 @@ UPDATE agents SET tamanho_maximo = NULL WHERE id = :lia;
 SELECT adc.confere('a fila antiga (v7) devolve 700 onde o tamanho é nulo',
   (SELECT tamanho_maximo FROM respostas_para_o_agente(100) WHERE contact_id = adc.c(3)) = 700);
 UPDATE agents SET tamanho_maximo = 700 WHERE id = :lia;
+-- E a vigência vale também na fila antiga: religar a Lia não faz o v7
+-- responder o que chegou com ela desligada.
+UPDATE agents SET ativo = false WHERE id = :lia;
+UPDATE agents SET ativo = true WHERE id = :lia;
+SELECT adc.confere('a fila antiga (v7) também respeita a vigência (religado)',
+  NOT EXISTS (SELECT 1 FROM respostas_para_o_agente(100) WHERE contact_id = adc.c(3)));
+ALTER TABLE agents DISABLE TRIGGER agents_ativo_desde;
+UPDATE agents SET ativo_desde = now() - interval '2 days' WHERE id = :lia;
+ALTER TABLE agents ENABLE TRIGGER agents_ativo_desde;
 SELECT adc.confere('e a fila antiga não sabe do agente do canal (o v8 é quem sabe)',
   NOT EXISTS (SELECT 1 FROM respostas_para_o_agente(100) WHERE contact_id = adc.c(1)));
 
@@ -527,6 +543,59 @@ RESET role;
 RESET request.jwt.claims;
 SELECT adc.confere('e a linha deixa de herdar',
   (SELECT agent_id = :lia AND NOT herda FROM campaign_agents WHERE campaign_id = :c6 AND canal = 'whatsapp'));
+
+-- (i) Quem responde não mudou, a data também não. O canal é da Lia desde
+-- (d); a pessoa 11 responde agora; escolher a Lia como exceção da campanha —
+-- ou voltar dela ao canal, que é a Lia — não pode tirar essa resposta da fila.
+SELECT adc.responde(11, 'e como funciona a portabilidade?');
+SELECT adc.confere('antes, a resposta nova está na fila com a Lia',
+  (SELECT agent_id FROM fila_do_agente(100) WHERE contact_id = adc.c(11)) = :lia);
+INSERT INTO campaign_agents (tenant_id, campaign_id, canal, agent_id) VALUES (:ta, :c1, 'whatsapp', :lia);
+SELECT adc.confere('exceção com o MESMO agente do canal não renova a vigência',
+  (SELECT agent_id FROM fila_do_agente(100) WHERE contact_id = adc.c(11)) = :lia);
+UPDATE campaign_agents SET agent_id = NULL, herda = true WHERE campaign_id = :c1 AND canal = 'whatsapp';
+SELECT adc.confere('nem voltar ao canal quando ele é o mesmo agente',
+  (SELECT agent_id FROM fila_do_agente(100) WHERE contact_id = adc.c(11)) = :lia);
+
+-- (j) O texto já composto: quem responde é perguntado de novo na hora de
+-- mandar. A pessoa 9 (c6, Lia) e a 12 (cliente B, Bia) têm rascunho pronto e
+-- vão para a fila; a 11 tem rascunho, e a campanha dela passa a "ninguém"
+-- antes de enfileirar.
+SELECT adc.pessoa(:tb, 12, :cb1, 'whatsapp', interval '1 hour');
+SELECT adc.responde(9, 'pode me explicar melhor?');
+SELECT registrar_rascunho(f.message_event_id, f.agent_id, 'pronto', 'Oi! Posso te explicar por aqui.', NULL, 'teste')
+  FROM fila_do_agente(100) f WHERE f.contact_id IN (adc.c(9), adc.c(11), adc.c(12));
+SELECT adc.confere('os três rascunhos existem',
+  (SELECT count(*) FROM rascunhos WHERE contact_id IN (adc.c(9), adc.c(11), adc.c(12)) AND situacao = 'pronto') = 3);
+UPDATE campaign_agents SET herda = false WHERE campaign_id = :c1 AND canal = 'whatsapp';
+CREATE TABLE adc.enf AS
+SELECT r.contact_id, enfileirar_resposta(r.message_event_id, 'real') AS destino
+  FROM rascunhos r WHERE r.contact_id IN (adc.c(9), adc.c(11), adc.c(12));
+SELECT adc.confere('enfileirar: o agente que ainda responde vai para a fila',
+  (SELECT destino FROM adc.enf WHERE contact_id = adc.c(9)) = 'fila'
+  AND (SELECT destino FROM adc.enf WHERE contact_id = adc.c(12)) = 'fila');
+SELECT adc.confere('enfileirar: a campanha que passou a "ninguém" devolve o texto a uma pessoa',
+  (SELECT destino FROM adc.enf WHERE contact_id = adc.c(11)) = 'devolvido'
+  AND (SELECT envio_motivo FROM rascunhos WHERE contact_id = adc.c(11)) LIKE '%não responde mais nesta campanha%');
+
+-- E a mensagem que já estava na fila: a Lia é desligada antes do despacho.
+UPDATE agents SET ativo = false WHERE id = :lia;
+CREATE TABLE adc.lote AS SELECT * FROM reivindicar_pendentes(50);
+SELECT adc.confere('despacho: a mensagem do agente que ainda responde sai',
+  EXISTS (SELECT 1 FROM adc.lote l JOIN messages m ON m.id = l.message_id
+            JOIN rascunhos r ON r.id = m.rascunho_id WHERE r.contact_id = adc.c(12)));
+SELECT adc.confere('despacho: a do agente desligado não sai — é cancelada e volta a uma pessoa',
+  NOT EXISTS (SELECT 1 FROM adc.lote l JOIN messages m ON m.id = l.message_id
+                JOIN rascunhos r ON r.id = m.rascunho_id WHERE r.contact_id = adc.c(9))
+  AND (SELECT m.status FROM messages m JOIN rascunhos r ON r.id = m.rascunho_id WHERE r.contact_id = adc.c(9)) = 'cancelado'
+  AND (SELECT envio FROM rascunhos WHERE contact_id = adc.c(9)) = 'devolvido');
+
+-- (k) A frase que a tela do "Testar" sugere como pedido de saída
+-- (`PEDIDO_DE_SAIDA_DO_TESTE` em app/src/agentes.ts) é uma que a blacklist
+-- padrão NÃO pega: é o [SAIR] do agente que ela existe para exercitar.
+SELECT adc.confere('a sugestão de pedido de saída da tela não é pega pela blacklist padrão',
+  NOT EXISTS (SELECT 1 FROM privado.regra_da_resposta(:ta, 'não me procure mais'))
+  AND EXISTS (SELECT 1 FROM blacklist_termos WHERE tenant_id = :ta));
 
 SET role anon;
   -- No Supabase o anon tem SELECT de tabela por default privilege, e quem nega

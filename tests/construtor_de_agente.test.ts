@@ -6,8 +6,8 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
-  camposParaGravar, canaisQueServe, entradaDaPrevia, oQueFalta, rascunhoDe, rascunhoNovo, rotulo,
-  trocarObjetivo, trocarPersona,
+  camposParaGravar, canaisQueServe, entradaDaPrevia, oQueFalta, PEDIDO_DE_SAIDA_DO_TESTE, rascunhoDe, rascunhoNovo,
+  rotulo, trocarObjetivo, trocarPersona,
 } from '../app/src/agentes.ts';
 import { CANAIS, montarPedido, OBJETIVOS, PERSONAS } from '../adapters/prompt-do-agente.ts';
 
@@ -90,4 +90,11 @@ test('a prévia é o pedido do worker: o mesmo módulo, o mesmo limite por canal
   }
   // Tamanho próprio menor que o do canal: vale o dele.
   assert.equal(montarPedido(entradaDaPrevia({ ...r, tamanho_maximo: '300' }, 'email')).limite, 300);
+});
+
+test('a frase de saída sugerida pelo Testar é a que o SQL confere contra a blacklist padrão', async () => {
+  const { readFileSync } = await import('node:fs');
+  const sql = readFileSync(new URL('./agente_do_canal.sql', import.meta.url), 'utf8');
+  assert.ok(sql.includes(`regra_da_resposta(:ta, '${PEDIDO_DE_SAIDA_DO_TESTE}')`),
+    'tests/agente_do_canal.sql precisa conferir a mesma frase que a tela sugere');
 });

@@ -64,13 +64,39 @@ export function ehModeloDeRaciocinio(modelo: string): boolean {
 }
 
 /**
- * Folga de tokens acima do que o texto precisa. O teto de tokens só limita
- * CUSTO: quem limita o tamanho é o freio. Modelo que raciocina — e pelo
- * OpenRouter o Gemini 2.5, o DeepSeek R1 e o Sonar Reasoning raciocinam
- * sempre — gasta o orçamento pensando antes de escrever; sem folga, devolve
- * vazio com `finish_reason = length` e o raciocínio já cobrado.
+ * Folga de tokens acima do que o texto precisa, SÓ para quem raciocina. O
+ * teto de tokens só limita CUSTO: quem limita o tamanho é o freio. Modelo que
+ * raciocina — e pelo OpenRouter o Gemini 2.5, o DeepSeek R1 e o Sonar
+ * Reasoning raciocinam sempre — gasta o orçamento pensando antes de escrever;
+ * sem folga, devolve vazio com `finish_reason = length` e o raciocínio já
+ * cobrado. Quem não raciocina não precisa dela, e muitos recusam com 400
+ * acima de 4096 (gpt-4o-2024-05-13, gpt-4-turbo): a folga em todos fazia toda
+ * resposta de e-mail virar erro.
  */
 export const FOLGA_DE_TOKENS = 3000;
+
+export function raciocinaAntesDeEscrever(modelo: string): boolean {
+  const m = modelo.trim().toLowerCase();
+  return ehModeloDeRaciocinio(m) || /(reason|thinking|\br1\b|gemini-(2\.5|3)|qwq|magistral|(^|\/)o\d)/.test(m);
+}
+
+/**
+ * As credenciais como o worker as monta: a `config` da conta e, por cima, o
+ * segredo do Vault — cada valor COMO ESTÁ. Espaço nas pontas de um
+ * `base_url` é defeito a apontar, não a esconder (D44): o "Testar" usa esta
+ * mesma função para errar igual ao worker, em vez de passar verde aparando o
+ * que a produção não apara.
+ */
+export function juntarCredenciais(config: unknown, segredo: string | null): Record<string, string> {
+  const juntas: Record<string, string> = {};
+  const de = (o: unknown) => {
+    if (!o || typeof o !== 'object' || Array.isArray(o)) return;
+    for (const [k, v] of Object.entries(o as Record<string, unknown>)) juntas[k] = String(v ?? '');
+  };
+  de(config);
+  if (segredo) de(JSON.parse(segredo));
+  return juntas;
+}
 
 /** 401, 403, 404 e 400 não melhoram sozinhos; o resto pode melhorar. */
 function definitivoPorStatus(status: number): boolean {
@@ -163,9 +189,8 @@ class ChatCompletionsIA implements ModeloIA {
     // é a conta do cliente hoje (D76). Os outros provedores do protocolo
     // continuam no nome antigo, que é o que eles documentam.
     const raciocina = ehModeloDeRaciocinio(p.modelo);
-    const teto = this.provedor === 'openai'
-      ? { max_completion_tokens: p.maxTokens + FOLGA_DE_TOKENS }
-      : { max_tokens: p.maxTokens + FOLGA_DE_TOKENS };
+    const tokens = p.maxTokens + (raciocinaAntesDeEscrever(p.modelo) ? FOLGA_DE_TOKENS : 0);
+    const teto = this.provedor === 'openai' ? { max_completion_tokens: tokens } : { max_tokens: tokens };
 
     try {
       const r = await this.buscar(`${base}/chat/completions`, {

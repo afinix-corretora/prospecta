@@ -324,11 +324,13 @@ export function Setup() {
           for (const c of a.canaisDaCampanha) await escolherAgenteDaCampanha(t, campanha, c, a.agente.id);
         }
         await definirIADaCampanha(campanha, a.credencial!);
-        const sozinho = 'novo' in a.agente || a.agente.autonomo;
-        texto = `${'novo' in a.agente ? `Criei o agente "${a.agente.nome}"` : `O agente "${a.agente.nome}"`} responde nesta `
-          + `campanha: quando alguém responder, ${sozinho ? 'ele responde sozinho'
-            : 'o texto dele fica de rascunho na tela de Respostas, para uma pessoa mandar'}. `
-          + 'Ajuste o texto dele em Configurações ▸ Agentes.';
+        // Quem responde de fato em cada canal, e se sozinho (D76): o
+        // escolhido pode não escrever em canal nenhum, quando a campanha
+        // herda outro do canal.
+        const quem = a.respondem.map((x) => `${x.nome} ${x.sozinho ? 'responde sozinho'
+          : 'deixa o texto de rascunho na tela de Respostas, para uma pessoa mandar'}`).join('; ');
+        texto = `${'novo' in a.agente ? `Criei o agente "${a.agente.nome}". ` : ''}`
+          + `Nesta campanha, quando alguém responder: ${quem}. Ajuste os agentes em Configurações ▸ Agentes.`;
       }
       mudar((m) => ({ ...m,
         estado: { ...m.estado, feitos: { ...m.estado.feitos, [a.id]: texto },

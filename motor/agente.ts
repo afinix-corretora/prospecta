@@ -52,13 +52,19 @@ export interface OpcoesAgente {
   readonly criar?: (provedor: string, buscar?: Buscador) => ModeloIA;
   /** O modo da passada. Em `simulado` a resposta do agente nasce simulada, como a cadência (D36). */
   readonly modo?: 'simulado' | 'real';
+  /** O relógio, para o teste. */
+  readonly agora?: () => number;
 }
+
+/** Quanto tempo um erro transitório do provedor de IA é tentado de novo antes de virar `erro` (D76). */
+export const PRAZO_DO_TRANSITORIO_MS = 6 * 3_600_000;
 
 export async function rascunharRespostas(
   banco: BancoAgente, limite: number, opcoes: OpcoesAgente = {},
 ): Promise<ResumoRascunhos> {
   const criar = opcoes.criar ?? criarIa;
   const modo = opcoes.modo ?? 'simulado';
+  const agora = opcoes.agora ?? Date.now;
   const respostas = await banco.respostasParaRascunhar(limite);
   const porSituacao: Partial<Record<Situacao, number>> = {};
   const envio: Partial<Record<Envio, number>> = {};
@@ -126,13 +132,23 @@ export async function rascunharRespostas(
 
     if (!resultado.ok) {
       // Transitório não vira linha: a próxima passada tenta de novo. Só o que
-      // não melhora sozinho fica gravado, com o motivo para a tela.
-      if (resultado.definitivo) await registrar(r, 'erro', null, resultado.erro);
-      else adiadas += 1;
+      // não melhora sozinho fica gravado, com o motivo para a tela — e o
+      // transitório que não melhora em PRAZO_DO_TRANSITORIO também não ia
+      // melhorar: conta sem crédito ou endereço errado davam "tente de novo"
+      // por sete dias, sem linha que dissesse por quê (D76).
+      const velha = Date.parse(r.resposta_em) < agora() - PRAZO_DO_TRANSITORIO_MS;
+      if (resultado.definitivo || velha) {
+        await registrar(r, 'erro', null, resultado.definitivo ? resultado.erro
+          : `o provedor de IA falhou por mais de ${PRAZO_DO_TRANSITORIO_MS / 3_600_000} horas: ${resultado.erro}`);
+      } else adiadas += 1;
       continue;
     }
 
-    const freio = aplicarFreios(resultado.texto, r);
+    // O freio que lança (um dado que ele não esperava) não derruba a passada
+    // de todos os clientes: o texto não sai, e o motivo fica gravado.
+    let freio: ReturnType<typeof aplicarFreios>;
+    try { freio = aplicarFreios(resultado.texto, r); }
+    catch (e) { freio = { situacao: 'bloqueado', motivo: `o freio falhou: ${e instanceof Error ? e.message : String(e)}` }; }
     if (freio.situacao !== 'pronto') {
       await registrar(r, freio.situacao, null, freio.motivo);
       continue;

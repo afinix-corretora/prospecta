@@ -14,6 +14,16 @@ import {
 import type { EntradaDoPrompt } from '../../adapters/prompt-do-agente.ts';
 
 export const CANAIS_DO_AGENTE = ['whatsapp', 'email', 'sms', 'instagram'] as const;
+
+/**
+ * O pedido de saída que o "Testar" sugere: um que a blacklist PADRÃO não pega,
+ * para exercitar o [SAIR] do agente. A sugestão anterior ("não quero mais
+ * saber disso") a blacklist pegava, e a tela se contradizia na frase que ela
+ * mesma escolheu. `tests/agente_do_canal.sql` confere esta frase contra a
+ * blacklist semeada, e `tests/construtor_de_agente.test.ts` confere que a
+ * frase lá é esta.
+ */
+export const PEDIDO_DE_SAIDA_DO_TESTE = 'não me procure mais';
 export type CanalDoAgente = typeof CANAIS_DO_AGENTE[number];
 
 /** O que o construtor edita. Números como texto: é o que o campo devolve. */

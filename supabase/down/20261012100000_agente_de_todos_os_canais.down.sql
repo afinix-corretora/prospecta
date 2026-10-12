@@ -98,6 +98,287 @@ AS $$
    LIMIT least(coalesce(p_limite, 20), 100);
 $$;
 
+-- O despacho volta ao corpo do D69, antes de a regra de quem responde sair.
+CREATE OR REPLACE FUNCTION public.enfileirar_resposta(p_message_event_id uuid, p_modo text DEFAULT 'simulado')
+RETURNS text
+LANGUAGE plpgsql
+SET search_path TO 'public', 'privado'
+AS $$
+DECLARE
+  r rascunhos%ROWTYPE; v_evento message_events%ROWTYPE; v_origem messages%ROWTYPE;
+  v_enrollment enrollments%ROWTYPE; v_campanha campaigns%ROWTYPE;
+  v_autonomo boolean; v_conta sender_accounts%ROWTYPE; v_chip uuid;
+  v_despacha boolean; v_status status_message; v_valor_norm text;
+BEGIN
+  IF p_modo NOT IN ('simulado', 'real') THEN
+    RAISE EXCEPTION 'modo inválido: % (use simulado ou real)', p_modo
+      USING ERRCODE = 'invalid_parameter_value';
+  END IF;
+  v_status := CASE WHEN p_modo = 'simulado' THEN 'simulado' ELSE 'pendente' END::status_message;
+
+  SELECT * INTO r FROM rascunhos WHERE message_event_id = p_message_event_id;
+  IF NOT FOUND OR r.situacao <> 'pronto' THEN
+    RETURN 'pessoa';
+  END IF;
+  IF r.envio <> 'pessoa' THEN
+    RETURN r.envio;   -- já decidido: a segunda chamada não cria nada
+  END IF;
+
+  SELECT a.autonomo INTO v_autonomo FROM agents a
+   WHERE a.tenant_id = r.tenant_id AND a.id = r.agent_id;
+  IF NOT coalesce(v_autonomo, false) THEN
+    RETURN 'pessoa';
+  END IF;
+
+  SELECT * INTO v_evento FROM message_events WHERE id = r.message_event_id;
+  SELECT * INTO v_origem FROM messages WHERE id = v_evento.message_id;
+  SELECT * INTO v_enrollment FROM enrollments WHERE id = v_origem.enrollment_id;
+  SELECT * INTO v_campanha FROM campaigns WHERE id = v_enrollment.campaign_id;
+  SELECT valor_norm INTO v_valor_norm FROM contact_identities WHERE id = v_origem.contact_identity_id;
+
+  -- A pessoa respondeu de novo: quem responde é o rascunho da mais recente.
+  IF EXISTS (
+    SELECT 1 FROM message_events me2
+      JOIN messages m2    ON m2.id = me2.message_id
+      JOIN enrollments e2 ON e2.id = m2.enrollment_id
+     WHERE me2.tenant_id = r.tenant_id AND e2.contact_id = r.contact_id
+       AND me2.tipo = 'respondido' AND me2.ocorrido_em > v_evento.ocorrido_em
+  ) THEN
+    PERFORM privado.devolver_rascunho(r.id, 'a pessoa respondeu de novo antes de o agente mandar');
+    RETURN 'devolvido';
+  END IF;
+
+  IF esta_suprimido(r.tenant_id, r.contact_id, v_origem.canal, v_valor_norm) THEN
+    PERFORM privado.devolver_rascunho(r.id, 'o contato está suprimido');
+    RETURN 'devolvido';
+  END IF;
+
+  IF NOT v_campanha.ativa THEN
+    PERFORM privado.devolver_rascunho(r.id, 'a campanha está desligada');
+    RETURN 'devolvido';
+  END IF;
+
+  -- Só a resposta reabre a conversa. Encerrada por supressão, por mudança de
+  -- etapa no CRM ou por uma pessoa, a decisão foi parar de falar.
+  IF v_enrollment.status = 'encerrado' AND v_enrollment.motivo_encerramento IS DISTINCT FROM 'resposta' THEN
+    PERFORM privado.devolver_rascunho(r.id,
+      'a inscrição foi encerrada por ' || coalesce(v_enrollment.motivo_encerramento::text, '?'));
+    RETURN 'devolvido';
+  END IF;
+
+  -- (c) A janela de 24h.
+  IF v_origem.canal IN ('whatsapp', 'instagram') AND r.resposta_em < now() - interval '24 hours' THEN
+    PERFORM privado.devolver_rascunho(r.id, 'passou a janela de 24h desde a última mensagem da pessoa');
+    RETURN 'devolvido';
+  END IF;
+
+  -- A conta que conversa: a que recebeu a resposta (o webhook grava o chip no
+  -- evento), ou a que mandou a mensagem respondida.
+  BEGIN
+    v_chip := nullif(v_evento.payload ->> 'chip', '')::uuid;
+  EXCEPTION WHEN invalid_text_representation THEN
+    v_chip := NULL;
+  END;
+  SELECT * INTO v_conta FROM sender_accounts
+   WHERE tenant_id = r.tenant_id AND canal = v_origem.canal
+     AND id = coalesce(v_chip, v_origem.sender_account_id);
+  IF NOT FOUND THEN
+    SELECT * INTO v_conta FROM sender_accounts
+     WHERE tenant_id = r.tenant_id AND id = v_origem.sender_account_id;
+  END IF;
+  IF v_conta.id IS NULL THEN
+    PERFORM privado.devolver_rascunho(r.id, 'não há conta que esteja conversando com a pessoa');
+    RETURN 'devolvido';
+  END IF;
+
+  SELECT v_conta.removido_em IS NULL AND cat.tem_adapter AND cat.ativo
+    INTO v_despacha
+    FROM channel_provider_catalog cat WHERE cat.slug = v_conta.provedor;
+  IF NOT coalesce(v_despacha, false) THEN
+    PERFORM privado.devolver_rascunho(r.id,
+      'a conta ' || coalesce(v_conta.apelido, v_conta.identificador) || ' não tem como despachar');
+    RETURN 'devolvido';
+  END IF;
+
+  -- (b) A resposta paga quota, como qualquer mensagem (invariante 3). Quem
+  -- decide se a conta está de pé é `reservar_envio`, que também fecha o
+  -- circuito vencido — conferir o estado antes dela devolveria à toa.
+  IF NOT reservar_envio(v_conta.id) THEN
+    SELECT * INTO v_conta FROM sender_accounts WHERE id = v_conta.id;
+    PERFORM privado.devolver_rascunho(r.id,
+      'a conta ' || coalesce(v_conta.apelido, v_conta.identificador) || CASE
+        WHEN v_conta.estado <> 'ativo' THEN ' está fora do pool (' || v_conta.estado::text || ')'
+        ELSE ' está sem quota hoje' END);
+    RETURN 'devolvido';
+  END IF;
+
+  BEGIN
+    INSERT INTO messages (tenant_id, enrollment_id, step_id, rascunho_id, contact_identity_id,
+                          sender_account_id, canal, status, conteudo)
+    VALUES (r.tenant_id, v_origem.enrollment_id, NULL, r.id, v_origem.contact_identity_id,
+            v_conta.id, v_origem.canal, v_status, r.texto);
+  EXCEPTION
+    WHEN unique_violation THEN
+      NULL;  -- outra passada chegou antes: a mensagem existe
+    WHEN restrict_violation THEN
+      -- Os gatilhos de supressão e de pool têm a palavra final.
+      PERFORM privado.devolver_rascunho(r.id, 'barrada na criação: ' || SQLERRM);
+      RETURN 'devolvido';
+  END;
+
+  UPDATE rascunhos SET envio = 'fila' WHERE id = r.id;
+  RETURN 'fila';
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.reivindicar_pendentes(p_limite integer DEFAULT 50, p_lease interval DEFAULT '00:05:00'::interval)
+ RETURNS TABLE(message_id uuid, tenant_id uuid, canal canal, destino text, conteudo text, sender_id uuid, sender_ident text, campanha_tipo tipo_campanha)
+ LANGUAGE plpgsql
+ SET search_path TO 'public', 'privado'
+AS $function$
+DECLARE
+  m         record;
+  candidato sender_accounts%ROWTYPE;
+  v_novo    uuid;
+BEGIN
+  -- Circuito vencido fecha na borda do lote (D37).
+  UPDATE sender_accounts
+     SET estado = 'ativo', falhas_consecutivas = 0, circuito_aberto_ate = NULL
+   WHERE estado = 'circuito_aberto'
+     AND circuito_aberto_ate IS NOT NULL
+     AND circuito_aberto_ate <= now();
+
+  FOR m IN
+    WITH alvo AS (
+      SELECT msg.id FROM messages msg
+       WHERE msg.status = 'pendente'
+         AND (msg.reivindicada_em IS NULL OR msg.reivindicada_em < now() - p_lease)
+       ORDER BY msg.criado_em LIMIT p_limite FOR UPDATE SKIP LOCKED
+    ), marcada AS (
+      UPDATE messages msg SET reivindicada_em = now() FROM alvo WHERE msg.id = alvo.id
+      RETURNING msg.*
+    )
+    SELECT msg.id, msg.tenant_id, msg.canal, msg.conteudo, msg.sender_account_id,
+           ci.valor AS destino, ci.valor_norm, e.contact_id, c.tipo AS campanha_tipo,
+           c.id AS campaign_id, c.remetente_email_id,
+           e.status AS estado_enrollment, e.motivo_encerramento, c.ativa AS campanha_ativa,
+           sa.estado AS estado_atual, sa.identificador AS ident_atual,
+           cat.tem_adapter, cat.ativo AS provedor_ativo,
+           -- D69: a mensagem do agente, e se ela ainda responde à última.
+           msg.rascunho_id, ra.resposta_em,
+           (msg.rascunho_id IS NOT NULL AND NOT EXISTS (
+              SELECT 1 FROM message_events me2
+                JOIN messages m2    ON m2.id = me2.message_id
+                JOIN enrollments e2 ON e2.id = m2.enrollment_id
+               WHERE me2.tenant_id = msg.tenant_id AND e2.contact_id = e.contact_id
+                 AND me2.tipo = 'respondido' AND me2.ocorrido_em > me0.ocorrido_em)) AS responde_a_ultima
+      FROM marcada msg
+      JOIN contact_identities ci ON ci.id = msg.contact_identity_id
+      JOIN enrollments        e  ON e.id = msg.enrollment_id
+      JOIN campaigns          c  ON c.id = e.campaign_id
+      JOIN sender_accounts    sa ON sa.id = msg.sender_account_id
+      JOIN channel_provider_catalog cat ON cat.slug = sa.provedor
+      LEFT JOIN rascunhos     ra ON ra.id = msg.rascunho_id
+      LEFT JOIN message_events me0 ON me0.id = ra.message_event_id
+  LOOP
+    -- 1. Supressão, acima de tudo (D39).
+    IF esta_suprimido(m.tenant_id, m.contact_id, m.canal, m.valor_norm) THEN
+      UPDATE messages SET status = 'cancelado', reivindicada_em = NULL WHERE id = m.id;
+      IF m.rascunho_id IS NOT NULL THEN
+        PERFORM privado.devolver_rascunho(m.rascunho_id, 'o contato foi suprimido antes do envio');
+      END IF;
+      CONTINUE;
+    END IF;
+
+    -- 2. Parada definitiva: a cadência acabou por um motivo que significa
+    -- "pare de falar com esta pessoa". `fim_dos_passos` não é um deles — é o
+    -- encerramento normal, e acontece na MESMA passada que cria a última
+    -- mensagem (D40).
+    --
+    -- D69: o critério positivo, e só um. Encerrada por `resposta`, passa a
+    -- mensagem do agente que responde à ÚLTIMA resposta da pessoa. Mensagem de
+    -- cadência nunca tem `rascunho_id` e segue cancelada.
+    IF m.estado_enrollment = 'encerrado'
+       AND m.motivo_encerramento IS DISTINCT FROM 'fim_dos_passos'
+       AND NOT (m.rascunho_id IS NOT NULL AND m.motivo_encerramento = 'resposta' AND m.responde_a_ultima) THEN
+      UPDATE messages SET status = 'cancelado', reivindicada_em = NULL WHERE id = m.id;
+      IF m.rascunho_id IS NOT NULL THEN
+        PERFORM privado.devolver_rascunho(m.rascunho_id, CASE
+          WHEN NOT m.responde_a_ultima THEN 'a pessoa respondeu de novo antes do envio'
+          ELSE 'a inscrição foi encerrada por ' || coalesce(m.motivo_encerramento::text, '?') END);
+      END IF;
+      CONTINUE;
+    END IF;
+
+    -- D69: a janela de 24h, conferida de novo na saída — a mensagem pode ter
+    -- esperado a conta voltar.
+    IF m.rascunho_id IS NOT NULL AND m.canal IN ('whatsapp', 'instagram')
+       AND m.resposta_em < now() - interval '24 hours' THEN
+      UPDATE messages SET status = 'cancelado', reivindicada_em = NULL WHERE id = m.id;
+      PERFORM privado.devolver_rascunho(m.rascunho_id, 'passou a janela de 24h esperando a conta despachar');
+      CONTINUE;
+    END IF;
+
+    -- 3. Parada temporária: pausa e campanha desligada voltam atrás. Segura a
+    -- mensagem em vez de cancelar — cancelada não é recriável, porque a chave
+    -- única `(enrollment_id, step_id)` impede repetir o passo.
+    IF m.estado_enrollment = 'pausado' OR NOT m.campanha_ativa THEN
+      UPDATE messages SET reivindicada_em = NULL WHERE id = m.id;
+      CONTINUE;
+    END IF;
+
+    -- 4. Quota NÃO entra: a reserva desta mensagem já foi paga na criação.
+    -- E-mail com provedor escolhido pela campanha só sai por ele: trocar o
+    -- provedor na tela vale para o que já está na fila, não só para o que
+    -- ainda vai nascer (D62) — é o D37 aplicado à escolha da pessoa. A
+    -- mensagem do agente sai pela conta que conversa, sempre (D69).
+    IF m.estado_atual = 'ativo' AND m.tem_adapter AND m.provedor_ativo
+       AND (m.rascunho_id IS NOT NULL OR m.canal <> 'email' OR m.remetente_email_id IS NULL
+            OR m.sender_account_id = m.remetente_email_id) THEN
+      message_id := m.id; tenant_id := m.tenant_id; canal := m.canal;
+      destino := m.destino; conteudo := m.conteudo;
+      sender_id := m.sender_account_id; sender_ident := m.ident_atual;
+      campanha_tipo := m.campanha_tipo;
+      RETURN NEXT;
+      CONTINUE;
+    END IF;
+
+    -- D69: a mensagem do agente não troca de conta. Outro número escrevendo
+    -- no meio da conversa é outra conversa; ela espera, e a janela decide.
+    IF m.rascunho_id IS NOT NULL THEN
+      UPDATE messages SET reivindicada_em = NULL WHERE id = m.id;
+      CONTINUE;
+    END IF;
+
+    -- 5. Remetente não despacha mais: procura outro no mesmo pool (D37).
+    v_novo := NULL;
+    FOR candidato IN
+      SELECT * FROM privado.remetentes_da_campanha(m.tenant_id, m.campaign_id, m.canal)
+    LOOP
+      IF candidato.id <> m.sender_account_id AND reservar_envio(candidato.id) THEN
+        v_novo := candidato.id;
+        EXIT;
+      END IF;
+    END LOOP;
+
+    IF v_novo IS NULL THEN
+      UPDATE messages SET reivindicada_em = NULL WHERE id = m.id;
+      CONTINUE;
+    END IF;
+
+    -- A reserva do remetente antigo não volta: furaria a invariante 3 (D37).
+    UPDATE messages SET sender_account_id = v_novo WHERE id = m.id;
+
+    SELECT * INTO candidato FROM sender_accounts WHERE id = v_novo;
+    message_id := m.id; tenant_id := m.tenant_id; canal := m.canal;
+    destino := m.destino; conteudo := m.conteudo;
+    sender_id := v_novo; sender_ident := candidato.identificador;
+    campanha_tipo := m.campanha_tipo;
+    RETURN NEXT;
+  END LOOP;
+END;
+$function$;
+
 CREATE OR REPLACE FUNCTION public.agente_do_canal(p_campaign_id uuid, p_canal canal)
 RETURNS agents
 LANGUAGE sql STABLE

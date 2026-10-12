@@ -573,6 +573,9 @@ export type Acao =
       readonly canaisDaCampanha: readonly CanalEnvio[];
       /** A conta de IA que a campanha passa a usar, ou `null` enquanto ela não existe. */
       readonly credencial: string | null;
+      /** Quem responde de fato nesta campanha depois do cartão, e se sozinho:
+       *  o agente escolhido e os que a campanha herda do canal (D76). */
+      readonly respondem: readonly { readonly nome: string; readonly sozinho: boolean }[];
     }
   | Base & { readonly tipo: 'abrir'; readonly rota: string };
 
@@ -608,8 +611,12 @@ export function agenteParaCampanha(f: Foto, modelo: { slug: string; tipo: Pool; 
   const objetivo = objetivoDoModelo(modelo.slug, modelo.tipo);
   const doCliente = f.agentes.filter((a) => a.tenant_id !== null && a.ativo !== false);
   const porCanal = f.agentesPorCanal ?? [];
+  // Entre os de mesmo objetivo, o que já é agente de um canal desta campanha
+  // vem primeiro: escolher outro deixaria o cartão dizendo "usa a Ana" num
+  // canal em que quem responde é o Bruno.
+  const doCanalDaCampanha = new Set(porCanal.filter((p) => (canais as readonly string[]).includes(p.canal)).map((p) => p.agent_id));
   const existente = doCliente.filter((a) => a.canal === null && a.objetivo === objetivo)
-    .sort((a, b) => a.nome.localeCompare(b.nome))[0];
+    .sort((a, b) => Number(doCanalDaCampanha.has(b.id)) - Number(doCanalDaCampanha.has(a.id)) || a.nome.localeCompare(b.nome))[0];
 
   let agente: AgenteDoSetup;
   if (existente) {
@@ -617,9 +624,12 @@ export function agenteParaCampanha(f: Foto, modelo: { slug: string; tipo: Pool; 
   } else {
     const o = OBJETIVOS.find((x) => x.slug === objetivo)!;
     const empresa = (f.empresa ?? '').trim();
-    const marca = empresa.split(/\s+/)[0] ?? '';
-    // "Assistente Afinix — Resgate": o contato ouve "Assistente Afinix"
-    // (`nomeDeApresentacao` corta no travessão); quem opera lê o objetivo.
+    // A empresa inteira, cortada por tamanho e não por palavra: "Grupo AFX"
+    // virava "Assistente Grupo", que não identifica empresa nenhuma.
+    const marca = empresa.length > 40 ? empresa.slice(0, 40).replace(/\s+\S*$/, '') : empresa;
+    // "Assistente Afinix Corretora — Resgate": o contato ouve "Assistente
+    // Afinix Corretora" (`nomeDeApresentacao` corta no travessão); quem opera
+    // lê o objetivo.
     const base = `Assistente${marca ? ` ${marca}` : ''} — ${o.nome}`;
     let nome = base;
     for (let n = 2; f.agentes.some((a) => a.tenant_id !== null && a.nome === nome); n++) nome = `${base} ${n}`;
@@ -632,7 +642,7 @@ export function agenteParaCampanha(f: Foto, modelo: { slug: string; tipo: Pool; 
 
   const canaisDoCanal: CanalEnvio[] = [];
   const canaisDaCampanha: CanalEnvio[] = [];
-  const herdados: { canal: CanalEnvio; nome: string }[] = [];
+  const herdados: { canal: CanalEnvio; nome: string; sozinho: boolean }[] = [];
   const outros: { canal: CanalEnvio; nome: string }[] = [];
   const desligados: { canal: CanalEnvio; nome: string }[] = [];
   const semResposta: CanalEnvio[] = [];
@@ -642,11 +652,20 @@ export function agenteParaCampanha(f: Foto, modelo: { slug: string; tipo: Pool; 
     const dele = atual ? f.agentes.find((a) => a.id === atual.agent_id) : undefined;
     if (!atual || !dele) canaisDoCanal.push(c);
     else if (dele.ativo === false) { canaisDaCampanha.push(c); desligados.push({ canal: c, nome: dele.nome }); }
-    else if ('id' in agente && dele.id === agente.id) herdados.push({ canal: c, nome: dele.nome });
-    else if (dele.objetivo === objetivo && dele.canal === null) herdados.push({ canal: c, nome: dele.nome });
+    else if ('id' in agente && dele.id === agente.id) herdados.push({ canal: c, nome: dele.nome, sozinho: dele.autonomo !== false });
+    else if (dele.objetivo === objetivo && dele.canal === null) herdados.push({ canal: c, nome: dele.nome, sozinho: dele.autonomo !== false });
     else { canaisDaCampanha.push(c); outros.push({ canal: c, nome: dele.nome }); }
   }
-  return { agente, objetivo, canaisDoCanal, canaisDaCampanha, herdados, outros, desligados, semResposta };
+  // Quem responde de fato depois do cartão: o escolhido, se ele escreve em
+  // algum canal desta campanha, e os herdados — cada um com o seu "sozinho".
+  const respondem: { nome: string; sozinho: boolean }[] = [];
+  if (canaisDoCanal.length + canaisDaCampanha.length > 0) {
+    respondem.push({ nome: agente.nome, sozinho: 'novo' in agente || agente.autonomo });
+  }
+  for (const h of herdados) {
+    if (!respondem.some((x) => x.nome === h.nome)) respondem.push({ nome: h.nome, sozinho: h.sozinho });
+  }
+  return { agente, objetivo, canaisDoCanal, canaisDaCampanha, herdados, outros, desligados, semResposta, respondem };
 }
 
 export interface Plano {
@@ -813,12 +832,12 @@ export function montarPlano(f: Foto, bruto: Respostas): Plano {
       const obj = OBJETIVOS.find((o) => o.slug === d.objetivo)!;
       // O agente novo nasce respondendo sozinho; o que já existe faz o que
       // está nele — dizer "responde sozinho" de um agente de rascunho seria o
-      // setup prometendo um envio que não vai acontecer.
-      const sozinho = 'novo' in d.agente || d.agente.autonomo;
+      // setup prometendo um envio que não vai acontecer. E é dito de QUEM
+      // responde em cada canal, não só do agente escolhido.
       if (d.canaisDoCanal.length + d.canaisDaCampanha.length + d.herdados.length > 0) {
         acoes.push({
           id: 'agentes', tipo: 'ligar_agentes', agente: d.agente, credencial,
-          canaisDoCanal: d.canaisDoCanal, canaisDaCampanha: d.canaisDaCampanha,
+          canaisDoCanal: d.canaisDoCanal, canaisDaCampanha: d.canaisDaCampanha, respondem: d.respondem,
           titulo: 'Pôr um agente para responder nesta campanha',
           efeitos: [
             'novo' in d.agente
@@ -833,9 +852,9 @@ export function montarPlano(f: Foto, bruto: Respostas): Plano {
             ...('novo' in d.agente
               ? ['ele sabe só o nome da empresa: complete "Sobre a empresa e a oferta" em Configurações ▸ Agentes, senão toda pergunta sobre o produto vai para a equipe']
               : []),
-            sozinho
-              ? 'o agente responde sozinho pelo motor (em simulado, nada sai); o que ele não puder mandar volta para uma pessoa, na tela de Respostas'
-              : `${d.agente.nome} não responde sozinho: o texto dele fica de rascunho na tela de Respostas, para uma pessoa mandar (isso se muda em Configurações ▸ Agentes)`,
+            ...d.respondem.map((x) => x.sozinho
+              ? `${x.nome} responde sozinho pelo motor (em simulado, nada sai); o que não puder mandar volta para uma pessoa, na tela de Respostas`
+              : `${x.nome} não responde sozinho: o texto fica de rascunho na tela de Respostas, para uma pessoa mandar (isso se muda em Configurações ▸ Agentes)`),
           ],
           exige: 'opera',
           dependeDe: ['campanha', ...(credencial === null ? ['config:ia'] : [])],

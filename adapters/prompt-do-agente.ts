@@ -44,37 +44,96 @@ export function semAcento(s: string): string {
  * cliente. Pedir CPF ou cartão por mensagem é o golpe que o contato aprendeu
  * a temer — e o primeiro passo para o chip ser denunciado.
  *
- * O freio olha FRASE A FRASE e só barra a frase que PEDE: pergunta, ou verbo
- * de pedido, e sem negação. "Por aqui não pedimos CPF nem senha" é o agente
- * tranquilizando a pessoa — barrar isso com o motivo "pede dado sensível" foi
- * o que a sonda ao vivo mostrou na primeira versão (D76).
+ * O freio olha ORAÇÃO a oração (frase partida também em vírgula, dois-pontos
+ * e "mas"). Dado forte — CPF, RG, CNH, número ou dados do cartão, dados
+ * bancários — é barrado sempre, salvo na oração que TRANQUILIZA: negação
+ * colada ao verbo de pedir ("não pedimos CPF", "nunca vamos pedir"). A
+ * primeira versão do D76 liberava qualquer frase com um "não" solto, e "Se
+ * não for incômodo, me passa seu CPF?" saía. Senha e cartão são fracos: falar
+ * da forma de pagamento ou da senha que a operadora manda não é pedir — só
+ * barra quando a oração pede ("me passa a senha", "qual o seu cartão?").
+ *
+ * O lado do erro é de propósito: texto barrado volta a uma pessoa com o
+ * motivo; pedido de CPF que sai não volta.
  */
-const DADO_SENSIVEL = /\b(cpf|rg|senha|cartao de credito|(numero|dados) d[oa] (seu |sua )?cartao|codigo de seguranca|cvv|dados bancarios|numero da (sua )?conta)\b/;
-const PEDIDO = /\?|\b(me )?(manda|mande|envia|envie|passa|passe|informa|informe|digita|digite|confirma|confirme|diga|fala)\b|\b(preciso|precisamos|precisaria) d[oa]\b/;
-const NEGACAO = /\b(nao|nunca|jamais|nem)\b/;
+const DADO_FORTE = /\b(cpf|c\.p\.f|rg|cnh|carteira de identidade|(numero|numeros|dados|digitos|validade|codigo) d[oa]s? (seu |sua |teu |tua )?cartao|codigo de seguranca|cvv|cvc|dados bancarios|agencia e (a )?conta|numero da (sua |tua )?conta|conta bancaria)\b/;
+const VERBO_DE_PEDIR = '(manda|mande|mandar|envia|envie|enviar|passa|passe|passar|informa|informe|informar|digita|digite|digitar|diga|dizer|fala|falar|confirma|confirme|confirmar)';
+const PEDE_FRACO = new RegExp(
+  `(^|\\b(me|nos|pode|poderia|consegue|voce|vc)\\s+)(me\\s+)?${VERBO_DE_PEDIR}\\b.{0,20}\\b(senha|cartao)\\b`
+  + '|\\bqual (e )?(o |a )?(seu |sua |teu |tua )?(senha|cartao)\\b');
+const FRACO_DE_QUEM_LE = /\b(seu|sua|teu|tua) (senha|cartao)\b|\b(senha|cartao) (do seu|da sua|de voce)\b/;
+const PEDE = new RegExp(`\\?|(^|\\b(me|nos|pode|poderia|consegue)\\s+)(me\\s+)?${VERBO_DE_PEDIR}\\b|\\b(preciso|precisamos|precisaria|vou precisar) d[oa]\\b|\\baguard`);
+const TRANQUILIZA = /\b(nao|nunca|jamais)\s+(\w+\s+){0,2}(pedimos|pede|pedem|pedira|pediremos|solicitamos|solicita|solicitam|solicitaremos|exigimos|exige|precisamos|precisa|vamos pedir|vamos solicitar|vai pedir|vai solicitar)\b/;
 
 /**
  * Pergunta sobre a saúde DA PESSOA: dado sensível pela LGPD (art. 5º, II), e
- * conversa da equipe, não do agente. O que é COBERTURA do plano — internação,
- * acomodação, atendimento a gestante, tratamento odontológico — é produto, e a
- * frase que fala de plano não é barrada.
+ * conversa da equipe, não do agente. Três formas de perguntar, e as três são
+ * barradas:
+ *   - alguém (você, a família, um dependente) + verbo de estado + termo de
+ *     saúde, com ou sem "?" — "me conta se alguém tem doença preexistente";
+ *   - pergunta com termo de saúde que não é sobre o que o plano cobre;
+ *   - pedido ("me conta", "preciso saber") com termo de saúde.
+ * A primeira versão deixava passar toda frase que citasse "plano", "carência"
+ * ou "rede", e em plano de saúde a pergunta de saúde vem justamente com essas
+ * palavras. O que é COBERTURA — "o plano inclui atendimento a gestante?",
+ * "enfermaria ou apartamento nas internações?" — não pergunta o estado de
+ * ninguém e passa.
  */
-const SAUDE_DA_PESSOA = /\b(doencas?|doente|problemas? de saude|condic(ao|oes) de saude|preexistentes?|cirurgias?|operad[oa]|gravida|gestante|gravidez|remedios?|medicamentos?|pressao alta|hipertens\w*|diabet\w*|fuma|fumante|tratamento medico|diagnosticos?|internad[oa]s?|seu peso|sua altura|peso e altura)\b/;
-const FALA_DO_PLANO = /\b(cobertura|coberturas|cobre|cobrem|plano|planos|inclui|incluem|coparticipacao|acomodacao|enfermaria|apartamento|carencias?|rede)\b/;
+const SAUDE = /\b(doencas?|doente|problemas? de saude|condic(ao|oes) de saude|condicao medica|preexistentes?|cirurgias?|operad[oa]|gravida|gestante|gravidez|remedios?|medicamentos?|medicacao|pressao alta|hipertens\w*|diabet\w*|fuma|fumante|tratamentos?|diagnosticos?|internad[oa]s?|internac\w*|seu peso|sua altura|peso e altura|alergi\w*|asma|colesterol|cancer|depress\w*|deficiencia)\b/;
+const PESSOA = /\b(alguem|voce|voces|vc|vcs|o senhor|a senhora|seus? (filhos?|dependentes?|familiares|pais)|sua (familia|esposa|filha|mae)|seu (esposo|marido|pai|filho)|algum (dependente|familiar|beneficiario)|alguma pessoa|da familia)\b/;
+const ESTADO = /\b(tem|tinha|teve|tiveram|toma|tomam|tomou|faz|fazem|fez|fizeram|esta|estao|esteve|possui|possuem|sofre|sofrem|usa|usam|fuma|fumam|trata|tratam|foi operad[oa])\b/;
+const COBERTURA = /\b(cobertura|coberturas|cobre|cobrem|inclui|incluem|coparticipacao|acomodacao|enfermaria|apartamento|quarto|desconto|descontos|reembolso|atendimento)\b/;
+const PEDE_RELATO = /\b(me (conta|conte|diga|diz|fala|fale|informe|informa)|preciso saber|precisamos saber|gostaria de saber|pode me dizer|poderia me dizer)\b/;
 
 /**
  * O agente confirmando uma remoção que ninguém gravou. Os agentes de antes do
  * D76 têm "confirme em uma frase e encerre" na instrução, e quem decide entre
  * isso e o [SAIR] da regra é só o cabeçalho. A confirmação vira escalada: a
  * pessoa vai continuar recebendo da próxima campanha se ninguém a suprimir.
+ * As formas são as que o português usa de fato — "não entraremos mais em
+ * contato", "tirei seu número da lista", "vou parar de te mandar mensagens".
  */
-const CONFIRMA_SAIDA = /\b(nao (vamos|vou|iremos|vai) mais (te |lhe )?(contatar|contactar|mandar|enviar|incomodar|chamar|escrever|procurar)|remov(i|emos|ido|ida|endo)\b.{0,30}\b(lista|cadastro|numero|contato|base)|descadastr\w*|nao (recebera|vai receber|recebe) mais|nao vai mais receber|(seu|teu) (numero|contato|e-?mail) (foi|esta|sera) (removido|excluido|retirado))/;
-
-/** Carência prometida — a promessa que mais vira reclamação em plano de saúde. */
-const PROMESSA_DE_CARENCIA = /\b(sem carencias?|carencia zero|isencao de carencias?|isent[oa] de carencias?|zero de carencia|carencia reduzida|carencias? reduzidas?|carencia de \d+ (dias|meses))\b/g;
+const CONFIRMA_SAIDA = new RegExp([
+  '\\bnao (vamos|vou|iremos|irei|vai|ira) mais (te |lhe |o |a )?(entrar em contato|contatar|contactar|mandar|enviar|incomodar|chamar|escrever|procurar|ligar|perturbar)',
+  '\\bnao (entraremos|enviaremos|mandaremos|contataremos|faremos contato|ligaremos|escreveremos|incomodaremos|chamaremos|procuraremos)\\b',
+  '\\b(tirei|tiramos|exclui|excluimos|retirei|retiramos|removi|removemos|apaguei|apagamos|descadastrei|descadastramos|removid[oa]|excluid[oa]|retirad[oa])\\b.{0,40}\\b(lista|listas|cadastro|numero|contato|base|e-?mail|mailing)\\b',
+  '\\bdescadastr\\w*',
+  '\\bnao (sera|vai ser|seras) mais (contatad|procurad|incomodad)',
+  '\\b(vou|vamos|iremos|irei) (parar|deixar) de (te |lhe )?(mandar|enviar|escrever|contatar|incomodar|ligar|chamar)',
+  '\\bnao (recebera|vai receber|recebe|receberas|vai mais receber) mais\\b',
+  '\\bnao vai mais receber\\b',
+  '\\b(seu|teu) (numero|contato|e-?mail|cadastro) (foi|esta|sera) (removido|excluido|retirado|apagado)',
+].join('|'));
 
 /**
- * Valores em dinheiro escritos no texto: "R$ 289,90", "289 reais", "1 mil
+ * Carência, oração a oração: a oração que fala de carência e AFIRMA algo
+ * sobre ela — que não tem, que é reduzida, que se aproveita, que é de tantos
+ * dias — só passa se uma frase do que o cliente escreveu afirma o mesmo. É a
+ * promessa que mais vira reclamação em plano de saúde, e as formas naturais
+ * ("não tem carência", "a carência é de 30 dias") passavam pela lista fixa
+ * da primeira versão.
+ */
+const CARENCIA = /\bcarencias?\b/;
+function afirmacoesDeCarencia(oracao: string): Set<string> {
+  const a = new Set<string>();
+  if (/\b(sem|nao tem|nao ha|nao possui|nao existe|nenhuma|zero|isen\w*|livre de|nao precisa cumprir|nao exige|dispensa\w*)\b/.test(oracao)) a.add('nenhuma');
+  if (/\b(reduz\w*|reducao|menor|menores|diminu\w*|so|apenas|somente)\b/.test(oracao)) a.add('reduzida');
+  if (/\b(aproveit\w*|portabilidade|compra de carencia)\b/.test(oracao)) a.add('aproveitada');
+  for (const m of oracao.matchAll(/\b(\d+)\s*(dias?|mes|meses|horas?|h|anos?)\b/g)) {
+    a.add(`${Number(m[1])} ${m[2]!.startsWith('d') ? 'd' : m[2]!.startsWith('m') ? 'm' : m[2]!.startsWith('a') ? 'a' : 'h'}`);
+  }
+  return a;
+}
+
+/**
+ * A frase da fonte que proíbe ou nega a oferta não é afirmação dela: "nunca
+ * cite R$ 300", "não temos plano sem carência". Sem isto, a regra escrita
+ * para segurar o agente seria o que o libera.
+ */
+const PROIBITIVA = /\b(nunca|jamais|proibid\w*|evite|evitar|nao (prometa|prometer|ofere\w*|diga|dizer|fale|falar|mencione|mencionar|cite|citar|temos|ha|existe|trabalhamos|informe|informar|passe|passar|de|dar|use|usar))\b/;
+
+/**
+ * Valores em dinheiro escritos no texto: "R$ 289,90", "289 reais", "2 mil
  * reais", "289,90", "189/mês". Devolve o valor, para comparar com o que o
  * cliente escreveu — não a presença de um valor qualquer.
  */
@@ -84,7 +143,8 @@ function valoresEmDinheiro(normal: string): number[] {
   const padroes: [RegExp, (m: RegExpExecArray) => number][] = [
     [/r\$\s*(\d+(?:\.\d{3})*(?:,\d{1,2})?)(\s*mil\b)?/g, (m) => num(m[1]!) * (m[2] ? 1000 : 1)],
     [/\b(\d+(?:\.\d{3})*(?:,\d{1,2})?)\s*(mil\s+)?reais\b/g, (m) => num(m[1]!) * (m[2] ? 1000 : 1)],
-    [/\bmil reais\b/g, () => 1000],
+    // "mil reais" sozinho; o "2 mil reais" já foi lido acima, como 2000.
+    [/(?<![\d,]\s{0,3})\bmil reais\b/g, () => 1000],
     [/(?<![\d.,$])\b(\d{1,3}(?:\.\d{3})*,\d{2})\b/g, (m) => num(m[1]!)],
     [/\b(\d{2,}(?:,\d{1,2})?)\s*(\/\s*mes|por mes|ao mes|mensais)\b/g, (m) => num(m[1]!)],
   ];
@@ -94,13 +154,27 @@ function valoresEmDinheiro(normal: string): number[] {
   return achados;
 }
 
-/** Todo número escrito numa fonte, para dizer se um valor está lá. */
-function numerosEscritos(normal: string): Set<number> {
-  const s = new Set<number>();
-  for (const m of normal.matchAll(/\d+(?:\.\d{3})*(?:,\d{1,2})?/g)) {
-    const v = Number(m[0].replace(/\./g, '').replace(',', '.'));
-    s.add(v);
-    if (/\bmil\b/.test(normal.slice(m.index! + m[0].length, m.index! + m[0].length + 5))) s.add(v * 1000);
+/**
+ * Os valores que o cliente escreveu: o que tem forma de dinheiro, e o número
+ * de uma frase que fala de preço ("a partir de 289"). "Há 20 anos e com 500
+ * empresas atendidas" não é preço, e não libera "R$ 500".
+ */
+const FALA_DE_PRECO = /r\$|\b(reais|real|valor|valores|preco|precos|mensalidade|mensalidades|custa|custam|custo|sai por|saem por|a partir de|por mes|ao mes|parcela|parcelas|investimento|pagamento|paga|pago|fatura)\b|\/\s*mes/;
+function valoresDaFonte(frasesDaFonte: readonly string[], numericos: readonly string[]): Set<number> {
+  const s = new Set<number>(valoresEmDinheiro(frasesDaFonte.join('\n')));
+  for (const f of frasesDaFonte) {
+    if (!FALA_DE_PRECO.test(f)) continue;
+    for (const m of f.matchAll(/\d+(?:\.\d{3})*(?:,\d{1,2})?/g)) {
+      const v = Number(m[0].replace(/\./g, '').replace(',', '.'));
+      s.add(v);
+      if (/^\s*mil\b/.test(f.slice(m.index! + m[0].length))) s.add(v * 1000);
+    }
+  }
+  // Metadado só numérico ("412.30", "412,30"): o valor que veio da planilha ou do CRM.
+  for (const v of numericos) {
+    const t = v.trim().replace(/^r\$\s*/i, '');
+    if (/^\d{1,3}(\.\d{3})*(,\d{1,2})?$/.test(t)) s.add(Number(t.replace(/\./g, '').replace(',', '.')));
+    else if (/^\d+(\.\d{1,2})?$/.test(t)) s.add(Number(t));
   }
   return s;
 }
@@ -112,18 +186,32 @@ function numerosEscritos(normal: string): Set<number> {
  * provedor de IA não é lugar para CPF nem diagnóstico (D76). Por palavra da
  * chave, e também pelo VALOR: CPF ou termo de saúde no meio do texto.
  */
-const PALAVRA_SENSIVEL = /^(cpf|rg|cnh|documento|carteirinha|cartao|senha|banco|bancari|agencia|pix|saude|doenca|comorbid|condic|cid\d*$|diagnostic|tratament|medicament|cirurgi|peso|altura|gravid|gestant|nasc|renda|rendiment|salario|obs|observ|nota|notas|anotac|coment)/;
-const VALOR_SENSIVEL = /\d{3}\.\d{3}\.\d{3}-\d{2}|\bcpf\b|\b(diabet\w*|hipertens\w*|cancer|hemodialise|gravida|gestante|doenca|cirurgia|internad[oa]|cid ?[a-z]\d|depress\w*|hiv|preexistente)\b/;
+const PALAVRA_SENSIVEL = /^(cpf|rg|cnh|identidade|doc$|docs$|documento|carteirinha|cartao|senha|banco|bancari|agencia|pix|saude|doenca|comorbid|condic|cid\d*$|diagnostic|tratament|medic|patolog|alergi|clinic|deficien|cirurgi|peso|altura|gravid|gestant|nasc|renda|rendiment|salario|obs|observ|nota|notas|anotac|coment)/;
+const VALOR_SENSIVEL = /\d{3}\.\d{3}\.\d{3}-\d{2}|\b\d{1,2}\.\d{3}\.\d{3}-[\dx]\b|\bcpf\b|\b(diabet\w*|hipertens\w*|cancer|hemodialise|gravida|gestante|doenca|cirurgia|internad[oa]|cid ?[a-z]\d|depress\w*|hiv|preexistente|asma|colesterol|infarto|alergi\w*|patolog\w*|avc|cardiac\w*|epilep\w*|autis\w*|deficien\w*|transtorno)\b/;
 
 function chaveSensivel(k: string): boolean {
   return semAcento(k).split(/[^a-z0-9]+/).some((p) => p !== '' && PALAVRA_SENSIVEL.test(p));
+}
+
+/** CPF pelo dígito verificador, com ou sem máscara: separa o CPF numa coluna de
+ *  nome neutro ("id_cliente") do celular, que não tem dígito que confira. */
+function pareceCpf(v: string): boolean {
+  const d = v.replace(/[.\-\s]/g, '');
+  if (!/^\d{11}$/.test(d) || /^(\d)\1{10}$/.test(d)) return false;
+  const dig = (n: number) => {
+    let soma = 0;
+    for (let i = 0; i < n; i++) soma += Number(d[i]) * (n + 1 - i);
+    const r = (soma * 10) % 11;
+    return r === 10 ? 0 : r;
+  };
+  return dig(9) === Number(d[9]) && dig(10) === Number(d[10]);
 }
 
 /** O que do contato vai ao modelo: só texto, e sem o que é sensível. A tela mostra a mesma lista. */
 export function metadadosParaOModelo(m: Record<string, unknown> | null | undefined): [string, string][] {
   return Object.entries(m ?? {})
     .filter((e): e is [string, string] => typeof e[1] === 'string' && e[1].trim() !== '')
-    .filter(([k, v]) => !chaveSensivel(k) && !VALOR_SENSIVEL.test(semAcento(v)));
+    .filter(([k, v]) => !chaveSensivel(k) && !VALOR_SENSIVEL.test(semAcento(v)) && !pareceCpf(v.trim()));
 }
 
 // ---------------------------------------------------------------------------
@@ -443,6 +531,12 @@ export function objetivoCombina(tipo: TipoDeCampanha, slugDoObjetivo: string | n
 /** O mínimo que "Sobre a empresa e a oferta" precisa ter num agente novo. */
 export const CONTEXTO_MINIMO = 40;
 
+/** O tamanho máximo de cada texto do agente: a tela (`maxLength`) e o "Testar" usam os mesmos (D76). */
+export const TETOS_DO_AGENTE = {
+  agente_nome: 120, papel: 500, descricao: 2000, tom: 8000, instrucoes: 20000, contexto: 20000,
+  escalar_quando: 4000, proibido: 300,
+} as const;
+
 /** Os campos de um agente novo, pré-preenchidos pela persona e pelo objetivo. */
 export function agenteNovo(e: { persona: string; objetivo: string; empresa: string }) {
   const p = persona(e.persona) ?? PERSONAS[0]!;
@@ -591,9 +685,16 @@ export function normalizarSaida(texto: string, canal: string): string {
   return m ? [`Assunto: ${m[1]!.replace(/^[*_]+|[*_]+$/g, '').trim()}`, ...resto].join('\n') : limpo;
 }
 
-/** O texto em frases: é na frase que se decide se há pedido, pergunta ou negação. */
+/** O texto em frases: é na frase que se decide se há pergunta. */
 function frases(texto: string): string[] {
-  return texto.split(/(?<=[.!?\n])/).map((x) => x.trim()).filter(Boolean);
+  // O ponto só fecha a frase quando vem espaço depois: "R$ 2.000" e "1.500" são números.
+  return texto.split(/(?<=[.!?])\s+|\n+/).map((x) => x.trim()).filter(Boolean);
+}
+
+/** A frase em orações — vírgula, ponto e vírgula, dois-pontos, "mas", "porém":
+ *  "Não pedimos CPF, só preciso do seu RG" são duas, e a segunda pede. */
+function oracoes(frase: string): string[] {
+  return frase.split(/[,;:]|\b(?:mas|porem|entretanto)\b/).map((x) => x.trim()).filter(Boolean);
 }
 
 /**
@@ -630,30 +731,49 @@ export function aplicarFreios(
     return { situacao: 'escalar', motivo: 'o agente ia confirmar uma remoção que ninguém gravou: se a pessoa pediu '
       + 'para sair, suprima o contato em Supressão e acrescente o termo em Configurações ▸ Blacklist' };
   }
-  const proibida = r.proibido.find((p) => p.trim() && normal.includes(semAcento(p.trim())));
+  // Elemento que não é texto (um NULL no array, gravado pela API) não derruba
+  // a fila do agente de todos os clientes: é ignorado.
+  const proibido = (r.proibido ?? []).filter((p): p is string => typeof p === 'string');
+  const proibida = proibido.find((p) => p.trim() && normal.includes(semAcento(p.trim())));
   if (proibida) return { situacao: 'bloqueado', motivo: `contém uma expressão proibida: "${proibida}"` };
   const fs = frases(normal);
-  if (fs.some((f) => DADO_SENSIVEL.test(f) && PEDIDO.test(f) && !NEGACAO.test(f))) {
+  const pedeDado = fs.some((f) => oracoes(f).some((o) => !TRANQUILIZA.test(o) && (
+    DADO_FORTE.test(o)
+    || PEDE_FRACO.test(o)
+    || (FRACO_DE_QUEM_LE.test(o) && PEDE.test(o + (f.endsWith('?') ? '?' : ''))))));
+  if (pedeDado) {
     return { situacao: 'bloqueado', motivo: 'pede dado sensível (CPF, RG, senha, cartão ou dados bancários)' };
   }
-  if (fs.some((f) => f.endsWith('?') && SAUDE_DA_PESSOA.test(f) && !FALA_DO_PLANO.test(f))) {
+  const perguntaSaude = fs.some((f) => SAUDE.test(f) && (
+    (PESSOA.test(f) && ESTADO.test(f))
+    || (f.endsWith('?') && !COBERTURA.test(f))
+    || (PEDE_RELATO.test(f) && !COBERTURA.test(f))));
+  if (perguntaSaude) {
     return { situacao: 'bloqueado', motivo: 'pergunta sobre a saúde da pessoa — isso é conversa da equipe com ela, não do agente' };
   }
-  const fonte = semAcento([
+
+  // A fonte do que o agente pode afirmar sobre a oferta: o contexto, o que
+  // foi ao modelo sobre o contato e, no agente de antes, a instrução — frase a
+  // frase, sem as que proíbem ou negam.
+  const permitidos = metadadosParaOModelo(r.metadados);
+  const fonte = frases(semAcento([
     r.contexto ?? '',
     ...(r.objetivo ? [] : [r.instrucoes ?? '']),
-    ...Object.values(r.metadados ?? {}).filter((v): v is string => typeof v === 'string'),
-  ].join('\n'));
-  const escritos = numerosEscritos(fonte);
+    ...permitidos.map(([, v]) => v),
+  ].join('\n'))).filter((f) => !PROIBITIVA.test(f));
+  const escritos = valoresDaFonte(fonte, permitidos.map(([, v]) => v));
   const inventado = valoresEmDinheiro(normal).find((v) => !escritos.has(v));
   if (inventado !== undefined) {
     return { situacao: 'bloqueado', motivo: `cita um valor (${inventado.toLocaleString('pt-BR')}) que não está no que o cliente escreveu sobre a oferta` };
   }
-  const linhasAfirmadas = fonte.split('\n').filter((l) => !NEGACAO.test(l)).join('\n');
-  const carencia = [...normal.matchAll(PROMESSA_DE_CARENCIA)].map((m) => m[0])
-    .find((frase) => !linhasAfirmadas.includes(frase));
+  const sobreCarencia = fonte.filter((f) => CARENCIA.test(f)).map(afirmacoesDeCarencia);
+  const carencia = fs.flatMap(oracoes).find((o) => {
+    if (!CARENCIA.test(o)) return false;
+    const afirma = afirmacoesDeCarencia(o);
+    return afirma.size > 0 && !sobreCarencia.some((f) => [...afirma].every((a) => f.has(a)));
+  });
   if (carencia) {
-    return { situacao: 'bloqueado', motivo: `promete carência ("${carencia}") que não está no que o cliente escreveu sobre a oferta` };
+    return { situacao: 'bloqueado', motivo: `afirma sobre a carência ("${carencia}") o que não está no que o cliente escreveu sobre a oferta` };
   }
   return { situacao: 'pronto', texto: limpo };
 }

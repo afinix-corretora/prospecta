@@ -130,3 +130,29 @@ test('metadados com teto: 5000 chaves enormes não viram um pedido de 5 MB', asy
   await testarDoPedido(porta().p, pedido({ agente: { ...AGENTE, metadados: enorme } }), undefined, () => ia);
   assert.ok(ia.pedidos[0]!.mensagem.length < 20_000, String(ia.pedidos[0]!.mensagem.length));
 });
+
+test('as credenciais vão como o worker as manda: sem aparar — base_url sujo erra aqui como lá (D44)', async () => {
+  const ia = new IaFalsa({ ok: true, texto: 'Oi!' });
+  const conta = { tenant_id: 't1', provedor: 'openai', modelo: 'gpt-5.5', ativo: true, config: { base_url: 'https://api.deepseek.com ' } };
+  await testarDoPedido(porta({ conta }).p, pedido(), undefined, () => ia);
+  assert.equal(ia.pedidos[0]!.credenciais.base_url, 'https://api.deepseek.com ');
+});
+
+test('texto acima do teto é recusado dizendo o campo — nunca cortado em silêncio', async () => {
+  const ia = new IaFalsa({ ok: true, texto: 'Oi!' });
+  const r = await testarDoPedido(porta().p, pedido({ agente: { ...AGENTE, contexto: 'a'.repeat(20_001) } }), undefined, () => ia);
+  assert.equal(r.status, 400);
+  assert.ok(!r.corpo.ok && /Sobre a empresa e a oferta.*20000/.test(r.corpo.erro));
+  assert.equal(ia.pedidos.length, 0);
+  // No teto, passa inteiro: o preço no fim do contexto chega ao modelo.
+  const longo = 'Falamos em nome da Afinix. '.padEnd(19_970, '.') + ' A partir de R$ 389,90.';
+  await testarDoPedido(porta().p, pedido({ agente: { ...AGENTE, contexto: longo } }), undefined, () => ia);
+  assert.match(ia.pedidos[0]!.sistema, /R\$ 389,90/);
+});
+
+test('endereço errado não é "suprime a pessoa": é o endereço, e ela segue nos outros canais (D49)', async () => {
+  const r = await testarDoPedido(porta({ regra: { termo: 'numero errado', acao: 'identidade_invalida' } }).p,
+    pedido({ texto: 'número errado' }), undefined, () => new IaFalsa({ ok: true, texto: 'oi' }));
+  assert.ok(r.corpo.ok && r.corpo.situacao === 'blacklist');
+  assert.ok(r.corpo.ok && 'motivo' in r.corpo && /este endereço como errado/.test(r.corpo.motivo) && !/suprime a pessoa/.test(r.corpo.motivo));
+});

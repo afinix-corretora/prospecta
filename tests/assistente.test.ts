@@ -217,15 +217,18 @@ test('agentes (D76): o setup não troca o agente do canal que já existe — exc
 test('agentes (D76): criar de novo não colide no nome, e nome e contexto são o que o contato pode ver', () => {
   const f: Foto = {
     ...FOTO, empresa: 'Afinix Corretora',
-    agentes: [{ id: 'x', nome: 'Assistente Afinix — Prospecção fria', canal: null, tenant_id: 't', objetivo: 'resgate', ativo: true }],
+    agentes: [{ id: 'x', nome: 'Assistente Afinix Corretora — Prospecção fria', canal: null, tenant_id: 't', objetivo: 'resgate', ativo: true }],
     modelos: FOTO.modelos.map((m) => ({ ...m, descricao: 'Lista fria em três toques, sem insistir depois do terceiro.' })),
   };
   const ag = doTipo(montarPlano(f, COMPLETO).acoes, 'ligar_agentes')[0]!;
   assert.ok('novo' in ag.agente);
   if (!('novo' in ag.agente)) return;
-  assert.equal(ag.agente.nome, 'Assistente Afinix — Prospecção fria 2');
-  // O contato ouve "Assistente Afinix": o objetivo fica depois do travessão.
-  assert.equal(nomeDeApresentacao(ag.agente.nome), 'Assistente Afinix');
+  assert.equal(ag.agente.nome, 'Assistente Afinix Corretora — Prospecção fria 2');
+  // O contato ouve a empresa inteira: o objetivo fica depois do travessão.
+  assert.equal(nomeDeApresentacao(ag.agente.nome), 'Assistente Afinix Corretora');
+  // A primeira palavra não identifica empresa nenhuma: "Grupo AFX" não vira "Assistente Grupo".
+  const grupo = doTipo(montarPlano({ ...f, empresa: 'Grupo AFX' }, COMPLETO).acoes, 'ligar_agentes')[0]!;
+  assert.equal(nomeDeApresentacao(grupo.agente.nome), 'Assistente Grupo AFX');
   assert.match(ag.agente.contexto, /^Falamos em nome de Afinix Corretora\./);
   // A descrição do modelo é texto interno: o agente a repetiria ao contato.
   assert.doesNotMatch(ag.agente.contexto, /três toques/);
@@ -390,4 +393,21 @@ test('mapa: só oferece ao agente o que é escolhível, com as contas de IA liga
   assert.ok(!m.ia!.valores.some((v) => v.valor === 'google'));
   assert.deepEqual(m['ia:conta']!.valores.map((v) => v.valor), ['c1']);
   assert.ok(m['provedor:sms'], 'sem canal escolhido, todos os canais de envio entram no mapa');
+});
+
+test('agentes (D76): o cartão diz quem responde DE FATO em cada canal — o do canal, se é ele, e se sozinho', () => {
+  const f: Foto = {
+    ...FOTO, empresa: 'Afinix Corretora',
+    agentes: [
+      { id: 'ana', nome: 'Ana', canal: null, tenant_id: 't', objetivo: 'prospeccao_fria', ativo: true, autonomo: true },
+      { id: 'bruno', nome: 'Bruno', canal: null, tenant_id: 't', objetivo: 'prospeccao_fria', ativo: true, autonomo: false },
+    ],
+    agentesPorCanal: [{ canal: 'whatsapp', agent_id: 'bruno' }, { canal: 'email', agent_id: 'bruno' }],
+  };
+  const ag = doTipo(montarPlano(f, COMPLETO).acoes, 'ligar_agentes')[0]!;
+  // O Bruno já é o agente dos canais desta campanha: é ele, não a Ana por ordem alfabética.
+  assert.deepEqual(ag.agente, { id: 'bruno', nome: 'Bruno', autonomo: false });
+  assert.deepEqual(ag.respondem, [{ nome: 'Bruno', sozinho: false }]);
+  assert.ok(ag.efeitos.some((e) => /Bruno não responde sozinho/.test(e)), ag.efeitos.join('\n'));
+  assert.ok(!ag.efeitos.some((e) => /responde sozinho pelo motor/.test(e)));
 });
