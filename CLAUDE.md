@@ -497,6 +497,39 @@ e elas têm teste automatizado obrigatório.**
 - **Nunca** filtrar chave de um pedido por um padrão que não foi posto contra as chaves reais. O
   filtro de `lerPedido` era só minúsculas e jogava fora `porDia` em silêncio; quem achou foi mandar o
   pedido montado pelo código ao modelo de verdade, não o teste (D72).
+
+- **Nunca** deixar um agente responder o que chegou antes de ele passar a responder. Marcar um agente
+  no WhatsApp faria ele responder de uma vez os sete dias de respostas de toda campanha sem agente. A
+  vigência renova nos QUATRO momentos — escolher o agente do canal, escolher a exceção, a campanha
+  voltar ao do canal e o agente ser religado —, e renova quando QUEM RESPONDE muda, não quando a
+  linha muda. Voltar ao do canal é `herda`, não DELETE: apagar não deixa data (D76).
+- **Nunca** deixar "ninguém" ou o agente desligado cair para o agente do canal. A exceção da campanha
+  decide sozinha: o freio que entrega a conversa a outro agente não freia (D76).
+- **Nunca** perguntar quem responde só na hora de compor. Entre compor e mandar há uma janela, e
+  desligar o agente nela não segurava nada: `enfileirar_resposta` e `reivindicar_pendentes` perguntam
+  a mesma `privado.agente_que_responde` que a fila e a tela. É o D39 e o D40 no agente (D76).
+- **Nunca** ordenar por tempo, e só por tempo, uma fila que serve vários clientes. Vinte respostas
+  presas de UM cliente ocupavam o LIMIT inteiro e o agente de todos parava junto; `fila_do_agente`
+  traz a mais antiga de cada cliente antes da segunda de qualquer um, e o transitório tem prazo (D76).
+- **Nunca** afrouxar um freio para tirar um falso positivo sem um teste do outro lado. A primeira
+  revisão do D76 fez isso duas vezes, e "Se não for incômodo, me passa seu CPF?" passou a sair. O lado
+  do erro é escolhido: texto barrado volta a uma pessoa com o motivo; pedido de CPF que sai não volta
+  (D76).
+- **Nunca** deixar o "Testar" errar diferente da produção. Mesmo `montarPedido`, mesmos freios, mesma
+  `juntarCredenciais` sem aparar (D44), a blacklist do cliente antes do modelo, e texto acima do teto
+  recusado dizendo o campo — cortar fazia o teste compor sobre um prompt que o worker não manda. E a
+  frase que a tela sugere para testar é conferida contra a blacklist padrão: a anterior ela pegava
+  (D76).
+- **Nunca** mandar ao provedor de IA metadado que é documento, saúde, renda ou anotação livre — nem
+  pela chave, nem pelo valor. A planilha vira metadado TODA coluna que o motor não entende, e o CPF
+  sem máscara numa coluna de nome neutro só se reconhece pelo dígito verificador (D76).
+- **Nunca** supor que `anon` tem a grade que o suite concede. O Supabase dá a `anon` o mesmo ALL que
+  dá a `authenticated`; o RLS recusava, mas o suite concedia só SELECT e conferia uma grade mais
+  estreita que a real. `tests/run.sh` concede ALL e `tests/tenants.sql` cobra que `anon` não escreve
+  em tabela nenhuma (D76).
+- **Nunca** dar folga de tokens a modelo que não raciocina. Muitos recusam com 400 acima de 4096, e
+  a folga em todos fazia toda resposta de e-mail virar erro; ela é só de quem gasta pensando antes de
+  escrever (D76).
 - **Nunca** guardar o progresso do assistente numa tabela. "O que está pronto" é lido do banco a cada
   vez; uma coluna "configurado" mentiria no dia em que alguém configurasse pela tela (D67).
 - **Nunca** aceitar uma resposta que nenhuma pergunta seguinte lê. Foi o laço infinito que a
@@ -648,8 +681,9 @@ e elas têm teste automatizado obrigatório.**
 > Os **agentes** compõem desde o **D66** e **respondem sozinhos desde o D69**, por decisão do
 > usuário. Quando o contato responde, o agente do canal da campanha compõe com a conta de IA escolhida
 > (`adapters/ia.ts`: Claude e a família "chat completions"; o Gemini fica sem adapter, dito em
-> `tem_adapter`). Os freios em `motor/agente.ts` conferem o texto composto: proibido, tamanho, pedido
-> de CPF ou cartão, e a marca de escalar. O texto que passa vira mensagem por `enfileirar_resposta`,
+> `tem_adapter`). Os freios (em `adapters/prompt-do-agente.ts` desde o D76) conferem o texto
+> composto: proibido, tamanho, pedido de CPF ou cartão, saúde, valor e carência inventados, e as
+> marcas de escalar e de saída. O texto que passa vira mensagem por `enfileirar_resposta`,
 > pelo MESMO caminho de envio da cadência — supressão no gatilho e no despacho, pool, quota — e pela
 > conta que conversa com a pessoa, que nunca é trocada (D37 não vale para conversa). A invariante 4
 > continua absoluta: a cadência não volta. O gate do D40 ganhou um critério positivo e só um — passa a
@@ -660,6 +694,22 @@ e elas têm teste automatizado obrigatório.**
 > pessoa com o motivo em `rascunhos.envio_motivo`, e a tela de Respostas diz o que aconteceu com cada
 > texto. `respostas_para_rascunhar` ficou sem chamador (a fila nova é `respostas_para_o_agente`) e sai
 > numa migration própria, pelo SQL Editor (D63).
+>
+> Desde o **D76** o agente é **um só para todos os canais**, e criar um é escolher **persona** e
+> **objetivo** (resgate, prospecção fria, follow-up, renovação, agendamento, atendimento, pós-venda),
+> ajustar o texto e dizer quem é a empresa — o contexto é obrigatório no agente novo, porque agente
+> autônomo que não sabe em nome de quem fala inventa. Persona e objetivo são catálogo do PRODUTO em
+> `adapters/prompt-do-agente.ts` e viram CÓPIA no agente: o catálogo não muda o agente de ninguém.
+> `agents.canal` nulo é o agente de todos os canais; o que muda de canal para canal — limite,
+> formato, janela de 24h, assunto do e-mail — é do produto e entra na hora de compor. Quem responde
+> em cada canal está em `agentes_por_canal`; a campanha que quer outro grava a EXCEÇÃO em
+> `campaign_agents` (inclusive "ninguém" e `herda`), e a exceção decide sozinha — desligar não cai
+> para o agente do canal. A regra mora numa função só, `privado.agente_que_responde`, perguntada pela
+> fila do worker (`fila_do_agente`, repartida entre clientes), pela tela (`quem_responde`), por
+> `enfileirar_resposta` e por `reivindicar_pendentes`, e o agente responde só o que chegou DEPOIS de
+> passar a responder. O "Testar" (`agente-testar`) compõe com o texto que está na tela pelo mesmo
+> `montarPedido` e pelos mesmos freios do worker, com a blacklist do cliente lendo a fala antes. A
+> fila do D69 (`respostas_para_o_agente`) ficou sem chamador e sai pelo SQL Editor (D63).
 >
 > A **identidade visual** é a da referência escolhida pelo usuário desde o **D71**: Anek Latin e
 > Roboto empacotadas no build, escuro por padrão com o claro guardado por pessoa, item ativo em
@@ -695,8 +745,8 @@ e elas têm teste automatizado obrigatório.**
 >
 > As **contas de IA** são várias por provedor desde sempre (`ai_credentials` é única por nome, não por
 > provedor), e desde o **D68** a tela de Provedores de IA as mostra agrupadas, com ligar e desligar. A
-> campanha escolhe uma em `campaigns.ai_credential_id`, que vale sobre a do agente em
-> `respostas_para_rascunhar` — o worker não mudou.
+> campanha escolhe uma em `campaigns.ai_credential_id`, que vale sobre a do agente — em
+> `respostas_para_rascunhar` no D68, e em `fila_do_agente` desde o D76.
 >
 > As **cadências** ganharam tela no **D55**: até então, a única forma de existir um `flow_version`
 > era instanciar um dos sete modelos do catálogo — o schema inteiro sem porta, que é o D41 da
@@ -733,7 +783,7 @@ e elas têm teste automatizado obrigatório.**
 > **derivados do schema** cobram `tenant_id`, RLS e FK composta de toda tabela nova — lista escrita
 > à mão envelhece sem avisar, e essa já tinha perdido a `provider_servers` (D31).
 >
-> O schema está **aplicado no projeto `hucuwjvihqgftdjpnych`** (65 migrations no repositório, 73
+> O schema está **aplicado no projeto `hucuwjvihqgftdjpnych`** (65 migrations no repositório, 74
 > registros no projeto — a 55ª, que só apaga os dois classificadores sem chamador do D63, entrou em
 > 05/10 pelo SQL Editor, porque o DROP pelo MCP espera uma confirmação que não chega à sessão remota
 > (D63) — duas corretivas de texto, uma separação, duas do D46 (superfície e
@@ -754,8 +804,12 @@ e elas têm teste automatizado obrigatório.**
 > linha discordar. O do projeto não dá para conferir do suite (precisa de rede), então quem mexer
 > no schema confere pelo `list_migrations` junto com o `get_advisors` que já é obrigatório.
 >
-> As edge functions são sete desde o D72 (`ia-modelos` v1 e `agente-setup` v4, chamadas pela TELA
-> como `verificar-remetente`). Eram cinco desde o D64. `motor-worker` está na **versão 7** desde 06/10, com o
+> As edge functions são oito desde o D76 (`agente-testar` v1, chamada pela TELA como
+> `verificar-remetente`, que compõe com o texto da tela sem gravar nem enviar). Eram sete desde o D72
+> (`ia-modelos` v1 e `agente-setup` v4) e cinco desde o D64. `motor-worker` está na **versão 8** desde
+> 12/10, com a fila `fila_do_agente`, o prompt por canal e os freios do D76 — publicada DEPOIS da
+> migration do D76, pela ordem do D31: o v7 seguia na fila antiga, que não entrega agente de todos os
+> canais, e por isso era o rollback seguro. A **versão 7**, de 06/10, trouxe o
 > dreno da outbox e a leitura das fontes de CRM (D64), os rascunhos do agente (D66) e o envio da
 > resposta pelo agente autônomo (D69) — a migration do D69 entrou antes dele, porque o v7 chama as
 > funções novas e o v6 seguia funcionando sobre as antigas. A migration
@@ -772,7 +826,8 @@ e elas têm teste automatizado obrigatório.**
 > justamente para as três não mudarem de bundle — e a do agente (`motor/porta-agente.ts`,
 > `_shared/banco-agente.ts`) pelo mesmo motivo. O `motor-worker` v6 foi lido de volta pela
 > resposta que a MCP salvou em arquivo, e comparado SEM transcrição (26/26); o `crm-descobrir`,
-> 6/6; o `motor-worker` v7, 26/26. Quem responde pela pergunta daqui para frente são os dois
+> 6/6; o `motor-worker` v7, 26/26; o v8, 27/27, e o `agente-testar` v1, 7/7 — as portas
+> (`motor/porta*.ts`) são `import type` e não voltam (D52). Quem responde pela pergunta daqui para frente são os dois
 > verificadores — `conferir-publicado.py`, no suite, pelo digest do que cada function empacota, e
 > `conferir-contra-projeto.py`, fora do suite porque precisa de rede, pela comparação com o que o
 > projeto tem. `LIGAR.md` é o procedimento de ligar o motor, com a conferência do D44 entre guardar

@@ -3111,3 +3111,193 @@ nova.
   para a rampa funcionar, e por isso não entrou.
 - **Reiniciar o aquecimento** não tem porta: `rampa_dia` é do motor. Quem quiser recomeçar hoje muda
   os parâmetros, que não reiniciam a rampa — a tela diz isso.
+
+### D76 — O agente de todos os canais (12/10)
+
+Pedido do usuário: criar o agente pela plataforma escolhendo persona e objetivo (resgate, prospecção
+fria, follow-up…), ajustar o texto, e "apenas selecioná-lo para o canal desejado, variando apenas a
+funcionalidade de acordo com cada plataforma".
+
+**O que mudou no modelo.**
+
+- `agents.canal` nulo é o agente de todos os canais. O que muda de canal para canal — limite,
+  formato, janela de 24h, assunto do e-mail — é do PRODUTO e entra na hora de compor
+  (`adapters/prompt-do-agente.ts`), não no texto do agente. Os agentes de antes continuam com canal e
+  só servem a ele.
+- `persona`, `objetivo`, `tom` e `contexto`. Persona e objetivo são catálogo do produto (constantes no
+  módulo puro, que a tela, o setup e o worker leem), e viram CÓPIA no agente: o catálogo não muda o
+  agente de ninguém. O contexto ("sobre a empresa e a oferta") é obrigatório no agente novo, com 40
+  caracteres no mínimo, porque um agente autônomo que não sabe em nome de quem fala inventa.
+- `tamanho_maximo` nulo é "o do canal". Preenchido, só encurta.
+- `agentes_por_canal`: quem responde em cada canal do cliente. A campanha que quiser outro grava a
+  EXCEÇÃO em `campaign_agents`, e a exceção decide sozinha — inclusive "ninguém" (`agent_id` nulo) e o
+  agente desligado, que NÃO caem para o agente do canal. Desligar é o freio, e o freio que entrega a
+  conversa a outro agente não freia.
+- A regra mora numa função só, `privado.agente_que_responde`, que a fila do worker
+  (`fila_do_agente`) e a tela (`quem_responde`) usam. O despachante discordar da tela sobre o mesmo
+  fato é o D40; a tela reproduzir a regra em TypeScript é o D55.
+- `criar_agente` cria e escolhe numa transação. Criar aqui e escolher o canal numa segunda chamada
+  seria o agente órfão — a campanha órfã do D54 pelo outro lado.
+
+**A vigência: os quatro momentos.** O agente responde só o que chega DEPOIS de passar a responder.
+Sem isso, marcar um agente no WhatsApp faria ele responder de uma vez os sete dias de respostas de
+toda campanha sem agente — no e-mail, dias depois, a uma conversa que uma pessoa pode já ter atendido.
+A primeira versão renovava a data em dois momentos (escolher o agente do canal, escolher a exceção), e
+a revisão achou os outros dois:
+
+1. a campanha **voltar ao agente do canal**. Era um DELETE da exceção, e apagar não deixa data: valia
+   a do canal, e o agente respondia sozinho o que chegou enquanto a campanha estava em "ninguém". A
+   volta virou uma linha (`campaign_agents.herda`), e a tela perdeu o DELETE;
+2. o agente ser **religado**. `agents.ativo_desde`, escrito pelo gatilho: o que chegou com o freio
+   puxado ficou com uma pessoa.
+
+É o "o que mais assume que ele é curto?" do D37, com a data no lugar da janela. E a data renova
+quando QUEM RESPONDE muda, não quando a linha muda: escolher como exceção o mesmo agente que o canal
+já tinha não é ninguém passando a responder, e renovar ali tirava da fila, para sempre, a resposta que
+esperava a próxima passada.
+
+**A regra também na hora de mandar.** A fila decide quem COMPÕE. Entre compor e despachar há uma
+janela — a passada inteira, ou as horas em que a mensagem espera a conta voltar (D69) —, e desligar o
+agente nessa janela não segurava nada: a tela dizia "ninguém responde" enquanto o motor mandava.
+`enfileirar_resposta` e `reivindicar_pendentes` passaram a perguntar a mesma `agente_que_responde`, e
+o texto do agente que deixou de responder volta a uma pessoa com o motivo. É o D39 e o D40 no agente:
+a pergunta não é de uma vez só. Os dois corpos partiram do que está no projeto, conferido por md5
+contra o D69 do repositório (D59).
+
+**A fila é repartida entre os clientes.** Ordenada só por `ocorrido_em`, vinte respostas presas de UM
+cliente — conta sem crédito, endereço errado; o erro transitório não vira linha (D66) — ocupavam o
+LIMIT inteiro, e o agente de todos os outros clientes parava junto, por até sete dias. A fila passou a
+trazer a resposta mais antiga de cada cliente antes da segunda de qualquer um. E o transitório ganhou
+prazo: depois de seis horas tentando, vira `erro` com o motivo, porque o que não melhorou em seis horas
+não ia melhorar, e sem linha ninguém sabia por quê.
+
+**O prompt e os freios.** O texto do agente é a voz e o roteiro; o produto acrescenta o canal, a
+regra de não inventar e os freios em código. Pedido de saída que a blacklist não pegou vira `[SAIR]`
+e escala. Os freios conferem o texto composto, e o lado do erro é escolhido: texto barrado volta a uma
+pessoa com o motivo, e isso se conserta; pedido de CPF ou promessa de carência que sai não volta.
+Foram duas revisões, e a segunda achou que a primeira tinha REGREDIDO em dois freios — a lição é que
+afrouxar um freio para tirar um falso positivo precisa de teste do outro lado também:
+
+- **dado sensível**, oração a oração: CPF, RG, CNH, cartão e dados bancários são barrados sempre,
+  salvo na oração que tranquiliza com a negação colada ao verbo de pedir ("não pedimos CPF"). A
+  primeira versão liberava a frase com qualquer "não", e "Se não for incômodo, me passa seu CPF?"
+  saía. Senha e cartão sozinhos são forma de pagamento ou a senha que a operadora manda: só barram
+  quando a oração pede;
+- **saúde**: alguém + verbo de estado + termo de saúde é barrado com ou sem "?", e "plano",
+  "carência" ou "rede" na frase não liberam mais — em plano de saúde a pergunta de saúde vem
+  justamente com essas palavras. O que é cobertura ("o plano inclui atendimento a gestante?") passa;
+- **saída**: as confirmações que o português usa de fato ("não entraremos mais em contato", "tirei
+  seu número da lista", "vou parar de te mandar mensagens") escalam;
+- **carência**: a oração que afirma algo sobre ela — que não tem, que é de 30 dias, que se aproveita
+  — só passa se uma frase do que o cliente escreveu afirma O MESMO. A lista fixa de antes não via
+  "não tem carência" nem "a carência é de 30 dias";
+- **dinheiro**: valor a valor contra o que o cliente escreveu como PREÇO. "Há 20 anos e 500
+  empresas atendidas" não libera "R$ 500"; o metadado que não foi ao modelo não libera nada; a frase
+  que proíbe ("nunca cite R$ 300") não libera o valor que proíbe;
+- **metadados**: documento, saúde, renda e observação livre não vão ao provedor, nem pela chave nem
+  pelo valor — e o CPF sem máscara numa coluna de nome neutro é reconhecido pelo dígito verificador.
+
+A divisão em frases cortava "R$ 2.000" no ponto do milhar; quem achou foi o teste do "2 mil reais".
+
+**O modelo.** A OpenAI recusava `max_tokens` no gpt-5.5 com 400 — toda composição virava erro. Passou
+a `max_completion_tokens` e esforço de raciocínio baixo nos modelos de raciocínio (os `-chat` ficam de
+fora). O modelo que raciocina ganha folga de tokens, porque gasta antes de escrever; o que não
+raciocina, não — muitos recusam acima de 4096, e a folga em todos fazia toda resposta de e-mail virar
+erro. Resposta vazia por limite de tokens é definitiva e diz que o modelo gastou raciocinando; texto
+cortado no meio também é definitivo, e nunca sai.
+
+**O "Testar".** Em simulado ninguém responde, então a primeira vez que alguém leria o agente seria
+com um contato de verdade — e, autônomo, o texto já teria saído. É o D42 no agente. A edge function
+`agente-testar` compõe com o texto que está NA TELA, salvo ou não, pelo mesmo `montarPedido` e pelos
+mesmos freios do worker, e nada é gravado nem enviado. A conta de IA é lida com o JWT de quem pede, e
+antes do modelo a blacklist do cliente lê a fala, como no webhook: "para de me mandar mensagem" no
+teste diz que em produção a pessoa seria suprimida e o agente nem a veria — e "número errado" diz que
+o ENDEREÇO seria marcado, com a pessoa seguindo nos outros canais (D49). O teste erra como a produção
+erraria: as credenciais são montadas pela mesma função do worker (`juntarCredenciais`), sem aparar
+(D44), e texto acima do teto é recusado dizendo o campo, nunca cortado — cortar fazia o Testar compor
+sobre um prompt diferente do que o worker manda. Os tetos (`TETOS_DO_AGENTE`) são os mesmos do
+`maxLength` da tela. A frase de saída que a tela sugere é uma que a blacklist padrão NÃO pega, conferida
+contra ela em `tests/agente_do_canal.sql`; a anterior a blacklist pegava, e a tela se contradizia na
+frase que ela mesma escolheu.
+
+**A grade.** `agents` perdeu o DELETE (remover é desligar; o DELETE apagava em cascata a exceção das
+campanhas). `campaign_agents` e `agentes_por_canal` ficaram por coluna, sem a vigência. Os dois
+vocabulários do catálogo (`opt_out_termos`, `recusa_termos`) estavam fora da lista e seguiam com
+escrita de tabela inteira. E `anon` deixou de ter escrita em qualquer tabela: o RLS recusava, mas o
+Supabase dá a `anon` o mesmo ALL que dá a `authenticated`, e o suite, que concedia só SELECT a
+`anon`, conferia uma grade mais estreita que a de produção. `tests/run.sh` passou a conceder ALL, como
+o Supabase, e `tests/tenants.sql` cobra que `anon` não escreve em tabela nenhuma de `public`.
+
+**O setup.** O agente vem do OBJETIVO do modelo (antes era o primeiro agente de catálogo do canal por
+ordem alfabética — a Ana, de resgate, respondia a lista fria como se a pessoa conhecesse a empresa).
+O setup nunca troca o agente do canal que já existe, nem solta o freio do agente desligado: nesses
+canais ele responde só na campanha da conversa. Entre os agentes de mesmo objetivo, prefere o que já
+é agente de um canal da campanha. O agente criado leva no nome e no contexto só o que o contato pode
+ver — "Assistente Afinix Corretora — Prospecção fria" se apresenta como "Assistente Afinix
+Corretora", e a descrição interna do modelo não vai para o contexto. E o cartão e a conversa dizem
+QUEM responde em cada canal e se sozinho — o escolhido pode não escrever em canal nenhum, quando a
+campanha herda outro do canal.
+
+**Ordem no projeto** (a do D31):
+1. a migration antes do worker. Enquanto o v7 roda, `respostas_para_o_agente` continua sendo a fila
+   dele, só enxerga os agentes de ANTES (canal preenchido) e devolve 700 onde o tamanho é nulo: o v7
+   não sabe montar o prompt do agente novo, então com ele o agente novo não compõe — e é isso que faz
+   do v7 um rollback seguro;
+2. `motor-worker` v8 e `agente-testar` v1 depois;
+3. o push por último, porque o push publica o app.
+
+**Como foi conferido.**
+
+- `tests/agente_do_canal.sql`, 89 asserções. Quinze sabotagens, cada uma acendendo exatamente a
+  sua: a vigência do canal, da exceção e de `herda` sem renovar; a vigência renovando com o mesmo
+  agente; religar sem renovar; a fila sem a data de religar, sem "só a última resposta", sem o
+  rascunho existente, sem a supressão e sem repartir entre clientes; a fila antiga compondo com o
+  agente novo, sem o 700 e sem a vigência; `enfileirar_resposta` e `reivindicar_pendentes` sem
+  perguntar quem responde.
+- Os freios: `tests/prompt_do_agente.test.ts` com as frases que a revisão adversarial achou, nos dois
+  sentidos, e uma sabotagem por peça (a oração que tranquiliza, a pessoa + estado, a confirmação de
+  saída, a afirmação de carência, a frase de preço, o dígito do CPF, o "mil reais", o ponto do milhar,
+  a divisão em orações, a frase que proíbe e a cobertura).
+- O down foi conferido de verdade: banco até o D75 contra banco com o D76 aplicado e desfeito, os dois
+  com a grade padrão do Supabase antes das migrations — 1468 linhas de digest, grade incluída, iguais.
+- `tests/prompt_do_agente.test.ts`, `tests/agente.test.ts`, `tests/teste_de_agente.test.ts`,
+  `tests/construtor_de_agente.test.ts` e `tests/assistente.test.ts`.
+
+**No projeto (12/10).**
+
+- A migration entrou pelo `apply_migration` como `agente_de_todos_os_canais`, o texto exato do
+  arquivo, e o projeto foi conferido contra o banco de teste pelo digest estrutural nas dez
+  categorias — corpos de função, privilégio de execução, colunas, constraints, índices, políticas,
+  gatilhos, RLS e as duas grades —, todas iguais. Os dois corpos que ela troca (`enfileirar_resposta`
+  e `reivindicar_pendentes`) partiram do que estava no projeto, conferido por md5 contra o D69 do
+  repositório antes de escrever (D59). O `get_advisors` depois não achou nada novo.
+- `agente-testar` v1: os 7 arquivos que o bundle devolve lidos de volta pela resposta salva da MCP e
+  comparados sem transcrição, 7/7 — depois de publicar e de novo antes do push.
+- `motor-worker` v8, DEPOIS da migration: 27/27 pelo mesmo caminho; as três portas são `import type`
+  e não voltam (D52). A primeira passada do cron depois dele (15:35) respondeu 200, com as quatro
+  partes sem erro e a fila nova chamada.
+- O push que publica o app veio por último.
+
+**A auditoria que pediu o D76, e o que ela deixou para o D77.** O pedido incluía verificar cada
+tela, migration, o setup e os prompts. A auditoria levantou 66 achados com verificação adversarial
+(56 confirmados, 1 plausível, 9 descartados) e mais 40 numa segunda rodada pelas telas. O D76 corrigiu
+o que era do agente: os 18 da revisão do próprio D76, a saída que a blacklist não reconhece, o freio
+de valor e de carência, os metadados sensíveis indo ao provedor, o SMS com limite de WhatsApp e a
+grade de `anon`. O resto fica para o D77, e o que não pode esperar está no topo:
+
+- **crítico** — `pareceSegredo` deixa passar chave de 24 a 39 caracteres (UUID, hex de 32, `re_…`):
+  colada no texto livre do setup, a chave do CLIENTE vai para a OpenAI pela chave da PLATAFORMA e
+  fica no `localStorage`. É o pior vazamento do D72, e o filtro que existe para impedi-lo não o vê;
+- **crítico** — editar uma credencial de IA ou de CRM trocando o provedor, com a chave em branco,
+  manda a chave guardada para o provedor novo;
+- **crítico** — renomear o `slug` de um estágio do funil faz toda resposta deixar de ser gravada: a
+  cadência continua e o "pare" não suprime;
+- **alto** — campanha desligada com 100 inscrições vencidas trava o agendador de todas; a busca de
+  Contatos sempre falha (PGRST100); a tela da campanha quebra para o papel leitor; credencial recusada
+  ao conectar deixa conta órfã no pool; a fonte de CRM descarta telefone em silêncio; a campanha de
+  produção não tem remetente no próprio pool e as telas dizem que está tudo pronto; no setup, o nome
+  de modelo digitado nunca entra e o chip criado tem a quota elevada sozinha;
+- **médio e baixo** — telas que não filtram pelo cliente escolhido, contagens sobre listas truncadas,
+  operador lendo "nada" onde o RLS só esconde, textos que envelheceram, e a blacklist padrão que não
+  pega "não me procure mais" (o "Testar" sugere justamente essa frase, porque ela chega ao agente — que
+  deve escalá-la como `[SAIR]`, e o freio barra a confirmação de saída se ele não escalar).

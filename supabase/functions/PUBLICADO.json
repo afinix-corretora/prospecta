@@ -4,6 +4,11 @@
     "em": "2026-10-07 (v4, D73; setup por chat: o agente recebe o passo e devolve valores de campos não secretos. Os 5 arquivos que o bundle devolve lidos de volta pela MCP, colados a partir do json.dumps do repositório; porta.ts e tipos.ts são import type, D52. Ao vivo pelo pg_net com a chave do Vault: um passo de campo voltou 200 no esquema estrito, com os dois campos preenchidos de uma frase)",
     "versao": 4
   },
+  "agente-testar": {
+    "digest": "7628411f8e345e5c",
+    "em": "2026-10-12 (v1, D76; compõe com o texto da tela pelo mesmo montarPedido e pelos mesmos freios do worker, sem gravar nem enviar. Os 7 arquivos que o bundle devolve lidos de volta pela resposta salva da MCP e comparados sem transcrição, 7/7, duas vezes — depois de publicar e de novo antes do push; motor/porta.ts e adapters/tipos.ts são import type, D52)",
+    "versao": 1
+  },
   "canal-webhook": {
     "digest": "4dd1efb33ca3f860",
     "em": "2026-10-02 (v4, D61; cada arquivo do bundle lido de volta do projeto e comparado byte a byte, 15/15)",
@@ -20,9 +25,9 @@
     "versao": 1
   },
   "motor-worker": {
-    "digest": "6f2de1f5cefb592c",
-    "em": "2026-10-06 (v7, D69; o bundle lido de volta do projeto pela resposta salva da MCP, sem transcrição, e comparado byte a byte, 26/26)",
-    "versao": 7
+    "digest": "8e8baef4af03bbb6",
+    "em": "2026-10-12 (v8, D76; a fila nova `fila_do_agente`, o prompt e os freios de `adapters/prompt-do-agente.ts` e o prazo do erro transitório. Publicada DEPOIS da migration 20261012100000, como manda o D31: o v7 seguia na fila antiga, que não entrega agente de todos os canais. Os 27 arquivos que o bundle devolve lidos de volta pela resposta salva da MCP e comparados sem transcrição, 27/27; motor/porta.ts, motor/porta-crm.ts e motor/porta-agente.ts são import type e não voltam, D52)",
+    "versao": 8
   },
   "provisionar-instancia": {
     "digest": "614e058ab3757074",
