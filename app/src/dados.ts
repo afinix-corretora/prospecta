@@ -7,6 +7,7 @@
 import { sb } from './supabase';
 import { cruzarEntregaveis } from './entregaveis';
 import type { CanalEntregavel, MotivoDoCanal } from './entregaveis';
+import type { EntradaDoPrompt } from '@adapters/prompt-do-agente.ts';
 
 export type { CanalEntregavel, MotivoDoCanal };
 
@@ -97,10 +98,20 @@ export interface Modelo {
 export interface Agente {
   id: string;
   nome: string;
-  canal: ProvedorCanal['canal'];
+  /** NULL: o agente de todos os canais (D76) — o que muda por canal é do
+   *  produto. Preenchido: agente de antes do D76, que só responde no dele. */
+  canal: ProvedorCanal['canal'] | null;
+  /** Slugs do catálogo de que o texto foi copiado (rótulo, não ligação). NULL nos de antes do D76. */
+  persona: string | null;
+  objetivo: string | null;
   papel: string;
   descricao: string;
+  /** Como fala (persona). */
+  tom: string;
+  /** O que faz (objetivo) — ou a instrução inteira, nos de antes do D76. */
   instrucoes: string;
+  /** Sobre a empresa e a oferta. */
+  contexto: string;
   escalar_quando: string;
   limite_trocas: number;
   pronto: boolean;
@@ -109,7 +120,8 @@ export interface Agente {
   ai_credential_id: string | null;
   /** Frases que o rascunho nunca contém — conferidas em código, não só pedidas. */
   proibido: string[];
-  tamanho_maximo: number;
+  /** NULL = o do canal (D76). */
+  tamanho_maximo: number | null;
   ativo: boolean;
   /** D69: o texto pronto sai sozinho pelo motor. Desligado, fica para uma pessoa (D66). */
   autonomo: boolean;
@@ -227,8 +239,8 @@ export const lerModelos = () =>
 
 export const lerAgentes = () =>
   tabela<Agente>('agents',
-    'id, nome, canal, papel, descricao, instrucoes, escalar_quando, limite_trocas, pronto, tenant_id, ' +
-    'ai_credential_id, proibido, tamanho_maximo, ativo, autonomo');
+    'id, nome, canal, persona, objetivo, papel, descricao, tom, instrucoes, contexto, escalar_quando, ' +
+    'limite_trocas, pronto, tenant_id, ai_credential_id, proibido, tamanho_maximo, ativo, autonomo');
 
 // ---------------------------------------------------------------------------
 // Escritas
@@ -696,6 +708,27 @@ export async function buscarModelosIA(pedido:
   return data as ListaDeModelos;
 }
 
+/** O que "Testar" devolve (D76): o texto que o agente escreveria e passou
+ *  pelos freios, ou por que não sairia. Nada foi gravado nem enviado. */
+export interface ResultadoDoTeste {
+  situacao: 'pronto' | 'escalar' | 'bloqueado' | 'erro';
+  texto?: string;
+  motivo?: string;
+  modelo?: string;
+}
+
+export async function testarAgente(pedido: {
+  credencial_id: string; canal: string; texto: string;
+  agente: EntradaDoPrompt;
+}): Promise<ResultadoDoTeste> {
+  const { data, error } = await sb.functions.invoke('agente-testar', { body: pedido });
+  if (error) {
+    const corpo = await (error as { context?: Response }).context?.json?.().catch(() => null);
+    throw new Error(corpo?.erro ?? error.message);
+  }
+  return data as ResultadoDoTeste;
+}
+
 /** Se a chave da plataforma está no cofre. Fato, nunca o valor (D44, D72). */
 export async function agenteDeSetupDisponivel(): Promise<boolean> {
   const { data, error } = await sb.rpc('agente_de_setup_disponivel');
@@ -776,7 +809,8 @@ export async function atribuirAgente(campanha: string, agente: string) {
 
 export interface AgenteDaCampanha {
   canal: ProvedorCanal['canal'];
-  agent_id: string;
+  /** NULL: "ninguém responde nesta campanha, neste canal" (D76). */
+  agent_id: string | null;
 }
 
 export async function lerAgentesDaCampanha(campanha: string): Promise<AgenteDaCampanha[]> {
@@ -1547,12 +1581,101 @@ export async function lerRascunhos(limite = 300): Promise<Rascunho[]> {
   return lista.map((r) => ({ ...r, mensagem_status: status.get(r.id) ?? null }));
 }
 
-/** Só as colunas que a grade deixa a tela escrever (D66). */
-export async function salvarAgente(id: string, campos: Pick<Agente,
-  'instrucoes' | 'escalar_quando' | 'limite_trocas' | 'tamanho_maximo' | 'proibido' | 'ai_credential_id' | 'ativo'
-  | 'autonomo'>) {
+/** Só as colunas que a grade deixa a tela escrever (D66, D76). `canal` fica
+ *  de fora: o agente de antes continua do canal dele. */
+export type CamposDoAgente = Pick<Agente,
+  'nome' | 'papel' | 'descricao' | 'tom' | 'instrucoes' | 'contexto' | 'persona' | 'objetivo'
+  | 'escalar_quando' | 'limite_trocas' | 'tamanho_maximo' | 'proibido' | 'ai_credential_id' | 'autonomo'>;
+
+export async function salvarAgente(id: string, campos: Partial<CamposDoAgente> & Partial<Pick<Agente, 'ativo'>>) {
   const { error } = await sb.from('agents').update(campos).eq('id', id);
   if (error) throw error;
+}
+
+/** Cria o agente e o escolhe para os canais na MESMA transação (D76): criar
+ *  aqui e escolher numa segunda chamada deixaria o agente sem responder em
+ *  lugar nenhum se a segunda falhasse. */
+export async function criarAgente(tenant: string, a: CamposDoAgente & {
+  canais: string[]; campanha?: string | null; canaisDaCampanha?: string[];
+}): Promise<string> {
+  const { data, error } = await sb.rpc('criar_agente', {
+    p_tenant: tenant, p_nome: a.nome, p_persona: a.persona, p_objetivo: a.objetivo,
+    p_papel: a.papel, p_descricao: a.descricao, p_tom: a.tom, p_instrucoes: a.instrucoes,
+    p_contexto: a.contexto, p_escalar_quando: a.escalar_quando, p_limite_trocas: a.limite_trocas,
+    p_proibido: a.proibido, p_tamanho_maximo: a.tamanho_maximo, p_ai_credential_id: a.ai_credential_id,
+    p_autonomo: a.autonomo, p_canais: a.canais, p_campanha: a.campanha ?? null,
+    p_canais_da_campanha: a.canaisDaCampanha ?? [],
+  });
+  if (error) throw error;
+  return data as string;
+}
+
+/** Quem responde em cada canal do cliente (D76). */
+export interface AgenteDoCanal {
+  canal: ProvedorCanal['canal'];
+  agent_id: string;
+  vigente_desde: string;
+}
+
+export async function lerAgentesPorCanal(tenant: string): Promise<AgenteDoCanal[]> {
+  const { data, error } = await sb.from('agentes_por_canal')
+    .select('canal, agent_id, vigente_desde').eq('tenant_id', tenant);
+  if (error) throw error;
+  return (data ?? []) as AgenteDoCanal[];
+}
+
+/** Escolhe (ou tira, com `null`) o agente de um canal. UPDATE e, sem linha,
+ *  INSERT — nunca upsert: o upsert do PostgREST põe no SET todas as colunas
+ *  do corpo, e a grade só deixa a tela trocar o agente (D76). */
+export async function escolherAgenteDoCanal(tenant: string, canal: string, agente: string | null) {
+  if (agente === null) {
+    const { error } = await sb.from('agentes_por_canal').delete().eq('tenant_id', tenant).eq('canal', canal);
+    if (error) throw error;
+    return;
+  }
+  const { data, error } = await sb.from('agentes_por_canal').update({ agent_id: agente })
+    .eq('tenant_id', tenant).eq('canal', canal).select('canal');
+  if (error) throw error;
+  if ((data ?? []).length) return;
+  const ins = await sb.from('agentes_por_canal').insert({ tenant_id: tenant, canal, agent_id: agente });
+  if (ins.error) throw ins.error;
+}
+
+/** O que a fila do worker usaria agora, por canal da campanha — a mesma regra,
+ *  lida do banco, para a tela nunca discordar dela (D40, D55). */
+export interface QuemResponde {
+  canal: ProvedorCanal['canal'];
+  agent_id: string | null;
+  /** campanha: exceção com agente · canal: o agente do canal · ninguem: a
+   *  campanha escolheu ninguém · sem_agente: nem campanha nem canal escolheram. */
+  origem: 'campanha' | 'canal' | 'ninguem' | 'sem_agente';
+  /** O agente está ligado e serve a este canal. */
+  responde: boolean;
+}
+
+export async function quemResponde(tenant: string, campanha: string): Promise<QuemResponde[]> {
+  const { data, error } = await sb.rpc('quem_responde', { p_tenant: tenant, p_campaign_id: campanha });
+  if (error) throw error;
+  return (data ?? []) as QuemResponde[];
+}
+
+/** A exceção da campanha: um agente, "ninguém" (`null`) ou de volta ao do
+ *  canal (`'canal'`, que apaga a exceção). */
+export async function escolherAgenteDaCampanha(
+  tenant: string, campanha: string, canal: string, escolha: string | null | 'canal',
+) {
+  if (escolha === 'canal') {
+    const { error } = await sb.from('campaign_agents').delete().eq('campaign_id', campanha).eq('canal', canal);
+    if (error) throw error;
+    return;
+  }
+  const { data, error } = await sb.from('campaign_agents').update({ agent_id: escolha })
+    .eq('campaign_id', campanha).eq('canal', canal).select('canal');
+  if (error) throw error;
+  if ((data ?? []).length) return;
+  const ins = await sb.from('campaign_agents')
+    .insert({ tenant_id: tenant, campaign_id: campanha, canal, agent_id: escolha });
+  if (ins.error) throw ins.error;
 }
 
 // ---------------------------------------------------------------------------

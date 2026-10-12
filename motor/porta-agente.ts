@@ -3,8 +3,14 @@
 // Arquivo próprio pelo motivo do D64: só a function que rascunha empacota
 // isto, e as outras não mudam de bundle por causa dele.
 
-/** Uma linha de `respostas_para_rascunhar`: a resposta e tudo o que o agente precisa. */
-export interface RespostaParaRascunhar {
+import type { EntradaDoPrompt } from '../adapters/prompt-do-agente.ts';
+
+/**
+ * Uma linha de `fila_do_agente` (D76): a resposta e tudo o que o agente
+ * precisa. O que entra no prompt é `EntradaDoPrompt`, e estender o tipo é o
+ * que deixa o `tsc` conferir que a fila dá o que o prompt lê.
+ */
+export interface RespostaParaRascunhar extends EntradaDoPrompt {
   readonly message_event_id: string;
   readonly tenant_id: string;
   readonly contact_id: string;
@@ -16,11 +22,15 @@ export interface RespostaParaRascunhar {
   readonly agente_nome: string;
   readonly papel: string;
   readonly descricao: string;
+  readonly tom: string;
   readonly instrucoes: string;
+  readonly contexto: string;
+  readonly objetivo: string | null;
   readonly escalar_quando: string;
   readonly limite_trocas: number;
   readonly proibido: string[];
-  readonly tamanho_maximo: number;
+  /** Nulo: vale o do canal (D76). */
+  readonly tamanho_maximo: number | null;
   readonly credencial_id: string | null;
   readonly provedor: string | null;
   readonly modelo: string | null;
@@ -47,8 +57,12 @@ export type Envio = 'fila' | 'pessoa' | 'devolvido';
 
 export interface BancoAgente {
   respostasParaRascunhar(limite: number): Promise<RespostaParaRascunhar[]>;
-  /** A chave do Vault, já como objeto. Fora daqui ninguém toca em segredo. */
-  credenciaisDaIa(credencialId: string): Promise<Record<string, string>>;
+  /**
+   * A chave do Vault, já como objeto. Fora daqui ninguém toca em segredo. O
+   * cliente é dito em voz alta: o worker roda sem RLS, e a conta de IA de um
+   * cliente compondo para outro mandaria a conversa de um ao provedor do outro.
+   */
+  credenciaisDaIa(tenantId: string, credencialId: string): Promise<Record<string, string>>;
   registrarRascunho(
     messageEventId: string, agentId: string, situacao: Situacao,
     texto: string | null, motivo: string | null, modelo: string | null,

@@ -364,9 +364,8 @@ SELECT ar.confere('e o devolvido não conta como troca da conversa',
 -- 10. A grade
 -- ===========================================================================
 
-BEGIN;
-  SET LOCAL role authenticated;
-  SET LOCAL request.jwt.claims = '{"sub":"ae000000-0000-0000-0000-0000000000a2"}';
+SET role authenticated;
+SET request.jwt.claims = '{"sub":"ae000000-0000-0000-0000-0000000000a2"}';
   SELECT ar.confere('o operador liga e desliga a autonomia pela tela',
     ar.sqlstate_de($q$UPDATE agents SET autonomo = false WHERE id = 'ae000000-0000-0000-0000-0000000000a9'$q$) = 'sem erro');
   SELECT ar.confere('a tela não enfileira resposta',
@@ -377,7 +376,8 @@ BEGIN;
     ar.sqlstate_de($q$UPDATE rascunhos SET envio = 'fila'$q$) = '42501');
   SELECT ar.confere('nem escreve mensagem com rascunho',
     ar.sqlstate_de($q$UPDATE messages SET rascunho_id = NULL$q$) = '42501');
-ROLLBACK;
+RESET role;
+RESET request.jwt.claims;
 
 -- ===========================================================================
 

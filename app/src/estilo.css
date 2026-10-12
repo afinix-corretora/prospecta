@@ -810,6 +810,45 @@ button.resp:hover { background: var(--surface-2) }
   .grade > .kpis .delta { font-size: 11px; padding: 1px 6px }
 }
 
+/* ---------------------------------------------------------------------------
+   Agentes (D76): o construtor, a prévia do prompt e o teste.
+--------------------------------------------------------------------------- */
+.nota-tela { font-size: 12.5px; color: var(--ink-3); line-height: 1.5; margin: 8px 0 12px; max-width: 80ch }
+.painel .sec { margin-top: 22px }
+.painel .opts { margin-bottom: 4px }
+.marca { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin: 6px 0; font-size: 14px }
+.marca input { width: 17px; height: 17px; accent-color: var(--accent); flex: none }
+.marca.desligada { opacity: .7 }
+.recolhe {
+  border: 1px solid var(--line); border-radius: var(--r-sm); background: var(--surface-2);
+  margin: 14px 0; padding: 0 16px;
+}
+.recolhe > summary {
+  cursor: pointer; list-style: none; padding: 13px 0; font-weight: 600; font-size: 14px;
+  display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: baseline;
+}
+.recolhe > summary::-webkit-details-marker { display: none }
+.recolhe > summary::before { content: '▸'; color: var(--ink-3); transition: transform .16s var(--ease) }
+.recolhe[open] > summary::before { transform: rotate(90deg) }
+.recolhe > summary span { font-weight: 400; font-size: 12.5px; color: var(--ink-3); min-width: 0 }
+.recolhe[open] { padding-bottom: 14px }
+.recolhe .campo { max-width: none }
+.previa-prompt {
+  margin: 12px 0 0; padding: 14px 16px; border-radius: var(--r-xs); border: 1px solid var(--line);
+  background: var(--surface); color: var(--ink-2); font-family: var(--code); font-size: 12px; line-height: 1.55;
+  white-space: pre-wrap; overflow-wrap: anywhere; max-height: 460px; overflow-y: auto;
+}
+.lista-canais { margin: 4px 0 14px; padding-left: 18px; font-size: 13px; color: var(--ink-2); line-height: 1.5 }
+.lista-canais > li { margin-bottom: 6px }
+.lista-canais ul { margin: 2px 0 0; padding-left: 18px; color: var(--ink-3) }
+.balao-teste {
+  margin-top: 12px; padding: 12px 14px; border-radius: var(--r-sm); background: var(--accent-soft);
+  border: 1px solid var(--accent-line);
+}
+.balao-teste b { font-size: 12.5px; color: var(--ink-2) }
+.balao-teste p { margin: 6px 0; white-space: pre-wrap; color: var(--ink) }
+.balao-teste .nota-tela { margin: 0 }
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: .01ms !important; animation-delay: 0s !important; transition-duration: .01ms !important }
   .grafico .desenha { stroke-dashoffset: 0 }

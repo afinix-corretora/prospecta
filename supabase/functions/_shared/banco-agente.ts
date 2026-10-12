@@ -14,14 +14,18 @@ export function bancoAgenteSupabase(sb: SupabaseClient): BancoAgente {
 
   return {
     async respostasParaRascunhar(limite) {
-      // D69: a fila com autonomia e teto. `respostas_para_rascunhar` ficou sem
-      // chamador e sai numa migration própria (D63).
-      return ((await rpc('respostas_para_o_agente', { p_limite: limite })) ?? []) as RespostaParaRascunhar[];
+      // D76: a fila que sabe do agente do canal e da exceção da campanha.
+      // `respostas_para_o_agente` (D69) fica sem chamador e sai pelo SQL
+      // Editor (D63), como `respostas_para_rascunhar` antes dela.
+      return ((await rpc('fila_do_agente', { p_limite: limite })) ?? []) as RespostaParaRascunhar[];
     },
 
-    async credenciaisDaIa(credencialId) {
+    async credenciaisDaIa(tenantId, credencialId) {
+      // O cliente vai no filtro: com a chave do serviço não há RLS, e o id
+      // sozinho deixaria o tenant implícito (D76).
       const { data, error } = await sb
-        .from('ai_credentials').select('config').eq('id', credencialId).single();
+        .from('ai_credentials').select('config')
+        .eq('tenant_id', tenantId).eq('id', credencialId).single();
       if (error) throw new Error(`credencial de IA ${credencialId}: ${error.message}`);
       const segredo = await rpc('segredo_da_credencial_ia', { p_credencial_id: credencialId });
       if (!segredo) throw new Error(`credencial de IA ${credencialId}: segredo não resolvido no Vault`);

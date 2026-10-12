@@ -1,15 +1,15 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useSessao } from '../sessao';
 import { mensagemDeErro } from '../supabase';
 import {
   alternarConexaoCRM, alternarCredencialIA, criarCampanha, criarCampanhaDeModelo, lerAgentes, lerCampanhas,
   lerCanaisEntregaveis, lerConexoesCRM, lerCredenciaisIA, lerModelos, lerProvedoresCRM,
-  lerProvedoresCanal, lerProvedoresIA, lerRemetentes, lerVersoesDeFlow, salvarAgente, salvarCredencialCRM,
+  lerProvedoresCanal, lerProvedoresIA, lerRemetentes, lerVersoesDeFlow, salvarCredencialCRM,
   salvarCredencialIA, buscarModelosIA,
 } from '../dados';
 import type {
-  Agente, CanalEntregavel, Campanha, ConexaoCRM, CredencialIA, Modelo, MotivoDoCanal,
+  CanalEntregavel, Campanha, ConexaoCRM, CredencialIA, Modelo, MotivoDoCanal,
   ProvedorCRM, ProvedorCanal, ProvedorIA, VersaoDeFlow,
 } from '../dados';
 import {
@@ -19,7 +19,7 @@ import {
 import { familiaDe, familiasDoCanal } from '../componentes/Rail';
 
 /** Carrega uma vez e devolve estado de tela — erro visível, não engolido. */
-function useDados<T>(carregar: () => Promise<T>, deps: unknown[] = []) {
+export function useDados<T>(carregar: () => Promise<T>, deps: unknown[] = []) {
   const [dados, setDados] = useState<T | null>(null);
   const [erro, setErro] = useState('');
   const [carregando, setCarregando] = useState(true);
@@ -454,6 +454,8 @@ export function Config() {
     remetentes: await lerRemetentes(),
   }), [tenant?.tenant_id]);
   const emails = (dados?.remetentes ?? []).filter((r) => r.canal === 'email').length;
+  // Os do catálogo antigo (tenant nulo) não são agentes deste cliente (D76).
+  const agentesDoCliente = (dados?.agentes ?? []).filter((a) => a.tenant_id === tenant?.tenant_id).length;
 
   const itens: [string, string, string, string, string][] = [
     ['/config/email', 'email', 'E-mail',
@@ -466,8 +468,8 @@ export function Config() {
      'As contas de IA deste cliente — várias por provedor, se quiser. Toda chave entra aqui e mora no Vault; campanha e assistente só escolhem.',
      `${dados?.ia.length ?? 0} provedores`],
     ['/config/agentes', 'agente', 'Agentes',
-     'A persona de cada canal: quando a pessoa responde, ela escreve a resposta — e manda sozinha, se você deixar.',
-     `${dados?.agentes.length ?? 0} agentes`],
+     'Crie um agente escolhendo persona e objetivo, ajuste o texto e escolha em que canal ele responde. O que muda de um canal para outro, a plataforma acrescenta.',
+     `${agentesDoCliente} agente${agentesDoCliente === 1 ? '' : 's'}`],
     ['/config/modelos', 'modelo', 'Modelos de conversa',
      'As receitas de cadência: canais, atrasos e texto de cada passo.',
      `${dados?.modelos.length ?? 0} modelos`],
@@ -744,173 +746,6 @@ function FormularioDeIA(props: PropsFormularioIA) {
         {estado === 'salvando' ? 'Salvando…' : existente ? 'Atualizar credencial' : 'Salvar credencial'}
       </button>
     </form>
-  );
-}
-
-export function ConfigAgentes() {
-  const nav = useNavigate();
-  const { tenant, opera } = useSessao();
-  const { dados, erro, carregando, recarregar } = useDados(async () => ({
-    agentes: await lerAgentes(),
-    credenciais: await lerCredenciaisIA(),
-    provedores: await lerProvedoresIA(),
-  }), [tenant?.tenant_id]);
-  const [abertoId, setAbertoId] = useState<string | null>(null);
-
-  // Usar um agente do catálogo copia a linha para o tenant; sem deduplicar, o
-  // original e a cópia apareceriam como dois agentes.
-  //
-  // O useMemo vem ANTES do return de carregamento: hook depois de return
-  // condicional muda a ordem entre renders e o React quebra.
-  const agentes = useMemo(() => {
-    const m = new Map<string, Agente>();
-    for (const a of (dados?.agentes ?? [])) {
-      const atual = m.get(a.nome);
-      if (!atual || (atual.tenant_id === null && a.tenant_id !== null)) m.set(a.nome, a);
-    }
-    return [...m.values()].sort((a, b) => a.canal.localeCompare(b.canal) || a.nome.localeCompare(b.nome));
-  }, [dados]);
-
-  if (carregando) return <div className="wrap"><p className="vazio">Carregando…</p></div>;
-  const aberto = agentes.find((a) => a.id === abertoId) ?? null;
-  const creds = dados?.credenciais ?? [];
-  const provs = dados?.provedores ?? [];
-
-  return (
-    <Moldura titulo="Agentes" voltar={() => nav('/config')}
-             sub="Uma persona por canal, escolhida na campanha. Quando o contato responde, o agente escreve a resposta. Se ele responde sozinho, ela sai pelo motor; se não, fica de rascunho para uma pessoa mandar.">
-      {erro && <Aviso tipo="erro">{erro}</Aviso>}
-      <section className="indice">
-        {agentes.map((a) => {
-          const c = creds.find((x) => x.id === a.ai_credential_id);
-          return (
-            <LinhaIndice key={a.id} icone={a.canal} cor={corCanal(a.canal)} titulo={a.nome}
-                         descricao={`${a.descricao} · ${a.papel} · ${a.tenant_id
-                           ? (c ? `compõe com ${c.nome} · ${a.autonomo ? 'responde sozinho' : 'rascunho para uma pessoa'}`
-                                : 'sem credencial: não compõe') : 'modelo'}`}
-                         contagem={a.tenant_id ? 'seu' : 'catálogo'}
-                         aoClicar={() => setAbertoId(abertoId === a.id ? null : a.id)} />
-          );
-        })}
-      </section>
-      {aberto && (aberto.tenant_id && opera
-        ? <EditorDeAgente key={aberto.id} agente={aberto} credenciais={creds} provedores={provs} aoSalvar={recarregar} />
-        : (
-          <>
-            <Secao titulo={aberto.nome} nota={`${NOME_CANAL[aberto.canal]} · ${aberto.papel}`} />
-            <div className="painel">
-              {!aberto.tenant_id && (
-                <Aviso tipo="neutro">Este é o modelo do catálogo. Ao escolher o agente numa campanha, o
-                  cliente ganha uma cópia própria — é ela que se edita aqui.</Aviso>
-              )}
-              <p style={{ whiteSpace: 'pre-wrap', marginTop: 0 }}>{aberto.instrucoes}</p>
-              <Secao titulo="Passa para uma pessoa quando" />
-              <p style={{ marginBottom: 0 }}>{aberto.escalar_quando}</p>
-            </div>
-          </>
-        ))}
-    </Moldura>
-  );
-}
-
-/** O agente do cliente, editável pelo que a grade deixa (D66): o que ele diz,
- *  quando passa para uma pessoa, o que nunca escreve, com que credencial — e,
- *  desde o D69, se ele responde sozinho.
- *
- *  O freio é do motor, não desta tela: aqui se diz o que é proibido; quem
- *  confere o texto composto é `motor/agente.ts`, depois do modelo responder. */
-function EditorDeAgente({ agente, credenciais, provedores, aoSalvar }: {
-  agente: Agente; credenciais: CredencialIA[]; provedores: ProvedorIA[]; aoSalvar(): Promise<void>;
-}) {
-  const [instrucoes, setInstrucoes] = useState(agente.instrucoes);
-  const [escalar, setEscalar] = useState(agente.escalar_quando);
-  const [limite, setLimite] = useState(String(agente.limite_trocas));
-  const [tamanho, setTamanho] = useState(String(agente.tamanho_maximo));
-  const [proibido, setProibido] = useState(agente.proibido.join('\n'));
-  const [cred, setCred] = useState(agente.ai_credential_id ?? '');
-  const [ativo, setAtivo] = useState(agente.ativo);
-  const [autonomo, setAutonomo] = useState(agente.autonomo);
-  const [msg, setMsg] = useState<{ tipo: 'erro' | 'ok'; texto: string } | null>(null);
-  const escolhida = credenciais.find((c) => c.id === cred);
-  const compoe = escolhida ? provedores.find((p) => p.slug === escolhida.provedor)?.tem_adapter ?? false : false;
-
-  async function salvar(e: React.FormEvent) {
-    e.preventDefault();
-    setMsg(null);
-    try {
-      await salvarAgente(agente.id, {
-        instrucoes, escalar_quando: escalar,
-        limite_trocas: Number(limite) || agente.limite_trocas,
-        tamanho_maximo: Number(tamanho) || agente.tamanho_maximo,
-        proibido: proibido.split('\n').map((x) => x.trim()).filter(Boolean),
-        ai_credential_id: cred || null, ativo, autonomo,
-      });
-      setMsg({ tipo: 'ok', texto: 'Agente salvo. Vale para a próxima resposta que chegar.' });
-      await aoSalvar();
-    } catch (e2) { setMsg({ tipo: 'erro', texto: mensagemDeErro(e2) }); }
-  }
-
-  return (
-    <>
-      <Secao titulo={agente.nome} nota={`${NOME_CANAL[agente.canal]} · ${agente.papel}`} />
-      <form className="painel" onSubmit={salvar}>
-        <div className="campo">
-          <label htmlFor="ag-instr">Instrução (o comportamento do agente)</label>
-          <textarea id="ag-instr" rows={8} value={instrucoes} onChange={(e) => setInstrucoes(e.target.value)} />
-          <span className="ajuda">Tom, o que perguntar, o que oferecer. Pelo menos 120 caracteres. Além disto, o
-            motor sempre manda: não inventar preço nem cobertura, não pedir CPF nem cartão, e passar para uma
-            pessoa no caso abaixo.</span>
-        </div>
-        <Campo id="ag-escalar" rotulo="Passa para uma pessoa quando" valor={escalar} aoMudar={setEscalar}
-               ajuda="Nesses casos o agente não escreve nem manda nada: a resposta aparece marcada para uma pessoa." />
-        <div className="campo">
-          <label htmlFor="ag-proib">Nunca escrever</label>
-          <textarea id="ag-proib" rows={4} value={proibido} onChange={(e) => setProibido(e.target.value)}
-                    placeholder={'garantimos\nsem carência\no menor preço'} />
-          <span className="ajuda">Uma expressão por linha. Não é só pedido ao modelo: o motor confere o texto
-            composto (sem acento e sem caixa) e barra — não manda — o que contiver uma delas.</span>
-        </div>
-        <Campo id="ag-tam" rotulo="Tamanho máximo (caracteres)" valor={tamanho} aoMudar={setTamanho}
-               ajuda="Entre 80 e 4000. Texto maior é barrado, não cortado." />
-        <Campo id="ag-lim" rotulo="Limite de trocas" valor={limite} aoMudar={setLimite}
-               ajuda="Depois de tantas respostas na mesma conversa, o agente para e diz que é hora de uma pessoa." />
-        <div className="campo">
-          <label htmlFor="ag-cred">Compõe com</label>
-          <select id="ag-cred" value={cred} onChange={(e) => setCred(e.target.value)}>
-            <option value="">Nenhuma credencial — o agente não compõe</option>
-            {credenciais.map((c) => (
-              <option key={c.id} value={c.id}>{c.nome} · {c.provedor} · {c.modelo}{c.ativo ? '' : ' (desligada)'}</option>
-            ))}
-          </select>
-          <span className="ajuda">As credenciais ficam em Configurações ▸ Provedores de IA.</span>
-        </div>
-        {escolhida && !compoe && (
-          <Aviso tipo="neutro">{escolhida.provedor} ainda não tem adapter de rascunho: com esta credencial o agente
-            diz que não tem com que compor.</Aviso>
-        )}
-        {escolhida && !escolhida.ativo && (
-          <Aviso tipo="neutro">Esta credencial está desligada: o agente não compõe enquanto ela estiver assim.</Aviso>
-        )}
-        <label style={{ display: 'flex', gap: 8, alignItems: 'center', margin: '4px 0 4px' }}>
-          <input type="checkbox" checked={autonomo} onChange={(e) => setAutonomo(e.target.checked)} /> Responde sozinho
-        </label>
-        <p className="ajuda" style={{ margin: '0 0 8px' }}>
-          {autonomo
-            ? <>A resposta que passa pelos freios sai pelo motor, pela mesma conta que conversa com a pessoa, e paga
-                quota como qualquer mensagem. Ela <b>não sai</b> se a pessoa pediu para sair, se respondeu de novo antes,
-                se passou a janela de 24h do WhatsApp, ou se a conta está fora do ar ou sem quota — aí o texto volta
-                para uma pessoa em Respostas, com o motivo. Com o motor em simulado, nada sai: a resposta aparece como
-                simulada.</>
-            : <>A resposta fica de rascunho na tela de Respostas, para uma pessoa ler, ajustar e mandar pelo
-                aplicativo do canal.</>}
-        </p>
-        <label style={{ display: 'flex', gap: 8, alignItems: 'center', margin: '4px 0 12px' }}>
-          <input type="checkbox" checked={ativo} onChange={(e) => setAtivo(e.target.checked)} /> Agente ativo
-        </label>
-        {msg && <Aviso tipo={msg.tipo}>{msg.texto}</Aviso>}
-        <button className="btn prim" disabled={instrucoes.trim().length < 120}>Salvar agente</button>
-      </form>
-    </>
   );
 }
 

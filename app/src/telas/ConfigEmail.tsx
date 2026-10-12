@@ -18,6 +18,7 @@ import type { Campanha, ProvedorCanal, Rampa, Remetente } from '../dados';
 import { Aviso, Kpi, Secao } from '../componentes/base';
 import { ConectarConta, LinhaConta } from './Canal';
 import { Moldura } from './Telas';
+import { QuemRespondeNoCanal } from './Agentes';
 
 export function ConfigEmail() {
   const nav = useNavigate();
@@ -66,6 +67,8 @@ export function ConfigEmail() {
         <Kpi rotulo="Campanhas com e-mail" valor={comEmail.length}
              sub={`${fixas.length} com conta escolhida · ${comEmail.length - fixas.length} em rodízio`} />
       </section>
+
+      <QuemRespondeNoCanal canal="email" />
 
       <Secao titulo="Contas" nota={contas.length ? 'verificar, tirar do pool ou remover' : 'nenhuma ainda'} />
       <section className="indice">

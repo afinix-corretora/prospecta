@@ -1,4 +1,7 @@
 import { normalizarTelefone } from '@adapters/telefone.ts';
+import { QuemRespondeNoCanal } from './Agentes';
+import { CANAIS_DO_AGENTE } from '../agentes';
+import type { CanalDoAgente } from '../agentes';
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useSessao } from '../sessao';
@@ -87,6 +90,13 @@ export function Canal() {
         <Kpi rotulo="Provedores no catálogo" valor={provs.length}
              sub={provs.filter((p) => !p.tem_adapter).length ? 'algum ainda sem adapter' : 'todos com adapter'} />
       </section>
+
+      {/* Na página do canal, não nas de família: o agente é do CANAL, e duas
+          escolhas (oficial e não oficial) seriam a mesma linha trocada sem
+          quem está numa saber da outra (D76). */}
+      {!familia && (CANAIS_DO_AGENTE as readonly string[]).includes(canal) && (
+        <QuemRespondeNoCanal canal={canal as CanalDoAgente} />
+      )}
 
       {soIndice && (
         <>

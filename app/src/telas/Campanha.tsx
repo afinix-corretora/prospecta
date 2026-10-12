@@ -13,19 +13,21 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { useSessao } from '../sessao';
 import { Aviso, Kpi, NOME_CANAL, Secao, corCanal, Pagina } from '../componentes/base';
 import {
-  alternarCampanha, atribuirAgente, definirEmailDaCampanha, definirFlowDaCampanha, definirIADaCampanha,
-  lerAgentes, lerCredenciaisIA, lerProvedoresIA,
-  lerContasDeEmail,
-  lerAgentesDaCampanha, lerCampanhas, lerEventosDaCampanha, lerMensagensDaCampanha,
+  alternarCampanha, definirEmailDaCampanha, definirFlowDaCampanha, definirIADaCampanha,
+  escolherAgenteDaCampanha, lerAgentes, lerAgentesPorCanal, lerCredenciaisIA, lerProvedoresIA,
+  lerContasDeEmail, quemResponde,
+  lerCampanhas, lerEventosDaCampanha, lerMensagensDaCampanha,
   lerRespostas, lerResumoDaCampanha, lerVersoesDeFlow, pausarInscricoes,
 } from '../dados';
 import type {
-  Agente, AgenteDaCampanha, Campanha as Camp, ContaDeEmail, CredencialIA, EventoDaCampanha,
+  Agente, AgenteDoCanal, Campanha as Camp, ContaDeEmail, CredencialIA, EventoDaCampanha, QuemResponde,
   MensagemComposta, ProvedorIA,
   RespostaRecebida, ResumoDaCampanha, VersaoDeFlow,
 } from '../dados';
 import { ListaDeRespostas } from './Respostas';
 import { mensagemDeErro } from '../supabase';
+import { CANAIS as CANAIS_DO_PROMPT, OBJETIVOS, objetivoCombina, objetivoDoModelo } from '@adapters/prompt-do-agente.ts';
+import { rotulo } from '../agentes';
 
 // Frases nominais, não verbos: "1 por resposta" funciona com qualquer
 // número, e "1 responderam" não.
@@ -62,7 +64,8 @@ export function Campanha() {
   const [mensagens, setMensagens] = useState<MensagemComposta[]>([]);
   const [versoes, setVersoes] = useState<VersaoDeFlow[]>([]);
   const [agentes, setAgentes] = useState<Agente[]>([]);
-  const [daCampanha, setDaCampanha] = useState<AgenteDaCampanha[]>([]);
+  const [quem, setQuem] = useState<QuemResponde[]>([]);
+  const [doCanal, setDoCanal] = useState<AgenteDoCanal[]>([]);
   const [respostas, setRespostas] = useState<RespostaRecebida[]>([]);
   const [emails, setEmails] = useState<ContaDeEmail[]>([]);
   const [contasIA, setContasIA] = useState<CredencialIA[]>([]);
@@ -74,14 +77,16 @@ export function Campanha() {
     if (!tenant || !id) return;
     setErro('');
     try {
-      const [cs, r, ev, ms, vs, ags, ca, rs, em, cia, pia] = await Promise.all([
+      const [cs, r, ev, ms, vs, ags, qr, dc, rs, em, cia, pia] = await Promise.all([
         lerCampanhas(),
         lerResumoDaCampanha(tenant.tenant_id, id),
         lerEventosDaCampanha(tenant.tenant_id, id),
         lerMensagensDaCampanha(tenant.tenant_id, id),
         lerVersoesDeFlow(),
-        lerAgentes(),
-        lerAgentesDaCampanha(id),
+        // Só os do cliente: o catálogo antigo não é mais escolha (D76).
+        lerAgentes().then((l) => l.filter((a) => a.tenant_id === tenant.tenant_id)),
+        quemResponde(tenant.tenant_id, id),
+        lerAgentesPorCanal(tenant.tenant_id),
         lerRespostas(tenant.tenant_id, id),
         lerContasDeEmail(tenant.tenant_id),
         lerCredenciaisIA(),
@@ -93,7 +98,8 @@ export function Campanha() {
       setMensagens(ms);
       setVersoes(vs);
       setAgentes(ags);
-      setDaCampanha(ca);
+      setQuem(qr);
+      setDoCanal(dc);
       setRespostas(rs);
       setEmails(em);
       setContasIA(cia);
@@ -132,7 +138,7 @@ export function Campanha() {
                          aoMudar={recarregar} aoFalhar={setErro} />
       )}
 
-      <Agentes campanha={campanha} agentes={agentes} atribuidos={daCampanha}
+      <Agentes campanha={campanha} agentes={agentes} quem={quem} doCanal={doCanal}
                contasIA={contasIA} provedoresIA={provedoresIA}
                podeOperar={opera} aoMudar={recarregar} aoFalhar={setErro} />
 
@@ -499,29 +505,25 @@ function EmailDaCampanha({ campanha, contas, podeOperar, aoMudar, aoFalhar }: {
 }
 
 /**
- * Quem responde por cada canal desta campanha — **quando houver quem responda**.
+ * Quem responde por cada canal desta campanha (D76).
  *
- * `atribuir_agente` deriva o canal do próprio agente (um argumento a menos
- * para errar), copia o agente do catálogo para o cliente na primeira vez que
- * ele é usado — assim editar o seu não mexe no catálogo — e a chave
- * `(campaign_id, canal)` garante um agente por canal.
+ * O agente do canal (Configurações ▸ Agentes) vale para toda campanha; aqui a
+ * campanha pode ter a sua EXCEÇÃO — outro agente, ou ninguém. A exceção decide
+ * sozinha: se o agente dela está desligado, ninguém responde, e a conversa não
+ * passa para o agente do canal (desligar é o freio).
  *
- * Desde o D66 o motor LÊ `campaign_agents`: quando o contato responde, o agente
- * do canal compõe a resposta. Desde o D69, se o agente responde sozinho, ela
- * sai pelo motor; se não, fica de rascunho na tela de Respostas. Resposta
- * encerra a cadência (invariante 4) — o que continua é a conversa, nunca a
- * cadência.
- *
- * A tela diz isso em voz alta de propósito. Oferecer a escolha e deixar a
- * pessoa supor que ela produz efeito é a decoração do D31 com cara de
- * funcionalidade — e o jeito de descobrir seria um lead sem resposta.
+ * O que a tela mostra é o que a fila faria agora, lido do banco por
+ * `quem_responde` — a mesma regra do worker, para os dois nunca discordarem
+ * (D40, D55). Resposta encerra a cadência (invariante 4): o que continua é a
+ * conversa, nunca a cadência.
  */
-function Agentes({ campanha, agentes, atribuidos, contasIA, provedoresIA, podeOperar, aoMudar, aoFalhar }: {
-  campanha: Camp; agentes: Agente[]; atribuidos: AgenteDaCampanha[];
+function Agentes({ campanha, agentes, quem, doCanal, contasIA, provedoresIA, podeOperar, aoMudar, aoFalhar }: {
+  campanha: Camp; agentes: Agente[]; quem: QuemResponde[]; doCanal: AgenteDoCanal[];
   contasIA: CredencialIA[]; provedoresIA: ProvedorIA[]; podeOperar: boolean;
   aoMudar(): Promise<void>; aoFalhar(m: string): void;
 }) {
   const nav = useNavigate();
+  const { tenant, administra } = useSessao();
   const [salvando, setSalvando] = useState('');
 
   // Só o que compõe: conta ligada de provedor com adapter (D66). Uma conta do
@@ -540,27 +542,35 @@ function Agentes({ campanha, agentes, atribuidos, contasIA, provedoresIA, podeOp
     finally { setSalvando(''); }
   }
 
-  async function atribuir(agente: string) {
-    setSalvando(agente); aoFalhar('');
-    try { await atribuirAgente(campanha.id, agente); await aoMudar(); }
-    catch (e) { aoFalhar(mensagemDeErro(e)); }
+  async function escolher(canal: string, valor: string) {
+    setSalvando(canal); aoFalhar('');
+    try {
+      await escolherAgenteDaCampanha(tenant?.tenant_id ?? '', campanha.id, canal,
+        valor === CANAL ? 'canal' : valor === NINGUEM ? null : valor);
+      await aoMudar();
+    } catch (e) { aoFalhar(mensagemDeErro(e)); }
     finally { setSalvando(''); }
   }
 
-  const semAgente = campanha.canais_habilitados.filter(
-    (c) => !atribuidos.some((a) => a.canal === c));
+  const comAgente = quem.filter((q) => q.responde).length;
+  const objetivoDaCampanha = objetivoDoModelo(campanha.template_slug, campanha.tipo);
 
   return (
     <>
       <Secao titulo="Quem responde"
-             nota={`${atribuidos.length} de ${campanha.canais_habilitados.length} canais com agente`} />
+             nota={`${comAgente} de ${campanha.canais_habilitados.length} canais com agente`} />
       <div className="painel">
         {/* A conta de IA é escolhida aqui, entre as que já estão conectadas.
             Chave nenhuma passa por esta tela: ela mora em Configurações ▸
             Provedores de IA, e a campanha só aponta para uma conta (D68). */}
         <div className="campo">
           <label htmlFor="ia-campanha">Conta de IA desta campanha</label>
-          {usaveis.length === 0 ? (
+          {!administra ? (
+            // Quem não administra não enxerga as contas (RLS): dizer "nenhuma
+            // conectada" seria mentira.
+            <span className="ajuda">{campanha.ai_credential_id
+              ? 'Escolhida por quem administra.' : 'Vale a conta de cada agente. Quem administra escolhe aqui.'}</span>
+          ) : usaveis.length === 0 ? (
             <p style={{ color: 'var(--ink-2)', fontSize: 13, margin: '2px 0 0' }}>
               Nenhuma conta de IA conectada ainda.{' '}
               <button className="link" onClick={() => nav('/config/ia')}>Conectar em Configurações ▸ Provedores de IA</button>
@@ -592,55 +602,71 @@ function Agentes({ campanha, agentes, atribuidos, contasIA, provedoresIA, podeOp
         </div>
 
         {campanha.canais_habilitados.map((canal) => {
-          const atual = atribuidos.find((a) => a.canal === canal);
-          // Só agentes DO canal: o agente carrega o seu, e a função o deriva.
-          const candidatos = agentes.filter((a) => a.canal === canal);
+          const info = CANAIS_DO_PROMPT[canal as keyof typeof CANAIS_DO_PROMPT];
+          const q = quem.find((x) => x.canal === canal);
+          const doCanalAqui = agentes.find((a) => a.id === doCanal.find((d) => d.canal === canal)?.agent_id);
+          const responde = q?.responde ? agentes.find((a) => a.id === q.agent_id) : undefined;
+          const daExcecao = q?.origem === 'campanha' ? agentes.find((a) => a.id === q.agent_id) : undefined;
+          const valor = q?.origem === 'campanha' ? q.agent_id! : q?.origem === 'ninguem' ? NINGUEM : CANAL;
+          const candidatos = agentes.filter((a) => a.ativo && (a.canal === null || a.canal === canal));
+          const conflito = responde && objetivoCombina(campanha.tipo, responde.objetivo) === 'conflito';
           return (
             <div className="campo" key={canal}>
-              <label htmlFor={`ag-${canal}`} style={{ color: corCanal(canal) }}>
-                {NOME_CANAL[canal] ?? canal}
-              </label>
-              {candidatos.length === 0 ? (
-                <p style={{ color: 'var(--ink-2)', fontSize: 13, margin: '2px 0 0' }}>
-                  Nenhum agente cadastrado para este canal.
-                </p>
-              ) : podeOperar ? (
-                <select id={`ag-${canal}`} value={atual?.agent_id ?? ''}
-                        disabled={!!salvando}
-                        onChange={(e) => { if (e.target.value) void atribuir(e.target.value); }}>
-                  <option value="">ninguém ainda</option>
-                  {candidatos.map((a) => (
-                    <option key={a.id} value={a.id}>
-                      {a.nome} · {a.papel}{a.pronto ? '' : ' · incompleto'}
-                    </option>
-                  ))}
-                </select>
+              <label htmlFor={`ag-${canal}`} style={{ color: corCanal(canal) }}>{NOME_CANAL[canal] ?? canal}</label>
+              {info && !info.recebeResposta ? (
+                <span className="ajuda">Nenhum agente responde aqui: {info.porQueNao}.</span>
               ) : (
-                <p style={{ color: 'var(--ink-2)', fontSize: 13, margin: '2px 0 0' }}>
-                  {agentes.find((a) => a.id === atual?.agent_id)?.nome ?? 'ninguém ainda'}
-                </p>
+                <>
+                  {podeOperar ? (
+                    <select id={`ag-${canal}`} value={valor} disabled={!!salvando}
+                            onChange={(e) => void escolher(canal, e.target.value)}>
+                      <option value={CANAL}>o do canal: {doCanalAqui
+                        ? `${doCanalAqui.nome}${doCanalAqui.ativo ? '' : ' (desligado)'}` : 'ninguém escolhido'}</option>
+                      {candidatos.map((a) => <option key={a.id} value={a.id}>só nesta campanha: {a.nome} · {rotulo(a)}</option>)}
+                      {daExcecao && !daExcecao.ativo && (
+                        <option value={daExcecao.id}>só nesta campanha: {daExcecao.nome} · desligado</option>
+                      )}
+                      <option value={NINGUEM}>ninguém nesta campanha — uma pessoa responde</option>
+                    </select>
+                  ) : null}
+                  <span className="ajuda">
+                    {responde
+                      ? `Responde: ${responde.nome} (${rotulo(responde)})${q?.origem === 'canal' ? ', o agente do canal' : ', só nesta campanha'}${responde.autonomo ? ', sozinho' : ', deixando rascunho'}.`
+                      : q?.origem === 'ninguem' ? 'Ninguém responde nesta campanha: a resposta fica para uma pessoa, em Respostas.'
+                      : q?.origem === 'campanha' ? 'O agente escolhido para esta campanha está desligado: ninguém responde — a conversa não passa para o agente do canal.'
+                      : doCanalAqui && !doCanalAqui.ativo ? `O agente do canal (${doCanalAqui.nome}) está desligado: ninguém responde.`
+                      : 'Nenhum agente escolhido para este canal: a resposta fica para uma pessoa, em Respostas.'}
+                    {' '}<button className="link" type="button"
+                      onClick={() => nav(`/config/agentes/novo?campanha=${campanha.id}&canal=${canal}&objetivo=${objetivoDaCampanha}`)}>
+                      Criar um agente para esta campanha</button>
+                  </span>
+                  {conflito && (
+                    <Aviso tipo="neutro">{responde!.nome} é de {OBJETIVOS.find((o) => o.slug === responde!.objetivo)?.nome}
+                      {campanha.tipo === 'fria'
+                        ? ', feito para quem já conhece a empresa — e esta campanha é para quem nunca falou com ela. Ele pode inventar um relacionamento que não existe.'
+                        : ', feito para quem nunca falou com a empresa — e esta campanha é da base própria. Ele vai tratar como estranho quem já é da casa.'}
+                    </Aviso>
+                  )}
+                </>
               )}
             </div>
           );
         })}
 
         <Aviso tipo="neutro">
-          <b>Quando o contato responde, a cadência encerra e o agente do canal conversa.</b>{' '}
-          {agentes.some((a) => atribuidos.some((x) => x.agent_id === a.id) && a.autonomo)
-            ? <>Agente que responde sozinho manda pelo motor, pela conta que conversa com a pessoa — e devolve
-                para uma pessoa, com o motivo, o que não puder mandar (opt-out, janela de 24h, conta fora do ar).
-                Com o motor em simulado, nada sai.</>
-            : <>Os agentes desta campanha deixam rascunho na tela de Respostas, para uma pessoa mandar.</>}
-          {' '}Sem conta de IA — nem na campanha, nem no agente —, ele diz que não tem com que compor.
-          A escolha de responder sozinho é do agente, em Configurações ▸ Agentes.
-          {semAgente.length > 0 && (
-            <> Sem agente em {semAgente.map((c) => NOME_CANAL[c] ?? c).join(', ')}: ali ninguém responde.</>
-          )}
+          <b>Quando o contato responde, a cadência encerra e o agente conversa.</b>{' '}
+          Agente que responde sozinho manda pelo motor, pela conta que conversa com a pessoa — e devolve para uma
+          pessoa, com o motivo, o que não puder mandar (opt-out, janela de 24h, conta fora do ar). Com o motor em
+          simulado, nada sai. Sem conta de IA — nem na campanha, nem no agente —, ele diz que não tem com que
+          compor. A persona, o objetivo e o texto de cada agente ficam em Configurações ▸ Agentes.
         </Aviso>
       </div>
     </>
   );
 }
+
+const CANAL = '__canal__';
+const NINGUEM = '__ninguem__';
 
 /**
  * O que o motor compôs, palavra por palavra.

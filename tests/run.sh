@@ -130,6 +130,7 @@ rodar blacklist      "$RAIZ/tests/blacklist.sql"
 rodar crm_pipefy     "$RAIZ/tests/crm_pipefy.sql"
 rodar rascunhos      "$RAIZ/tests/rascunhos.sql"
 rodar agente_responde "$RAIZ/tests/agente_responde.sql"
+rodar agente_do_canal "$RAIZ/tests/agente_do_canal.sql"
 rodar agente_setup   "$RAIZ/tests/agente_de_setup.sql"
 
 # ---------------------------------------------------------------------------
@@ -197,6 +198,21 @@ node --experimental-strip-types --test "$RAIZ/tests/profitcare.test.ts" \
 echo ""
 echo "→ o agente: pedido, freios e as sete saídas (TypeScript)"
 node --experimental-strip-types --test "$RAIZ/tests/agente.test.ts" \
+  | grep -E "^# (tests|pass|fail)|^not ok"
+
+echo ""
+echo "→ o prompt do agente: o que muda por canal, persona, objetivo e freios (TypeScript)"
+node --experimental-strip-types --test "$RAIZ/tests/prompt_do_agente.test.ts" \
+  | grep -E "^# (tests|pass|fail)|^not ok"
+
+echo ""
+echo "→ o construtor de agentes: persona, objetivo, o que falta e a prévia (TypeScript)"
+node --experimental-strip-types --test "$RAIZ/tests/construtor_de_agente.test.ts" \
+  | grep -E "^# (tests|pass|fail)|^not ok"
+
+echo ""
+echo "→ testar o agente na tela: o mesmo prompt e os mesmos freios, sem gravar nada (TypeScript)"
+node --experimental-strip-types --test "$RAIZ/tests/teste_de_agente.test.ts" \
   | grep -E "^# (tests|pass|fail)|^not ok"
 
 echo ""

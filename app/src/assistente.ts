@@ -39,6 +39,8 @@
  * rodar no Node.
  */
 
+import { CANAIS as CANAIS_DO_PROMPT, OBJETIVOS, objetivoDoModelo } from '../../adapters/prompt-do-agente.ts';
+
 export type CanalEnvio = 'whatsapp' | 'email' | 'sms';
 export type Pool = 'morna' | 'fria';
 export type Familia = 'oficial' | 'nao';
@@ -85,7 +87,16 @@ export interface Foto {
   readonly provedoresCRM: readonly { slug: string; nome: string; tem_adapter: boolean; campos: CampoDeCatalogo[] }[];
   readonly conexoesCRM: readonly { id: string; nome: string; provedor: string; ativo: boolean }[];
   readonly modelos: readonly { slug: string; nome: string; descricao: string; tipo: Pool; canais: string[] }[];
-  readonly agentes: readonly { id: string; nome: string; canal: string; tenant_id: string | null }[];
+  /** Os agentes visíveis. `canal` nulo = de todos os canais (D76); `objetivo`
+   *  é o que o setup compara para reaproveitar em vez de criar outro. */
+  readonly agentes: readonly {
+    id: string; nome: string; canal: string | null; tenant_id: string | null;
+    objetivo?: string | null; persona?: string | null; ativo?: boolean;
+  }[];
+  /** Quem responde em cada canal do cliente (D76). */
+  readonly agentesPorCanal?: readonly { canal: string; agent_id: string }[];
+  /** O nome do cliente: é o que o agente criado pelo setup diz em nome de quem fala. */
+  readonly empresa?: string;
   readonly campanhas: readonly { id: string; nome: string; ativa: boolean }[];
   readonly contatos: number;
   /** Servidores de provedor que hospeda instância (D25). Com um, o setup por
@@ -553,12 +564,76 @@ export type Acao =
   | Base & { readonly tipo: 'criar_campanha'; readonly modelo: string; readonly nome: string; readonly canais: readonly CanalEnvio[] }
   | Base & {
       readonly tipo: 'ligar_agentes';
-      /** Agente do catálogo por canal; a cópia do cliente nasce em `atribuir_agente`. */
-      readonly agentes: readonly { canal: CanalEnvio; agente: string; nome: string }[];
+      /** O agente que responde (D76): um do cliente com o mesmo objetivo, ou um a criar. */
+      readonly agente: AgenteDoSetup;
+      /** Canais sem agente: ele passa a ser o agente do canal. */
+      readonly canaisDoCanal: readonly CanalEnvio[];
+      /** Canais cujo agente tem OUTRO objetivo: ele responde só nesta campanha,
+       *  e o agente do canal continua o mesmo nas outras. */
+      readonly canaisDaCampanha: readonly CanalEnvio[];
       /** A conta de IA que a campanha passa a usar, ou `null` enquanto ela não existe. */
       readonly credencial: string | null;
     }
   | Base & { readonly tipo: 'abrir'; readonly rota: string };
+
+/** O agente que o setup põe na campanha: um que já existe, ou um novo, pela persona e pelo objetivo. */
+export type AgenteDoSetup =
+  | { readonly id: string; readonly nome: string }
+  | { readonly novo: true; readonly nome: string; readonly persona: string; readonly objetivo: string; readonly contexto: string };
+
+/**
+ * Quem responde em cada canal da campanha nova (D76). Antes disto o setup
+ * escolhia, por ordem alfabética, o primeiro agente de catálogo do canal — e
+ * a Ana, de RESGATE, respondia a lista fria como se a pessoa já conhecesse a
+ * empresa. Agora o objetivo vem do modelo, e cada canal é decidido:
+ *
+ *   sem agente                 ele vira o agente do canal;
+ *   agente com o mesmo objetivo  nada muda: a campanha herda;
+ *   agente com outro objetivo    ele responde só nesta campanha (exceção),
+ *                                e as outras campanhas não mudam de agente.
+ *
+ * O setup nunca troca o agente do canal que já existe: a escrita seria mais
+ * larga que o pedido da conversa, que é sobre UMA campanha.
+ */
+export function agenteParaCampanha(f: Foto, modelo: { slug: string; tipo: Pool; descricao: string; nome: string },
+  canais: readonly CanalEnvio[]) {
+  const objetivo = objetivoDoModelo(modelo.slug, modelo.tipo);
+  const doCliente = f.agentes.filter((a) => a.tenant_id !== null && a.ativo !== false);
+  const porCanal = f.agentesPorCanal ?? [];
+  const existente = doCliente.filter((a) => a.canal === null && a.objetivo === objetivo)
+    .sort((a, b) => a.nome.localeCompare(b.nome))[0];
+
+  let agente: AgenteDoSetup;
+  if (existente) {
+    agente = { id: existente.id, nome: existente.nome };
+  } else {
+    const o = OBJETIVOS.find((x) => x.slug === objetivo)!;
+    const base = `Assistente de ${o.nome.toLowerCase()}`;
+    let nome = base;
+    for (let n = 2; f.agentes.some((a) => a.tenant_id !== null && a.nome === nome); n++) nome = `${base} ${n}`;
+    const empresa = (f.empresa ?? '').trim() || 'esta empresa';
+    const contexto = [`Falamos em nome de ${empresa}.`,
+      modelo.descricao.trim() ? `Esta conversa vem da campanha "${modelo.nome}": ${modelo.descricao.trim()}` : '']
+      .filter(Boolean).join(' ');
+    agente = { novo: true, nome, persona: 'consultiva', objetivo, contexto };
+  }
+
+  const canaisDoCanal: CanalEnvio[] = [];
+  const canaisDaCampanha: CanalEnvio[] = [];
+  const herdados: { canal: CanalEnvio; nome: string }[] = [];
+  const outros: { canal: CanalEnvio; nome: string }[] = [];
+  const semResposta: CanalEnvio[] = [];
+  for (const c of canais) {
+    if (!CANAIS_DO_PROMPT[c].recebeResposta) { semResposta.push(c); continue; }
+    const atual = porCanal.find((p) => p.canal === c);
+    const dele = atual ? f.agentes.find((a) => a.id === atual.agent_id) : undefined;
+    if (!atual || !dele || dele.ativo === false) canaisDoCanal.push(c);
+    else if ('id' in agente && dele.id === agente.id) herdados.push({ canal: c, nome: dele.nome });
+    else if (dele.objetivo === objetivo && dele.canal === null) herdados.push({ canal: c, nome: dele.nome });
+    else { canaisDaCampanha.push(c); outros.push({ canal: c, nome: dele.nome }); }
+  }
+  return { agente, objetivo, canaisDoCanal, canaisDaCampanha, herdados, outros, semResposta };
+}
 
 export interface Plano {
   readonly acoes: readonly Acao[];
@@ -719,24 +794,33 @@ export function montarPlano(f: Foto, bruto: Respostas): Plano {
     });
 
     if (credencial !== undefined) {
-      const agentes = canais.flatMap((c) => {
-        const a = f.agentes.filter((x) => x.canal === c && x.tenant_id === null)
-          .sort((x, y) => x.nome.localeCompare(y.nome))[0];
-        return a ? [{ canal: c, agente: a.id, nome: a.nome }] : [];
-      });
+      const d = agenteParaCampanha(f, modelo, canais);
       const conta = credencial ? f.credenciaisIA.find((c) => c.id === credencial) : undefined;
-      if (agentes.length) {
+      const obj = OBJETIVOS.find((o) => o.slug === d.objetivo)!;
+      if (d.canaisDoCanal.length + d.canaisDaCampanha.length + d.herdados.length > 0) {
         acoes.push({
-          id: 'agentes', tipo: 'ligar_agentes', agentes, credencial,
-          titulo: 'Pôr um agente em cada canal da campanha',
+          id: 'agentes', tipo: 'ligar_agentes', agente: d.agente, credencial,
+          canaisDoCanal: d.canaisDoCanal, canaisDaCampanha: d.canaisDaCampanha,
+          titulo: 'Pôr um agente para responder nesta campanha',
           efeitos: [
-            ...agentes.map((a) => `${NOME[a.canal]}: ${a.nome}`),
+            'novo' in d.agente
+              ? `cria o agente "${d.agente.nome}" (persona Consultiva, objetivo ${obj.nome}) — o texto vem pronto e se ajusta em Configurações ▸ Agentes`
+              : `usa o agente "${d.agente.nome}", que já é de ${obj.nome}`,
+            ...d.canaisDoCanal.map((c) => `${NOME[c]}: ele passa a responder neste canal, em toda campanha sem agente próprio`),
+            ...d.outros.map((o) => `${NOME[o.canal]}: ${o.nome} continua sendo o agente do canal; nesta campanha responde ${d.agente.nome}`),
+            ...d.herdados.map((h) => `${NOME[h.canal]}: ${h.nome} já responde aqui e continua`),
+            ...d.semResposta.map((c) => `${NOME[c]}: nenhum agente responde por aqui — ${CANAIS_DO_PROMPT[c].porQueNao}`),
             conta ? `a campanha compõe com a conta "${conta.nome}"` : 'a campanha compõe com a conta de IA que você conectar',
+            ...('novo' in d.agente
+              ? ['ele sabe só o nome da empresa e o que a campanha quer: complete "Sobre a empresa e a oferta" em Configurações ▸ Agentes']
+              : []),
             'o agente responde sozinho pelo motor (em simulado, nada sai); o que ele não puder mandar volta para uma pessoa, na tela de Respostas',
           ],
           exige: 'opera',
           dependeDe: ['campanha', ...(credencial === null ? ['config:ia'] : [])],
         });
+      } else if (d.semResposta.length) {
+        avisos.push(`Nenhum canal desta campanha traz a resposta da pessoa (${d.semResposta.map((c) => NOME[c]).join(', ')}): não há agente para pôr.`);
       }
     }
   } else if (credencial !== undefined) {

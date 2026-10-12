@@ -29,8 +29,9 @@ import { useNavigate } from 'react-router-dom';
 import { useSessao } from '../sessao';
 import { mensagemDeErro, sb } from '../supabase';
 import {
-  agenteDeSetupDisponivel, ajustarQuota, atribuirAgente, buscarModelosIA, conectarConta, contarContatos,
-  conversarComAgente, criarCampanhaDeModelo, definirIADaCampanha, lerAgentes, lerCampanhas, lerConexoesCRM,
+  agenteDeSetupDisponivel, ajustarQuota, buscarModelosIA, conectarConta, contarContatos,
+  conversarComAgente, criarAgente, criarCampanhaDeModelo, definirIADaCampanha, escolherAgenteDaCampanha,
+  escolherAgenteDoCanal, lerAgentes, lerAgentesPorCanal, lerCampanhas, lerConexoesCRM,
   lerCredenciaisIA, lerModelos, lerProvedoresCRM, lerProvedoresCanal, lerProvedoresIA, lerRemetentes,
   provisionarInstancia, salvarCredencialCRM, salvarCredencialIA, verificarRemetente,
 } from '../dados';
@@ -46,10 +47,12 @@ import type { Coleta, EstadoSetup, PassoSetup } from '../setupChat';
 import { Aviso } from '../componentes/base';
 import { Ico } from '../componentes/icones';
 import { AVISO_DE_CHAVE, pareceSegredo } from '@adapters/segredo.ts';
+import { agenteNovo } from '@adapters/prompt-do-agente.ts';
 
-export async function lerFoto(administra: boolean, opera: boolean): Promise<Foto> {
+export async function lerFoto(administra: boolean, opera: boolean,
+  cliente?: { id: string; nome: string }): Promise<Foto> {
   const [provedores, remetentes, provedoresIA, credenciaisIA, provedoresCRM, conexoesCRM,
-         modelos, agentes, campanhas, contatos, servidores] = await Promise.all([
+         modelos, agentes, campanhas, contatos, servidores, agentesPorCanal] = await Promise.all([
     lerProvedoresCanal(), lerRemetentes(), lerProvedoresIA(), lerCredenciaisIA(), lerProvedoresCRM(),
     // A RLS de conexão de CRM é só de quem administra, inclusive na leitura:
     // operador vê uma lista vazia, e o assistente não deve tratar isso como erro.
@@ -59,10 +62,15 @@ export async function lerFoto(administra: boolean, opera: boolean): Promise<Foto
     // aqui não derruba o setup: sem servidor, a conversa conecta uma instância.
     sb.from('provider_servers').select('id, provedor, nome').eq('ativo', true)
       .then(({ data }) => (data ?? []) as { id: string; provedor: string; nome: string }[]),
+    // Quem responde em cada canal: o setup não troca o que já existe (D76).
+    cliente ? lerAgentesPorCanal(cliente.id) : Promise.resolve([]),
   ]);
   return {
     administra, opera, provedores, remetentes, provedoresIA, credenciaisIA, provedoresCRM,
-    conexoesCRM, modelos, agentes, campanhas, contatos, servidores,
+    conexoesCRM, modelos, campanhas, contatos, servidores, agentesPorCanal,
+    // Só os do cliente: os do catálogo antigo não são mais o jeito de começar (D76).
+    agentes: cliente ? agentes.filter((a) => a.tenant_id === cliente.id) : agentes,
+    empresa: cliente?.nome,
   };
 }
 
@@ -153,7 +161,10 @@ export function Setup() {
   memRef.current = mem;
 
   async function recarregar(): Promise<Foto | null> {
-    try { const f = await lerFoto(administra, opera); setFoto(f); setErro(''); return f; }
+    try {
+      const f = await lerFoto(administra, opera, tenant ? { id: tenant.tenant_id, nome: tenant.nome } : undefined);
+      setFoto(f); setErro(''); return f;
+    }
     catch (e) { setErro(mensagemDeErro(e)); return null; }
   }
   useEffect(() => { setMem(lerMemoria(chave)); void recarregar(); /* eslint-disable-next-line */ }, [chave]);
@@ -299,9 +310,22 @@ export function Setup() {
         texto = `Campanha "${a.nome}" criada com ${r.passos_criados} passos. Ela está ligada, mas ninguém recebe nada até você inscrever contatos.`;
       } else if (a.tipo === 'ligar_agentes') {
         const campanha = memRef.current.estado.produzidos.campanha!;
-        for (const x of a.agentes) await atribuirAgente(campanha, x.agente);
+        if ('novo' in a.agente) {
+          // Criar e escolher numa transação só (D76): o agente nunca fica
+          // criado sem responder em lugar nenhum.
+          const base = agenteNovo({ persona: a.agente.persona, objetivo: a.agente.objetivo, empresa: tenant?.nome ?? '' });
+          await criarAgente(t, {
+            ...base, nome: a.agente.nome, contexto: a.agente.contexto, proibido: [], tamanho_maximo: null,
+            ai_credential_id: a.credencial, autonomo: true,
+            canais: [...a.canaisDoCanal], campanha, canaisDaCampanha: [...a.canaisDaCampanha],
+          });
+        } else {
+          for (const c of a.canaisDoCanal) await escolherAgenteDoCanal(t, c, a.agente.id);
+          for (const c of a.canaisDaCampanha) await escolherAgenteDaCampanha(t, campanha, c, a.agente.id);
+        }
         await definirIADaCampanha(campanha, a.credencial!);
-        texto = `${a.agentes.map((x) => x.nome).join(' e ')} na campanha: quando alguém responder, o agente responde sozinho.`;
+        texto = `${'novo' in a.agente ? `Criei o agente "${a.agente.nome}"` : `O agente "${a.agente.nome}"`} responde nesta `
+          + 'campanha: quando alguém responder, ele responde sozinho. Ajuste o texto dele em Configurações ▸ Agentes.';
       }
       mudar((m) => ({ ...m,
         estado: { ...m.estado, feitos: { ...m.estado.feitos, [a.id]: texto },

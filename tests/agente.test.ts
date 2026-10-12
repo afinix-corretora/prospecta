@@ -17,6 +17,8 @@ const BASE: RespostaParaRascunhar = {
   message_event_id: 'ev1', tenant_id: 't', contact_id: 'c', canal: 'whatsapp',
   texto: 'Quanto fica para mim e minha esposa?', regra: null,
   agent_id: 'a1', agente_nome: 'Lia', papel: 'SDR de resgate', descricao: 'Reativa quem já cotou.',
+  // Um agente de antes do D76: instrução num texto só, sem persona nem objetivo.
+  tom: '', contexto: '', objetivo: null,
   instrucoes: 'Seja breve e cordial. Pergunte a idade das vidas antes de falar de valor.',
   escalar_quando: 'Pedido de proposta formal ou reclamação.', limite_trocas: 3,
   proibido: ['garantimos', 'sem carência'], tamanho_maximo: 300,
@@ -34,8 +36,11 @@ const BASE: RespostaParaRascunhar = {
 test('pedido: a instrução do cliente, as regras fixas, a escalada e o proibido', () => {
   const p = montarPedido(BASE);
   assert.match(p.sistema, /Você é Lia, SDR de resgate/);
+  assert.match(p.sistema, /INSTRUÇÕES DO CLIENTE\nSeja breve/, 'agente antigo mantém o título de sempre');
   assert.match(p.sistema, /Pergunte a idade das vidas/);
-  assert.match(p.sistema, /no máximo 300 caracteres/);
+  // Pede-se três quartos do freio; o freio é o tamanho do agente (menor que o do WhatsApp).
+  assert.match(p.sistema, /até 225 caracteres \(nunca mais de 300\)/);
+  assert.equal(p.limite, 300);
   assert.match(p.sistema, /Não invente preço/);
   assert.match(p.sistema, /Pedido de proposta formal.*\[ESCALAR\]/);
   assert.match(p.sistema, /"garantimos", "sem carência"/);
@@ -116,6 +121,24 @@ test('saídas: recusa, limite e sem credencial não chamam modelo nem leem segre
   assert.equal(segredos(), 0);
   assert.ok(gravados.every((g) => g.texto === null && g.motivo));
   assert.deepEqual(r.porSituacao, { recusa: 1, limite: 1, sem_credencial: 2 });
+});
+
+test('canal sem comportamento declarado: bloqueado sem chamar modelo, e o resto do lote segue (D76)', async () => {
+  const { b, gravados, segredos } = banco([{ ...BASE, message_event_id: 'x', canal: 'telegram' }, BASE]);
+  const ia = new IaFalsa({ ok: true, texto: 'Oi Marina! Qual a idade de vocês dois?' });
+  await rascunharRespostas(b, 10, { criar: () => ia });
+  assert.deepEqual(gravados.map((g) => [g.ev, g.s]), [['x', 'bloqueado'], ['ev1', 'pronto']]);
+  assert.match(gravados[0]!.motivo ?? '', /telegram/);
+  assert.equal(ia.pedidos.length, 1);
+  assert.equal(segredos(), 1);
+});
+
+test('a credencial é pedida com o cliente da resposta, não só pelo id (D76)', async () => {
+  const pedidas: [string, string][] = [];
+  const { b } = banco([BASE]);
+  b.credenciaisDaIa = async (t, c) => { pedidas.push([t, c]); return { api_key: 'sk' }; };
+  await rascunharRespostas(b, 10, { criar: () => new IaFalsa({ ok: true, texto: 'Oi!' }) });
+  assert.deepEqual(pedidas, [['t', 'k1']]);
 });
 
 test('saídas: o texto bom vira rascunho pronto; o barrado, bloqueado com motivo', async () => {
@@ -237,6 +260,13 @@ test('claude: Messages API com x-api-key e versão, texto juntado dos blocos', a
   assert.deepEqual(c.corpo, { model: 'm', max_tokens: 350, system: 'S', messages: [{ role: 'user', content: 'M' }] });
 });
 
+test('claude: texto cortado pelo limite de tokens e resposta vazia são definitivos (não se paga de novo)', async () => {
+  const cortado = await criarIa('anthropic', buscador(200, { content: [{ type: 'text', text: 'Olá, tudo' }], stop_reason: 'max_tokens' }).buscar).compor(PEDIDO);
+  assert.deepEqual(cortado.ok ? null : cortado.definitivo, true);
+  const vazio = await criarIa('anthropic', buscador(200, { content: [], stop_reason: 'end_turn' }).buscar).compor(PEDIDO);
+  assert.deepEqual(vazio.ok ? null : vazio.definitivo, true);
+});
+
 test('claude: recusa do modelo é definitiva; 401 também; 529 não', async () => {
   const recusa = await criarIa('anthropic', buscador(200, { content: [], stop_reason: 'refusal' }).buscar).compor(PEDIDO);
   assert.deepEqual(recusa.ok ? null : recusa.definitivo, true);
@@ -256,6 +286,34 @@ test('chat completions: endpoint por provedor, Bearer e system + user', async ()
     assert.equal(chamadas[0]!.headers.get('authorization'), 'Bearer sk-x');
     assert.deepEqual(chamadas[0]!.corpo.messages, [{ role: 'system', content: 'S' }, { role: 'user', content: 'M' }]);
   }
+});
+
+test('openai: max_completion_tokens (o gpt-5.5 recusa max_tokens com 400); os outros, max_tokens', async () => {
+  const comum = buscador(200, { choices: [{ message: { content: 'oi' } }] });
+  await criarIa('openai', comum.buscar).compor({ ...PEDIDO, modelo: 'gpt-4.1' });
+  assert.equal(comum.chamadas[0]!.corpo.max_completion_tokens, 350);
+  assert.equal('max_tokens' in comum.chamadas[0]!.corpo, false);
+  assert.equal('reasoning_effort' in comum.chamadas[0]!.corpo, false);
+
+  // Modelo de raciocínio: folga para pensar, e raciocínio baixo — escrever uma mensagem curta não pede mais.
+  const pensa = buscador(200, { choices: [{ message: { content: 'oi' } }] });
+  await criarIa('openai', pensa.buscar).compor({ ...PEDIDO, modelo: 'gpt-5.5' });
+  assert.equal(pensa.chamadas[0]!.corpo.max_completion_tokens, 3350);
+  assert.equal(pensa.chamadas[0]!.corpo.reasoning_effort, 'low');
+
+  for (const prov of ['deepseek', 'openrouter', 'perplexity'] as const) {
+    const b = buscador(200, { choices: [{ message: { content: 'oi' } }] });
+    await criarIa(prov, b.buscar).compor(PEDIDO);
+    assert.equal(b.chamadas[0]!.corpo.max_tokens, 350, prov);
+    assert.equal('max_completion_tokens' in b.chamadas[0]!.corpo, false, prov);
+  }
+});
+
+test('chat completions: cortado (finish_reason length) e vazio são definitivos', async () => {
+  const cortado = await criarIa('openai', buscador(200, { choices: [{ message: { content: '' }, finish_reason: 'length' }] }).buscar).compor(PEDIDO);
+  assert.deepEqual(cortado.ok ? null : [cortado.definitivo, /limite de tokens/.test(cortado.erro)], [true, true]);
+  const vazio = await criarIa('openai', buscador(200, { choices: [{ message: { content: '  ' }, finish_reason: 'stop' }] }).buscar).compor(PEDIDO);
+  assert.deepEqual(vazio.ok ? null : vazio.definitivo, true);
 });
 
 test('compatível: sem base_url é erro definitivo, sem chamar nada', async () => {

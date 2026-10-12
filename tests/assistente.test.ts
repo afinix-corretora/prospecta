@@ -186,7 +186,46 @@ test('IA: escolhe o provedor; sem conta, o plano aponta Configurações e o agen
   assert.equal(ia.rota, '/config/ia');
   const ag = doTipo(plano.acoes, 'ligar_agentes')[0]!;
   assert.deepEqual([ag.credencial, ag.dependeDe], [null, ['campanha', 'config:ia']]);
-  assert.deepEqual(ag.agentes.map((a) => [a.canal, a.agente]), [['whatsapp', 'ag-wa'], ['email', 'ag-mail']]);
+  // D76: o agente vem do OBJETIVO do modelo (fria → prospecção fria), não do
+  // primeiro agente de catálogo do canal por ordem alfabética.
+  assert.ok('novo' in ag.agente && ag.agente.objetivo === 'prospeccao_fria' && ag.agente.persona === 'consultiva');
+  assert.deepEqual(ag.canaisDoCanal, ['whatsapp', 'email'], 'canais sem agente: ele vira o agente do canal');
+  assert.deepEqual(ag.canaisDaCampanha, []);
+});
+
+test('agentes (D76): o setup não troca o agente do canal que já existe — exceção só nesta campanha', () => {
+  const f: Foto = {
+    ...FOTO,
+    agentes: [
+      { id: 'ana', nome: 'Ana', canal: null, tenant_id: 't', objetivo: 'resgate', persona: 'proxima', ativo: true },
+      { id: 'caio', nome: 'Caio', canal: null, tenant_id: 't', objetivo: 'prospeccao_fria', persona: 'objetiva', ativo: true },
+    ],
+    agentesPorCanal: [{ canal: 'whatsapp', agent_id: 'ana' }, { canal: 'email', agent_id: 'caio' }],
+    empresa: 'Afinix Corretora',
+  };
+  const ag = doTipo(montarPlano(f, COMPLETO).acoes, 'ligar_agentes')[0]!;
+  // Já existe um agente de prospecção fria: é reaproveitado, nada é criado.
+  assert.deepEqual(ag.agente, { id: 'caio', nome: 'Caio' });
+  // WhatsApp é da Ana (Resgate): o Caio responde só nesta campanha. E-mail já é do Caio: herda.
+  assert.deepEqual(ag.canaisDaCampanha, ['whatsapp']);
+  assert.deepEqual(ag.canaisDoCanal, []);
+  assert.ok(ag.efeitos.some((e) => /Ana continua sendo o agente do canal/.test(e)));
+  assert.ok(ag.efeitos.some((e) => /Caio já responde aqui/.test(e)));
+});
+
+test('agentes (D76): criar de novo não colide no nome, e o contexto diz a empresa e a campanha', () => {
+  const f: Foto = {
+    ...FOTO, empresa: 'Afinix Corretora',
+    agentes: [{ id: 'x', nome: 'Assistente de prospecção fria', canal: null, tenant_id: 't', objetivo: 'resgate', ativo: true }],
+  };
+  const ag = doTipo(montarPlano(f, COMPLETO).acoes, 'ligar_agentes')[0]!;
+  assert.ok('novo' in ag.agente);
+  if (!('novo' in ag.agente)) return;
+  assert.equal(ag.agente.nome, 'Assistente de prospecção fria 2');
+  assert.match(ag.agente.contexto, /^Falamos em nome de Afinix Corretora\./);
+  // Agente desligado não é reaproveitado.
+  const g: Foto = { ...f, agentes: [{ id: 'y', nome: 'Velho', canal: null, tenant_id: 't', objetivo: 'prospeccao_fria', ativo: false }] };
+  assert.ok('novo' in doTipo(montarPlano(g, COMPLETO).acoes, 'ligar_agentes')[0]!.agente);
 });
 
 test('IA: com contas conectadas, a pergunta seguinte é qual delas — só as do provedor, só as ligadas', () => {

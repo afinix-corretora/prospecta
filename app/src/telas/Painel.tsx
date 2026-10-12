@@ -124,7 +124,7 @@ export function Painel() {
           lerRespostas(t, undefined, 6).catch(() => [] as RespostaRecebida[]),
           lerCampanhas().catch(() => [] as Campanha[]),
           lerResumoDaOutbox(t).catch(() => null),
-          lerFoto(administra, opera).catch(() => null),
+          lerFoto(administra, opera, tenant ? { id: tenant.tenant_id, nome: tenant.nome } : undefined).catch(() => null),
         ]);
         const ativas = campanhas.filter((c) => c.ativa).slice(0, 5);
         const resumos = await Promise.all(ativas.map((c) =>

@@ -21,9 +21,10 @@ import { Writeback } from './telas/Writeback';
 import { Setup } from './telas/Inicio';
 import { Painel } from './telas/Painel';
 import {
-  Canais, Config, ConfigAgentes, ConfigIA, ConfigModelos, ConfigPlataformas,
+  Canais, Config, ConfigIA, ConfigModelos, ConfigPlataformas,
   ConfigVinculadas, Hub,
 } from './telas/Telas';
+import { ConfigAgentes, ConstrutorDeAgente } from './telas/Agentes';
 import { lerProvedoresCanal, lerRespostas, criarTenant } from './dados';
 import type { ProvedorCanal } from './dados';
 import { configurado, faltando, mensagemDeErro } from './supabase';
@@ -158,6 +159,7 @@ function Casca() {
           <Route path="/config/blacklist" element={<ConfigBlacklist />} />
           <Route path="/config/ia" element={<ConfigIA />} />
           <Route path="/config/agentes" element={<ConfigAgentes />} />
+          <Route path="/config/agentes/:id" element={<ConstrutorDeAgente />} />
           <Route path="/config/modelos" element={<ConfigModelos />} />
           <Route path="/config/plataformas" element={<ConfigPlataformas />} />
           <Route path="/config/vinculadas" element={<ConfigVinculadas />} />

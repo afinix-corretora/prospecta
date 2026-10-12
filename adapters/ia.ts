@@ -53,6 +53,15 @@ export function criarIa(provedor: string, buscar: Buscador = fetch): ModeloIA {
   throw new Error(`provedor de IA sem adapter: ${provedor}`);
 }
 
+/**
+ * Modelo de raciocínio da OpenAI (gpt-5, o1, o3, o4…), direto ou pelo
+ * OpenRouter ("openai/gpt-5…"). Ele gasta parte do orçamento de tokens
+ * pensando: sem folga, devolve vazio com `finish_reason = length`.
+ */
+export function ehModeloDeRaciocinio(modelo: string): boolean {
+  return /^(openai\/)?(gpt-5|o\d)/i.test(modelo.trim());
+}
+
 /** 401, 403, 404 e 400 não melhoram sozinhos; o resto pode melhorar. */
 function definitivoPorStatus(status: number): boolean {
   return status === 400 || status === 401 || status === 403 || status === 404 || status === 422;
@@ -67,6 +76,15 @@ function mensagemDeErro(corpo: Record<string, unknown>, status: number): string 
   const m = typeof e === 'string' ? e : e?.message;
   return typeof m === 'string' && m ? `HTTP ${status}: ${m}` : `HTTP ${status}`;
 }
+
+// Os dois não melhoram repetindo o MESMO pedido, e repetir paga de novo a
+// cada passada, fora do teto diário (que só conta o que vira linha). Por isso
+// são definitivos: viram `erro` com o motivo, e uma pessoa vê (D76).
+const CORTADO: Composicao = {
+  ok: false, definitivo: true,
+  erro: 'o modelo não terminou dentro do limite de tokens (texto cortado no meio não é mandado)',
+};
+const VAZIO: Composicao = { ok: false, definitivo: true, erro: 'o modelo devolveu uma resposta sem texto' };
 
 class ClaudeIA implements ModeloIA {
   readonly provedor = 'anthropic';
@@ -97,10 +115,11 @@ class ClaudeIA implements ModeloIA {
       if (corpo.stop_reason === 'refusal') {
         return { ok: false, erro: 'o modelo recusou compor esta resposta', definitivo: true };
       }
+      if (corpo.stop_reason === 'max_tokens') return CORTADO;
       const blocos = Array.isArray(corpo.content) ? corpo.content as { type?: unknown; text?: unknown }[] : [];
       const texto = blocos.filter((b) => b.type === 'text' && typeof b.text === 'string')
         .map((b) => b.text as string).join('').trim();
-      return texto ? { ok: true, texto } : { ok: false, erro: 'resposta sem texto', definitivo: false };
+      return texto ? { ok: true, texto } : VAZIO;
     } catch (e) {
       return { ok: false, erro: e instanceof Error ? e.message : String(e), definitivo: false };
     }
@@ -125,13 +144,25 @@ class ChatCompletionsIA implements ModeloIA {
     if (this.provedor === 'openai' && p.credenciais.organizacao) headers['OpenAI-Organization'] = p.credenciais.organizacao;
     if (this.provedor === 'openrouter' && p.credenciais.referer) headers['HTTP-Referer'] = p.credenciais.referer;
 
+    // A OpenAI recusa `max_tokens` nos modelos novos ("use
+    // max_completion_tokens", HTTP 400) — conferido ao vivo com o gpt-5.5, que
+    // é a conta do cliente hoje (D76). Os outros provedores do protocolo
+    // continuam no nome antigo, que é o que eles documentam.
+    const raciocina = ehModeloDeRaciocinio(p.modelo);
+    const teto = this.provedor === 'openai'
+      ? { max_completion_tokens: raciocina ? p.maxTokens + 3000 : p.maxTokens }
+      : { max_tokens: raciocina ? p.maxTokens + 3000 : p.maxTokens };
+
     try {
       const r = await this.buscar(`${base}/chat/completions`, {
         method: 'POST',
         headers,
         body: JSON.stringify({
           model: p.modelo,
-          max_tokens: p.maxTokens,
+          ...teto,
+          // Escrever uma mensagem curta não pede raciocínio longo; sem isto o
+          // modelo pode gastar o orçamento pensando e devolver vazio.
+          ...(raciocina && this.provedor === 'openai' ? { reasoning_effort: 'low' } : {}),
           messages: [
             { role: 'system', content: p.sistema },
             { role: 'user', content: p.mensagem },
@@ -140,12 +171,15 @@ class ChatCompletionsIA implements ModeloIA {
       });
       const corpo = await corpoJson(r);
       if (!r.ok) return { ok: false, erro: mensagemDeErro(corpo, r.status), definitivo: definitivoPorStatus(r.status) };
-      const escolha = (corpo.choices as { message?: { content?: unknown; refusal?: unknown } }[] | undefined)?.[0];
+      const escolha = (corpo.choices as {
+        message?: { content?: unknown; refusal?: unknown }; finish_reason?: unknown;
+      }[] | undefined)?.[0];
       if (typeof escolha?.message?.refusal === 'string' && escolha.message.refusal) {
         return { ok: false, erro: 'o modelo recusou compor esta resposta', definitivo: true };
       }
+      if (escolha?.finish_reason === 'length') return CORTADO;
       const texto = typeof escolha?.message?.content === 'string' ? escolha.message.content.trim() : '';
-      return texto ? { ok: true, texto } : { ok: false, erro: 'resposta sem texto', definitivo: false };
+      return texto ? { ok: true, texto } : VAZIO;
     } catch (e) {
       return { ok: false, erro: e instanceof Error ? e.message : String(e), definitivo: false };
     }
