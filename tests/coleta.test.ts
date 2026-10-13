@@ -6,14 +6,16 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
-  ACEITA, bytesDoBase64, cabemJuntos, conferirArquivo, conferirEndereco, decodificarTexto, enderecoInterno,
-  htmlParaTexto, lerInstagram, lerMaterial, lerSite, MAX_ARQUIVOS, paginasParaLer, POUCO_TEXTO, semInformacao,
-  SEM_INFORMACAO, tamanhoDoBase64, TETO_DA_PAGINA, TETO_TEXTO_DO_ARQUIVO, TETO_TOTAL,
+  ACEITA, bytesDoBase64, cabemJuntos, chaveDaPagina, conferirArquivo, conferirEndereco, cortar, decodificarTexto,
+  emMb, enderecoInterno, htmlParaTexto, lerInstagram, lerMaterial, lerSite, MAX_ARQUIVOS, paginasParaLer,
+  perfilDoInstagram, POUCO_TEXTO, semInformacao, SEM_INFORMACAO, separarConferir, SISTEMA_DA_COLETA,
+  tamanhoDoBase64, TETO_DA_PAGINA, TETO_TEXTO_DO_ARQUIVO, TETO_TOTAL,
 } from '../adapters/coleta.ts';
 import type { RedeDoSite } from '../adapters/coleta.ts';
 import { blocosDoClaude, criarLeitor, LEEM_ANEXOS, partesDoChat } from '../adapters/ia-leitura.ts';
 import type { Parte } from '../adapters/ia-leitura.ts';
 import { criarIa, PROVEDORES_IA_COM_ADAPTER } from '../adapters/ia.ts';
+import { aplicarFreios } from '../adapters/prompt-do-agente.ts';
 
 const MB = 1024 * 1024;
 const b = (s: string | number[]) => (typeof s === 'string' ? new TextEncoder().encode(s) : new Uint8Array(s));
@@ -45,17 +47,35 @@ test('arquivo: a extensão escolhe o formato e os primeiros bytes confirmam', ()
   const vazio = conferirArquivo('a.txt', 0, b(''));
   assert.ok(!vazio.ok && /vazio/.test(vazio.motivo));
   const binario = conferirArquivo('a.txt', 10, b([0x61, 0, 0x62]));
-  assert.ok(!binario.ok && /binário/.test(binario.motivo));
+  assert.ok(!binario.ok && /salve como UTF-8/.test(binario.motivo));
 });
 
-test('arquivo: o teto é por formato, e no teto exato ainda entra', () => {
+test('arquivo: o "Texto Unicode" do Excel (UTF-16 com marca) é texto, e se lê', () => {
+  const utf16 = new Uint8Array([0xff, 0xfe, ...[...'Ação'].flatMap((c) => [c.charCodeAt(0), 0])]);
+  assert.ok(conferirArquivo('tabela.txt', utf16.length, utf16).ok);
+  const lido = lerMaterial({ nome: 'tabela.txt', origem: 'material', base64: b64(utf16) }, 'deepseek', false);
+  assert.deepEqual(lido.parte, { tipo: 'texto', texto: '[Arquivo] tabela.txt\nAção' });
+});
+
+test('arquivo: o teto é por formato, no teto exato ainda entra, e a recusa nunca diz o tamanho igual ao teto', () => {
   assert.ok(conferirArquivo('a.pdf', 10 * MB, PDF).ok);
   const pdf = conferirArquivo('a.pdf', 10 * MB + 1, PDF);
-  assert.ok(!pdf.ok && /teto para PDF é 10 MB/.test(pdf.motivo), !pdf.ok ? pdf.motivo : '');
+  assert.ok(!pdf.ok && /tem 10,01 MB; o teto para PDF é 10 MB/.test(pdf.motivo), !pdf.ok ? pdf.motivo : '');
+  const pdf2 = conferirArquivo('a.pdf', Math.round(10.04 * MB), PDF);
+  assert.ok(!pdf2.ok && /tem 10,04 MB/.test(pdf2.motivo), !pdf2.ok ? pdf2.motivo : '');
   assert.ok(conferirArquivo('a.png', 5 * MB, PNG).ok);
   assert.ok(!conferirArquivo('a.png', 5 * MB + 1, PNG).ok);
   assert.ok(!conferirArquivo('a.txt', MB + 1, b('oi')).ok);
   assert.ok(conferirArquivo('a.html', 2 * MB, b('<html>')).ok);
+  assert.equal(emMb(1500), '2 KB');
+  assert.equal(emMb(12.5 * MB), '12,5 MB');
+});
+
+test('arquivo: nome longo demais é recusado dizendo isso, e não "não é PDF"', () => {
+  const nome = `${'Tabela de preços dos planos empresariais '.repeat(6)}.pdf`;
+  const r = conferirArquivo(nome, 1000, PDF);
+  assert.ok(!r.ok && /nome de arquivo longo demais \(\d+ caracteres; até 200\)/.test(r.motivo), !r.ok ? r.motivo : '');
+  assert.ok(conferirArquivo(`${'a'.repeat(196)}.pdf`, 1000, PDF).ok);
 });
 
 test('arquivos juntos: quantos e quanto', () => {
@@ -63,7 +83,7 @@ test('arquivos juntos: quantos e quanto', () => {
   assert.equal(cabemJuntos(Array(MAX_ARQUIVOS).fill(1)), null);
   assert.match(cabemJuntos(Array(MAX_ARQUIVOS + 1).fill(1))!, /até 10 arquivos/);
   assert.equal(cabemJuntos([TETO_TOTAL]), null);
-  assert.match(cabemJuntos([TETO_TOTAL, 1])!, /teto de uma leitura é 15 MB/);
+  assert.match(cabemJuntos([TETO_TOTAL, 1])!, /somam 15,01 MB; o teto de uma leitura é 15 MB/);
 });
 
 test('base64: tamanho sem decodificar, e os primeiros bytes', () => {
@@ -79,12 +99,32 @@ test('base64: tamanho sem decodificar, e os primeiros bytes', () => {
   assert.equal(tamanhoDoBase64(grande), 5005);
 });
 
-test('texto: UTF-8, e o que não é UTF-8 lido como Windows-1252', () => {
+test('texto: a marca, depois o rótulo declarado, depois UTF-8 e Windows-1252', () => {
   assert.equal(decodificarTexto(b('ação')), 'ação');
   assert.equal(decodificarTexto(b([0xef, 0xbb, 0xbf, 0x6f, 0x69])), 'oi', 'o BOM sai');
   assert.equal(decodificarTexto(b([0x61, 0xe7, 0xe3, 0x6f])), 'ação');
-  assert.equal(decodificarTexto(b([0x61, 0xe7, 0xe3, 0x6f]), 'iso-8859-1'), 'ação');
+  // Bytes que SÃO UTF-8 válido, declarados em outro charset: o rótulo manda.
+  assert.equal(decodificarTexto(b('ç'), 'windows-1252'), 'Ã§');
+  assert.equal(decodificarTexto(b([0xe3]), 'iso-8859-2'), 'ă');
   assert.equal(decodificarTexto(b('ação'), 'rotulo-que-nao-existe'), 'ação');
+  // A marca manda mais que o rótulo, como no navegador.
+  assert.equal(decodificarTexto(b([0xef, 0xbb, 0xbf, ...b('ação')]), 'iso-8859-1'), 'ação');
+  // Página UTF-8 com um byte solto não vira mojibake inteira.
+  assert.equal(decodificarTexto(b([...b('São Paulo '), 0xa9]), 'utf-8'), 'São Paulo �');
+  // Cortada no meio de um caractere: o pedaço sai, o resto continua UTF-8.
+  const cortada = b('carência ç').subarray(0, b('carência ç').length - 1);
+  assert.equal(decodificarTexto(cortada, null, true), 'carência ');
+  assert.equal(decodificarTexto(cortada, 'utf-8', true), 'carência ');
+});
+
+test('cortar: nunca deixa metade de um emoji no fim', () => {
+  const s = 'a'.repeat(4999) + '😀 resto';
+  assert.equal(cortar(s, 5000), 'a'.repeat(4999));
+  assert.equal(cortar(s, 5001), 'a'.repeat(4999) + '😀');
+  assert.equal(cortar('curto', 10), 'curto');
+  const ig = lerInstagram('empresa', 'a'.repeat(4999) + '😀 resto');
+  const texto = (ig.parte as { texto: string }).texto;
+  assert.ok(texto.isWellFormed(), 'o texto que vai ao modelo é JSON válido');
 });
 
 // ---------------------------------------------------------------------------
@@ -101,15 +141,43 @@ test('html: o texto que se lê, sem script, estilo e comentário', () => {
     <svg><text>ícone</text></svg><noscript>ative o JS</noscript></body></html>`);
   assert.equal(p.titulo, 'Corretora & Cia');
   assert.equal(p.descricao, 'Planos de saúde em Sorocaba');
-  assert.doesNotMatch(p.texto, /R\$|color|ícone|ative o JS/);
+  assert.doesNotMatch(p.texto, /R\$|color|ícone|ative o JS|Corretora & Cia/);
   assert.match(p.texto, /Atendemos empresas é famílias A\./);
   assert.match(p.texto, /- Plano Bronze\n- Plano Prata/);
   assert.deepEqual(p.links.map((l) => [l.href, l.texto]), [['/sobre', 'Quem somos'], ['/planos', 'Planos']]);
 });
 
+test('html: tag de texto não parte o preço — "R$ 189,90" continua inteiro, e o freio lê o valor certo', () => {
+  const p = htmlParaTexto('<p>Plano Bronze por R$ <strong>189</strong><sup>,90</sup>/mês</p><p>Ligue<br>agora</p><table><tr><td>A</td><td>B</td></tr></table>');
+  assert.equal(p.texto, 'Plano Bronze por R$ 189,90/mês\nLigue\nagora\nA B');
+  const contexto = `A Corretora Exemplo vende planos de saúde.\n- ${p.texto.split('\n')[0]}`;
+  const base = { proibido: [], tamanho_maximo: null, canal: 'whatsapp', contexto, objetivo: 'resgate' };
+  assert.equal(aplicarFreios('O Plano Bronze sai por R$ 189,90 por mês.', base).situacao, 'pronto');
+  assert.equal(aplicarFreios('O Plano Bronze sai por R$ 90 por mês.', base).situacao, 'bloqueado');
+});
+
 test('html: a página que repete a mesma linha seguida não a repete no texto', () => {
   const p = htmlParaTexto('<p>Ligue</p><p>Ligue</p><p>Agora</p><p>Ligue</p>');
   assert.equal(p.texto, 'Ligue\nAgora\nLigue');
+});
+
+test('html: HTML hostil de 2 MB custa o mesmo que HTML comum — nada de voltar atrás', () => {
+  const casos: [string, string][] = [
+    ['meta com atributo sem =', `<meta ${'a'.repeat(2 * MB)}>`],
+    ['link com atributo sem =', `<a ${'x'.repeat(2 * MB)}>sobre</a>`],
+    ['comentários sem fechar', '<!--'.repeat(MB / 2)],
+    ['estilos sem fechar', '<style>'.repeat(MB / 4)],
+    ['links sem fechar', '<a href="/x">'.repeat(MB / 8)],
+    ['muitos meta', '<meta name="description" content="x">'.repeat(MB / 20)],
+    ['entidade sem ponto e vírgula', `&${'a'.repeat(2 * MB)}`],
+    ['muitos <', '<'.repeat(2 * MB)],
+  ];
+  for (const [nome, html] of casos) {
+    const t0 = performance.now();
+    htmlParaTexto(html);
+    const ms = performance.now() - t0;
+    assert.ok(ms < 400, `${nome}: ${Math.round(ms)} ms`);
+  }
 });
 
 test('html: as páginas do mesmo site que dizem o que a empresa é, nessa ordem', () => {
@@ -123,30 +191,70 @@ test('html: as páginas do mesmo site que dizem o que a empresa é, nessa ordem'
     { href: '/institucional/quem-somos#time', texto: 'A empresa' },
     { href: '/sobre?x=1', texto: 'Sobre' },
     { href: 'mailto:oi@empresa.com.br', texto: 'Contato' },
-    { href: '/', texto: 'Início' },
+    { href: '/#sobre', texto: 'Sobre nós' },
+    { href: 'http://www.empresa.com.br/#planos', texto: 'Planos' },
     { href: '/servi%C3%A7os', texto: '' },
   ];
   assert.deepEqual(paginasParaLer(links, base).map((u) => u.href), [
     'https://www.empresa.com.br/institucional/quem-somos',
     'https://www.empresa.com.br/sobre?x=1',
     'https://empresa.com.br/planos',
-  ]);
+  ], 'a âncora da própria inicial (/#sobre, http://www…/#planos) não é página nova');
+});
+
+test('html: rótulo de várias palavras sobre caminho neutro, e post de blog não é "sobre"', () => {
+  const base = new URL('https://empresa.com.br/');
+  const wp = paginasParaLer([
+    { href: '/?page_id=12', texto: 'Quem Somos' }, { href: '/empresa', texto: 'A Empresa' },
+    { href: '/?page_id=20', texto: 'Fale conosco' }, { href: '/historia', texto: 'Nossa história' },
+  ], base, 4).map((u) => u.href);
+  assert.deepEqual(wp, ['https://empresa.com.br/?page_id=12', 'https://empresa.com.br/empresa',
+    'https://empresa.com.br/historia', 'https://empresa.com.br/?page_id=20']);
+  const blog = paginasParaLer([
+    { href: '/blog/tudo-sobre-o-plano-x', texto: 'Tudo sobre o plano X' },
+    { href: '/noticias/sobre-a-ans', texto: 'Sobre a ANS' },
+    { href: '/planos', texto: 'Planos' }, { href: '/contato', texto: 'Contato' },
+  ], base).map((u) => u.href);
+  assert.deepEqual(blog, ['https://empresa.com.br/planos', 'https://empresa.com.br/contato']);
+});
+
+test('html: link com porta, usuário e senha ou rede social não vira página extra', () => {
+  const base = new URL('https://empresa.com.br/');
+  const r = paginasParaLer([
+    { href: 'https://empresa.com.br:6379/sobre', texto: 'Sobre' },
+    { href: 'http://empresa.com.br:22/planos', texto: 'Planos' },
+    { href: 'https://u:p@empresa.com.br/contato', texto: 'Contato' },
+    { href: 'https://instagram.com/empresa', texto: 'Sobre nós no Instagram' },
+  ], base);
+  assert.deepEqual(r, []);
+});
+
+test('html: a chave de uma página ignora www, esquema, barra do fim e rastreio', () => {
+  const k = (s: string) => chaveDaPagina(new URL(s));
+  assert.equal(k('http://www.empresa.com.br/contato/'), k('https://empresa.com.br/contato'));
+  assert.equal(k('https://empresa.com.br/planos?utm_source=ig&fbclid=x'), k('https://empresa.com.br/planos'));
+  assert.notEqual(k('https://empresa.com.br/?page_id=12'), k('https://empresa.com.br/?page_id=20'));
 });
 
 // ---------------------------------------------------------------------------
 // O endereço
 // ---------------------------------------------------------------------------
 
-test('endereço: o que o texto já entrega como não público é recusado antes da rede', () => {
+test('endereço: só https, e o que o texto já entrega como não público é recusado antes da rede', () => {
   const ok = (s: string) => { const r = conferirEndereco(s); assert.ok(r.ok, `${s}: ${r.ok ? '' : r.motivo}`); return r.url.href; };
-  const nao = (s: string, re: RegExp) => { const r = conferirEndereco(s); assert.ok(!r.ok && re.test(r.motivo), `${s}: ${r.ok ? 'aceito' : r.motivo}`); };
+  const nao = (s: string, re: RegExp, promover = true) => {
+    const r = conferirEndereco(s, promover);
+    assert.ok(!r.ok && re.test(r.motivo), `${s}: ${r.ok ? 'aceito' : r.motivo}`);
+  };
   assert.equal(ok('www.empresa.com.br'), 'https://www.empresa.com.br/');
-  assert.equal(ok(' http://empresa.com/planos#topo '), 'http://empresa.com/planos');
+  assert.equal(ok(' http://empresa.com/planos#topo '), 'https://empresa.com/planos', 'o http digitado vira https');
+  nao('http://empresa.com/planos', /só se lê site por https/, false);
   assert.equal(ok('https://xn--caf-dma.com.br'), 'https://xn--caf-dma.com.br/');
   ok('https://café.com.br');
   nao('', /vazio/);
-  nao('ftp://empresa.com.br', /http ou https/);
-  nao('javascript:alert(1)', /não é o endereço de um site público|não é um endereço/);
+  nao(`https://empresa.com.br/${'x'.repeat(2001)}`, /longo demais/);
+  nao('ftp://empresa.com.br', /só se lê endereço de site/);
+  nao('javascript:alert(1)', /não é o endereço de um site público|não é um endereço|só se lê/);
   nao('https://eu:senha@empresa.com.br', /usuário e senha/);
   nao('https://empresa.com.br:8443/', /porta padrão/);
   nao('http://127.0.0.1/', /por IP/);
@@ -163,16 +271,27 @@ test('endereço: o que o texto já entrega como não público é recusado antes 
   nao('http://empresa.123/', /site público|não é um endereço/);
 });
 
-test('endereço: para onde o domínio aponta — rede interna, reservado ou ilegível é interno', () => {
+test('endereço: Instagram e Facebook não se leem por robô, nem digitados no campo do site', () => {
+  for (const s of ['instagram.com/corretoraexemplo', 'https://www.instagram.com/corretora/', 'instagr.am/x']) {
+    const r = conferirEndereco(s);
+    assert.ok(!r.ok && /Instagram não se lê por robô/.test(r.motivo), s);
+  }
+  const fb = conferirEndereco('https://m.facebook.com/corretora');
+  assert.ok(!fb.ok && /Facebook não se lê por robô/.test(fb.motivo));
+});
+
+test('endereço: para onde o domínio aponta — no IPv6, público é só o unicast global', () => {
   for (const ip of ['10.1.2.3', '172.16.0.1', '172.31.255.255', '192.168.0.10', '127.0.0.1', '0.0.0.0',
     '169.254.169.254', '100.64.0.1', '100.127.255.255', '198.18.0.1', '224.0.0.1', '255.255.255.255',
     '192.0.2.1', '203.0.113.9', '::', '::1', 'fe80::1', 'febf::1', 'fc00::1', 'fd12:3456::1', 'ff02::1',
     '::ffff:127.0.0.1', '::ffff:7f00:1', '::ffff:10.0.0.1', '64:ff9b::a9fe:a9fe', '2001:db8::1', '::2',
+    '::ffff:0:7f00:1', '64:ff9b:1::7f00:1', '2002:a9fe:a9fe::1', '2002:0a00:0001::1', 'fec0::1',
+    '2001:0:4136:e378:8000:63bf:3fff:fdd2', '100::1',
     'lixo', '1.2.3', '1.2.3.256', ':::1', '1::2::3']) {
     assert.equal(enderecoInterno(ip), true, ip);
   }
   for (const ip of ['8.8.8.8', '172.32.0.1', '100.128.0.1', '200.147.67.142', '2001:4860:4860::8888',
-    '2606:4700::6810:84e5', '::ffff:8.8.8.8', '64:ff9b::808:808']) {
+    '2606:4700::6810:84e5', '::ffff:8.8.8.8', '64:ff9b::808:808', '2002:0808:0808::1']) {
     assert.equal(enderecoInterno(ip), false, ip);
   }
 });
@@ -181,9 +300,9 @@ test('endereço: para onde o domínio aponta — rede interna, reservado ou ileg
 // O site, com a rede de mentira
 // ---------------------------------------------------------------------------
 
-interface Pagina { status?: number; tipo?: string; corpo?: string | Uint8Array; destino?: string; lancar?: unknown }
+interface Pagina { status?: number; tipo?: string; corpo?: string | Uint8Array; destino?: string; lancar?: unknown; demoraMs?: number }
 
-function redeFalsa(paginas: Record<string, Pagina>, dns: Record<string, string[] | 'lança'> = {}) {
+function redeFalsa(paginas: Record<string, Pagina>, dns: Record<string, string[] | 'lança'> = {}, extra: Partial<RedeDoSite> = {}) {
   const pedidos: { url: string; redirect: unknown; temPrazo: boolean }[] = [];
   const perguntas: string[] = [];
   const rede: RedeDoSite = {
@@ -196,11 +315,18 @@ function redeFalsa(paginas: Record<string, Pagina>, dns: Record<string, string[]
     buscar: (async (url: string, init?: RequestInit) => {
       pedidos.push({ url: String(url), redirect: init?.redirect, temPrazo: init?.signal instanceof AbortSignal });
       const p = paginas[String(url)];
+      if (p?.demoraMs) {
+        await new Promise((ok, falha) => {
+          const t = setTimeout(ok, p.demoraMs);
+          init?.signal?.addEventListener('abort', () => { clearTimeout(t); falha(init.signal!.reason); });
+        });
+      }
       if (!p) return new Response('não achei', { status: 404, headers: { 'content-type': 'text/html' } });
       if (p.lancar) throw p.lancar;
-      if (p.destino) return new Response(null, { status: p.status ?? 301, headers: { location: p.destino } });
+      if (p.destino !== undefined) return new Response(null, { status: p.status ?? 301, headers: p.destino ? { location: p.destino } : {} });
       return new Response(p.corpo ?? '', { status: p.status ?? 200, headers: { 'content-type': p.tipo ?? 'text/html; charset=utf-8' } });
     }) as typeof fetch,
+    ...extra,
   };
   return { rede, pedidos, perguntas };
 }
@@ -233,17 +359,25 @@ test('site: a página e até três do mesmo site, cada uma com a sua linha', asy
   assert.match(r.fontes[2]!.detalhe, /quase não tem texto/, 'página curta diz que chegou curta');
 });
 
-test('site: redirecionamento é seguido, e cada salto é conferido de novo', async () => {
+test('site: redirecionamento é seguido, e cada salto é conferido de novo — inclusive o https', async () => {
   const ida = redeFalsa({
-    'http://empresa.com.br/': { destino: 'https://www.empresa.com.br/' },
+    'https://empresa.com.br/': { destino: 'https://www.empresa.com.br/' },
     'https://www.empresa.com.br/': { corpo: `<p>${TEXTO_LONGO}</p>` },
   });
   const r = await lerSite('http://empresa.com.br', ida.rede);
+  assert.deepEqual(ida.pedidos.map((p) => p.url), ['https://empresa.com.br/', 'https://www.empresa.com.br/'],
+    'o http digitado é lido por https');
   assert.equal(r.fontes[0]!.rotulo, 'https://www.empresa.com.br/');
   assert.equal(r.fontes[0]!.lida, true);
 
+  // O site que manda para http: o rebinding passaria por aí sem certificado nenhum.
+  const http = redeFalsa({ 'https://empresa.com.br/': { destino: 'http://empresa.com.br/home' } });
+  const h = await lerSite('empresa.com.br', http.rede);
+  assert.match(h.fontes[0]!.detalhe, /redirecionou para um endereço que não se lê \(só se lê site por https\)/);
+  assert.equal(http.pedidos.length, 1);
+
   // O salto para o IP de metadados é recusado SEM ser buscado.
-  const meta = redeFalsa({ 'https://empresa.com.br/': { destino: 'http://169.254.169.254/latest/meta-data/' } });
+  const meta = redeFalsa({ 'https://empresa.com.br/': { destino: 'https://169.254.169.254/latest/meta-data/' } });
   const m = await lerSite('empresa.com.br', meta.rede);
   assert.equal(m.fontes[0]!.lida, false);
   assert.match(m.fontes[0]!.detalhe, /redirecionou para um endereço que não se lê \(endereço por IP/);
@@ -257,11 +391,28 @@ test('site: redirecionamento é seguido, e cada salto é conferido de novo', asy
   assert.deepEqual(dentro.pedidos.map((p) => p.url), ['https://empresa.com.br/']);
   assert.deepEqual(dentro.perguntas, ['empresa.com.br', 'painel.empresa.com.br']);
 
+  // O domínio que manda para o Instagram: não se lê.
+  const ig = redeFalsa({ 'https://corretora.com.br/': { destino: 'https://www.instagram.com/corretoraexemplo/' } });
+  const i = await lerSite('corretora.com.br', ig.rede);
+  assert.match(i.fontes[0]!.detalhe, /Instagram não se lê por robô/);
+  assert.equal(ig.pedidos.length, 1);
+
   const laco = redeFalsa({ 'https://a.com.br/': { destino: 'https://a.com.br/x' }, 'https://a.com.br/x': { destino: 'https://a.com.br/' } });
   assert.match((await lerSite('a.com.br', laco.rede)).fontes[0]!.detalhe, /vezes demais/);
   const semDestino = redeFalsa({ 'https://a.com.br/': { status: 302, destino: '' } });
-  semDestino.rede.buscar = (async () => new Response(null, { status: 302 })) as typeof fetch;
   assert.match((await lerSite('a.com.br', semDestino.rede)).fontes[0]!.detalhe, /sem dizer para onde/);
+});
+
+test('site: a página extra que redireciona para uma já lida não é lida de novo', async () => {
+  const { rede, pedidos } = redeFalsa({
+    'https://empresa.com.br/': { corpo: `<p>${TEXTO_LONGO}</p><a href="/sobre">Sobre</a><a href="/planos">Planos</a>` },
+    'https://empresa.com.br/sobre': { destino: 'https://empresa.com.br/' },
+    'https://empresa.com.br/planos': { corpo: `<p>${TEXTO_LONGO}</p>` },
+  });
+  const r = await lerSite('empresa.com.br', rede);
+  assert.equal(pedidos.length, 4);
+  assert.deepEqual(r.fontes.map((f) => f.rotulo), ['https://empresa.com.br/', 'https://empresa.com.br/planos']);
+  assert.equal(r.partes.length, 2);
 });
 
 test('site: domínio que aponta para dentro, que não existe, ou sem DNS — e nada é buscado', async () => {
@@ -288,7 +439,7 @@ test('site: o que não é página, o que não responde e o que é grande demais'
   const lento = redeFalsa({ 'https://a.com.br/': { lancar: new DOMException('The operation was aborted due to timeout', 'TimeoutError') } });
   assert.match((await lerSite('a.com.br', lento.rede)).fontes[0]!.detalhe, /não respondeu em 10 s/);
   const caiu = redeFalsa({ 'https://a.com.br/': { lancar: new TypeError('fetch failed') } });
-  assert.match((await lerSite('a.com.br', caiu.rede)).fontes[0]!.detalhe, /não foi possível conectar/);
+  assert.match((await lerSite('a.com.br', caiu.rede)).fontes[0]!.detalhe, /não foi possível conectar ao site por https/);
 
   const grande = redeFalsa({ 'https://a.com.br/': { corpo: `<p>${'Texto da empresa. '.repeat(Math.ceil(TETO_DA_PAGINA * 1.3 / 18))}</p>` } });
   const g = await lerSite('a.com.br', grande.rede);
@@ -302,6 +453,40 @@ test('site: o que não é página, o que não responde e o que é grande demais'
   assert.match(v.fontes[0]!.detalhe, /montar o conteúdo no navegador/);
   assert.equal(v.partes.length, 0);
   assert.ok(POUCO_TEXTO > 0);
+
+  // Título e descrição longos não fazem de uma página vazia uma página lida sem aviso.
+  const titulada = redeFalsa({ 'https://a.com.br/': { corpo: `<title>${'Corretora Exemplo — planos '.repeat(3)}</title>`
+    + `<meta name="description" content="${'Planos de saúde em Sorocaba. '.repeat(6)}"><div id="root"></div>` } });
+  const t = await lerSite('a.com.br', titulada.rede);
+  assert.equal(t.fontes[0]!.lida, true);
+  assert.match(t.fontes[0]!.detalhe, /^0 caracteres; a página quase não tem texto/);
+});
+
+test('site: os bytes da página param no teto — o que vem depois nunca é lido', async () => {
+  const antes = '<p>Começo da página, com carência explicada.</p>';
+  const recheio = ' '.repeat(TETO_DA_PAGINA - b(antes).length - 1);
+  // O "ç" (2 bytes) começa no último byte do teto: fica partido no corte.
+  const corpo = `${antes}${recheio}ç<p>DEPOIS DO TETO</p>`;
+  const { rede } = redeFalsa({ 'https://a.com.br/': { corpo } });
+  const r = await lerSite('a.com.br', rede);
+  const texto = (r.partes[0] as { texto: string }).texto;
+  assert.doesNotMatch(texto, /DEPOIS DO TETO/);
+  assert.match(texto, /carência explicada/, 'UTF-8 cortado no meio de um caractere não vira mojibake');
+  assert.match(r.fontes[0]!.detalhe, /lida até/);
+});
+
+test('site: a leitura inteira tem prazo, somando saltos e páginas extras', async () => {
+  const { rede } = redeFalsa({
+    'https://a.com.br/': { corpo: `<p>${TEXTO_LONGO}</p><a href="/sobre">Sobre</a>` },
+    'https://a.com.br/sobre': { corpo: `<p>${TEXTO_LONGO}</p>`, demoraMs: 2000 },
+  }, {}, { prazoTotalMs: 150 });
+  const vivo = setTimeout(() => undefined, 5000);
+  const t0 = performance.now();
+  const r = await lerSite('a.com.br', rede);
+  clearTimeout(vivo);
+  assert.ok(performance.now() - t0 < 1500);
+  assert.equal(r.fontes[0]!.lida, true);
+  assert.match(r.fontes[1]!.detalhe, /a leitura do site passou de 0 s e parou aqui/);
 });
 
 test('site: o charset que o site declara', async () => {
@@ -310,23 +495,29 @@ test('site: o charset que o site declara', async () => {
   assert.match((((await lerSite('a.com.br', porCabecalho.rede)).partes[0]) as { texto: string }).texto, /ação/);
   const porMeta = redeFalsa({ 'https://a.com.br/': { tipo: 'text/html', corpo: new Uint8Array([...b('<meta charset="windows-1252">'), ...latin]) } });
   assert.match((((await lerSite('a.com.br', porMeta.rede)).partes[0]) as { texto: string }).texto, /ação/);
+  // O rótulo tem de MANDAR: UTF-8 válido declarado como iso-8859-2 é lido como iso-8859-2.
+  const declarado = new Uint8Array([...b('<p>'), 0xe3, 0x20, ...b(TEXTO_LONGO), ...b('</p>')]);
+  const l2 = redeFalsa({ 'https://a.com.br/': { tipo: 'text/html; charset=iso-8859-2', corpo: declarado } });
+  assert.match((((await lerSite('a.com.br', l2.rede)).partes[0]) as { texto: string }).texto, /^\[Site\][^\n]*\nă /m);
+  const m2 = redeFalsa({ 'https://a.com.br/': { tipo: 'text/html', corpo: new Uint8Array([...b('<meta charset="iso-8859-2">'), ...declarado]) } });
+  assert.match((((await lerSite('a.com.br', m2.rede)).partes[0]) as { texto: string }).texto, /\nă /);
 });
 
 // ---------------------------------------------------------------------------
 // Materiais e Instagram, como chegam à function
 // ---------------------------------------------------------------------------
 
-test('material: PDF e imagem só vão a quem os lê; texto vai a todos', () => {
+test('material: PDF e imagem só vão a quem os lê, com o rótulo que o modelo lê antes; texto vai a todos', () => {
   const pdf = { nome: 'catalogo.pdf', origem: 'material' as const, base64: b64(PDF) };
   const lido = lerMaterial(pdf, 'anthropic', true);
-  assert.deepEqual(lido.parte, { tipo: 'pdf', nome: 'catalogo.pdf', base64: b64(PDF) });
+  assert.deepEqual(lido.parte, { tipo: 'pdf', nome: 'catalogo.pdf', rotulo: '[Arquivo] catalogo.pdf', base64: b64(PDF) });
   assert.equal(lido.fonte.lida, true);
   const recusado = lerMaterial(pdf, 'deepseek', false);
   assert.equal(recusado.parte, null);
   assert.match(recusado.fonte.detalhe, /\(deepseek\) não lê PDF nem imagem.*Claude, OpenAI ou OpenRouter/);
 
   const print = lerMaterial({ nome: 'perfil.jpg', origem: 'instagram', base64: b64(PNG) }, 'openai', true);
-  assert.deepEqual(print.parte, { tipo: 'imagem', nome: 'perfil.jpg', mime: 'image/png', base64: b64(PNG) });
+  assert.deepEqual(print.parte, { tipo: 'imagem', nome: 'perfil.jpg', rotulo: '[Instagram] print perfil.jpg', mime: 'image/png', base64: b64(PNG) });
   assert.equal(print.fonte.rotulo, 'print do Instagram (perfil.jpg)');
 
   const txt = lerMaterial({ nome: 'sobre.txt', origem: 'material', base64: b64(new Uint8Array([0x61, 0xe7, 0xe3, 0x6f, 0x0d, 0x0a, 0x6f, 0x6b])) }, 'deepseek', false);
@@ -363,15 +554,62 @@ test('instagram: o @ não se lê por robô; o que se lê é o que a pessoa colou
   assert.match(lerInstagram('x', 'a'.repeat(6000)).fonte!.detalhe, /lido até 5\.000/);
 });
 
+test('instagram: link de publicação no campo do perfil não vira "@p"', () => {
+  for (const s of ['https://www.instagram.com/p/C8xYz12AbC/?igsh=abc', 'instagram.com/reel/X/', 'https://instagram.com/stories/x/1']) {
+    const p = perfilDoInstagram(s);
+    assert.match(p.motivo ?? '', /link de uma publicação/, s);
+    const r = lerInstagram(s, '');
+    assert.equal(r.parte, null);
+    assert.equal(r.fonte!.lida, false);
+  }
+  assert.deepEqual(perfilDoInstagram('@corretora'), { handle: 'corretora', motivo: null });
+  assert.deepEqual(perfilDoInstagram(''), { handle: '', motivo: null });
+  const comTexto = lerInstagram('https://www.instagram.com/reel/X/', 'bio');
+  assert.equal(comTexto.fonte!.rotulo, 'perfil do Instagram');
+});
+
+// ---------------------------------------------------------------------------
+// O que se pede, e o que volta
+// ---------------------------------------------------------------------------
+
 test('sem informação: só quando a resposta É a marca', () => {
   assert.equal(semInformacao(SEM_INFORMACAO), true);
   assert.equal(semInformacao(' [sem informacao]. '), true);
   assert.equal(semInformacao('A Corretora Exemplo vende planos. Sobre preços: [SEM INFORMAÇÃO] nos materiais.'), false);
 });
 
-// ---------------------------------------------------------------------------
-// O pedido ao modelo, com anexos
-// ---------------------------------------------------------------------------
+test('divergência sai do texto: o que vem depois de PARA CONFERIR não entra no agente', () => {
+  const r = separarConferir('A Corretora Exemplo vende planos.\n- Plano Bronze (site).\n\nPARA CONFERIR:\n- Essencial: R$ 289,90 (site) e R$ 249,90 (arquivo tabela-2023.pdf)');
+  assert.equal(r.texto, 'A Corretora Exemplo vende planos.\n- Plano Bronze (site).');
+  assert.equal(r.conferir, '- Essencial: R$ 289,90 (site) e R$ 249,90 (arquivo tabela-2023.pdf)');
+  assert.doesNotMatch(r.texto, /289|249/);
+  assert.deepEqual(separarConferir('Texto.\nPara conferir: nenhuma.'), { texto: 'Texto.', conferir: '' });
+  assert.deepEqual(separarConferir('Só texto.'), { texto: 'Só texto.', conferir: '' });
+  assert.deepEqual(separarConferir('Texto.\n**PARA CONFERIR:** o prazo de carência diverge'), { texto: 'Texto.', conferir: 'o prazo de carência diverge' });
+});
+
+test('o formato que o prompt pede é o que o freio lê: valor e "sem carência" passam, telefone não vira preço', () => {
+  // As três regras de formato do SISTEMA_DA_COLETA, cada uma posta contra o freio de verdade.
+  assert.match(SISTEMA_DA_COLETA, /Uma condição por linha/);
+  assert.match(SISTEMA_DA_COLETA, /Ausência se escreve com "sem"/);
+  assert.match(SISTEMA_DA_COLETA, /Telefone, endereço, horário e site ficam numa linha própria/);
+  const contexto = [
+    'A Corretora Exemplo vende planos de saúde em Sorocaba.',
+    '- Plano Empresarial: R$ 150,00 por vida (site, página Planos).',
+    '- Sem taxa de adesão no Plano Empresarial (site, página Planos).',
+    '- Sem carência para consultas no Plano Empresarial (site, página Planos).',
+    '- Atendimento: (11) 4004-1234, das 8h às 20h.',
+  ].join('\n');
+  const freio = (t: string) => aplicarFreios(t, { proibido: [], tamanho_maximo: null, canal: 'whatsapp', contexto, objetivo: 'resgate' }).situacao;
+  assert.equal(freio('O Empresarial custa R$ 150,00 por vida.'), 'pronto');
+  assert.equal(freio('No Empresarial não tem carência para consultas.'), 'pronto');
+  assert.equal(freio('O plano custa R$ 20,00.'), 'bloqueado', 'o horário do atendimento não vira preço');
+  assert.equal(freio('O plano custa R$ 1.234,00.'), 'bloqueado', 'o telefone não vira preço');
+  // E o formato que o prompt proíbe é o que dava errado.
+  const negando = contexto.replace('Sem carência para consultas', 'Não há carência para consultas');
+  assert.equal(aplicarFreios('No Empresarial não tem carência para consultas.',
+    { proibido: [], tamanho_maximo: null, canal: 'whatsapp', contexto: negando, objetivo: 'resgate' }).situacao, 'bloqueado');
+});
 
 function modeloFalso(respostas: (() => Response)[] = []) {
   const pedidos: { url: string; headers: Headers; corpo: Record<string, unknown>; temPrazo: boolean }[] = [];
@@ -389,34 +627,36 @@ function modeloFalso(respostas: (() => Response)[] = []) {
 const CRED = { api_key: 'sk-teste', base_url: '' };
 const ANEXOS: Parte[] = [
   { tipo: 'texto', texto: 'A empresa se chama X.' },
-  { tipo: 'pdf', nome: 'catalogo.pdf', base64: b64(PDF) },
-  { tipo: 'imagem', nome: 'p.png', mime: 'image/png', base64: b64(PNG) },
+  { tipo: 'pdf', nome: 'catalogo.pdf', rotulo: '[Arquivo] catalogo.pdf', base64: b64(PDF) },
+  { tipo: 'imagem', nome: 'p.png', rotulo: '[Instagram] print p.png', mime: 'image/png', base64: b64(PNG) },
 ];
 
 test('leitura: quem lê anexo é subconjunto de quem tem adapter', () => {
   for (const p of LEEM_ANEXOS) assert.ok((PROVEDORES_IA_COM_ADAPTER as readonly string[]).includes(p), p);
 });
 
-test('leitura: no Claude, os blocos document e image no lugar do texto — o resto é o pedido de ia.ts', async () => {
+test('leitura: no Claude, cada anexo com o rótulo antes e o documento com o nome — o resto é o pedido de ia.ts', async () => {
   const m = modeloFalso();
-  const r = await criarLeitor('anthropic', m.buscar).ler({ credenciais: CRED, modelo: 'claude-x', sistema: 'S', partes: ANEXOS, maxTokens: 3000 });
+  const r = await criarLeitor('anthropic', m.buscar).ler({ credenciais: CRED, modelo: 'claude-x', sistema: 'S', partes: ANEXOS, maxTokens: 16000 });
   assert.deepEqual(r, { ok: true, texto: 'ok' });
   const p = m.pedidos[0]!;
   assert.equal(p.url, 'https://api.anthropic.com/v1/messages');
   assert.equal(p.headers.get('x-api-key'), 'sk-teste');
   assert.ok(p.temPrazo);
   assert.deepEqual(p.corpo, {
-    model: 'claude-x', max_tokens: 3000, system: 'S',
+    model: 'claude-x', max_tokens: 16000, system: 'S',
     messages: [{ role: 'user', content: [
       { type: 'text', text: 'A empresa se chama X.' },
-      { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: b64(PDF) } },
+      { type: 'text', text: '[Arquivo] catalogo.pdf' },
+      { type: 'document', title: 'catalogo.pdf', source: { type: 'base64', media_type: 'application/pdf', data: b64(PDF) } },
+      { type: 'text', text: '[Instagram] print p.png' },
       { type: 'image', source: { type: 'base64', media_type: 'image/png', data: b64(PNG) } },
     ] }],
   });
   assert.deepEqual((p.corpo.messages as { content: unknown }[])[0]!.content, blocosDoClaude(ANEXOS));
 });
 
-test('leitura: na OpenAI e no OpenRouter, file e image_url — com o teto de tokens de ia.ts', async () => {
+test('leitura: na OpenAI e no OpenRouter, file e image_url com o rótulo antes — e o teto de tokens de ia.ts', async () => {
   for (const [provedor, url] of [['openai', 'https://api.openai.com/v1/chat/completions'],
     ['openrouter', 'https://openrouter.ai/api/v1/chat/completions']] as const) {
     const m = modeloFalso();
@@ -426,9 +666,13 @@ test('leitura: na OpenAI e no OpenRouter, file e image_url — com o teto de tok
     const msgs = p.corpo.messages as { role: string; content: unknown }[];
     assert.deepEqual(msgs[0], { role: 'system', content: 'S' });
     assert.deepEqual(msgs[1]!.content, partesDoChat(ANEXOS));
-    assert.deepEqual((msgs[1]!.content as unknown[])[1],
-      { type: 'file', file: { filename: 'catalogo.pdf', file_data: `data:application/pdf;base64,${b64(PDF)}` } });
-    assert.deepEqual((msgs[1]!.content as unknown[])[2], { type: 'image_url', image_url: { url: `data:image/png;base64,${b64(PNG)}` } });
+    assert.deepEqual(msgs[1]!.content, [
+      { type: 'text', text: 'A empresa se chama X.' },
+      { type: 'text', text: '[Arquivo] catalogo.pdf' },
+      { type: 'file', file: { filename: 'catalogo.pdf', file_data: `data:application/pdf;base64,${b64(PDF)}` } },
+      { type: 'text', text: '[Instagram] print p.png' },
+      { type: 'image_url', image_url: { url: `data:image/png;base64,${b64(PNG)}` } },
+    ]);
     if (provedor === 'openai') {
       assert.equal(p.corpo.max_completion_tokens, 6000, 'gpt-5.5 raciocina: a folga de ia.ts vale aqui também');
       assert.equal(p.corpo.reasoning_effort, 'low');

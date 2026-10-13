@@ -10,15 +10,16 @@
 //
 // A ordem é a de quem paga cada passo: o que se confere no pedido vem antes da
 // conta; a conta, antes de ir ao site de alguém; o site e os arquivos, antes
-// do segredo; e o modelo só é chamado quando há o que ler.
+// do segredo; e o modelo só é chamado quando há o que ler — e quando ainda há
+// tempo para ele responder dentro dos 150 s da edge function.
 
 import type { Buscador } from '../adapters/tipos.ts';
 import { juntarCredenciais, PROVEDORES_IA_COM_ADAPTER } from '../adapters/ia.ts';
 import type { Leitor, Parte } from '../adapters/ia-leitura.ts';
-import { criarLeitor, leAnexos } from '../adapters/ia-leitura.ts';
+import { criarLeitor, leAnexos, PRAZO_DO_MODELO_MS } from '../adapters/ia-leitura.ts';
 import {
-  cabecalhoDaLeitura, cabemJuntos, lerInstagram, lerMaterial, lerSite, MAX_ARQUIVOS, semInformacao,
-  SISTEMA_DA_COLETA, tamanhoDoBase64,
+  cabecalhoDaLeitura, cabemJuntos, cortar, lerInstagram, lerMaterial, lerSite, MAX_ARQUIVOS, semInformacao,
+  separarConferir, SISTEMA_DA_COLETA, tamanhoDoBase64,
 } from '../adapters/coleta.ts';
 import type { Fonte, MaterialDoPedido } from '../adapters/coleta.ts';
 import { TETOS_DO_AGENTE } from '../adapters/prompt-do-agente.ts';
@@ -43,7 +44,14 @@ export interface PortaDaColeta {
 export interface RedeDaColeta {
   /** Para o site da empresa. A conta de IA usa o `buscar` do leitor. */
   readonly buscar: Buscador;
-  readonly resolver: (host: string) => Promise<string[]>;
+  readonly resolver: (host: string, sinal?: AbortSignal) => Promise<string[]>;
+}
+
+export interface OpcoesDaColeta {
+  /** O leitor da conta, com o prazo que sobrou. Os testes trocam por um de mentira. */
+  readonly criar?: (provedor: string, prazoMs: number) => Leitor;
+  /** O relógio, em ms. */
+  readonly agora?: () => number;
 }
 
 export type PedidoDaColeta = {
@@ -51,7 +59,7 @@ export type PedidoDaColeta = {
 };
 
 export type ResultadoDaColeta =
-  | { ok: true; situacao: 'pronto'; texto: string; fontes: Fonte[]; modelo: string }
+  | { ok: true; situacao: 'pronto'; texto: string; conferir: string; fontes: Fonte[]; modelo: string }
   | { ok: true; situacao: 'nada_lido' | 'sem_informacao' | 'erro'; motivo: string; fontes: Fonte[]; modelo: string };
 
 export type RespostaDaColeta =
@@ -60,8 +68,16 @@ export type RespostaDaColeta =
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-/** O rascunho: um resumo, não o material inteiro. A tela tem o teto do campo (20 000). */
+/**
+ * O teto de tokens da resposta. No chat completions é o rascunho, e o que
+ * raciocina ganha a folga de `ia.ts`. No Claude, o teto vale para o
+ * raciocínio E o texto, e os modelos atuais raciocinam sem que se peça: com
+ * 3000, um material grande acabava em "texto cortado". O teto não muda o
+ * custo — o que se paga é o que o modelo escreve — e o tamanho do rascunho é
+ * barrado adiante, no teto do campo.
+ */
 export const TOKENS_DA_LEITURA = 3000;
+export const TOKENS_DA_LEITURA_CLAUDE = 16_000;
 
 /**
  * Teto do texto que vai ao modelo, somando site, perfil e arquivos — fora o
@@ -71,33 +87,50 @@ export const TOKENS_DA_LEITURA = 3000;
  */
 export const TETO_DO_TEXTO_LIDO = 160_000;
 
+/** O pedido inteiro, abaixo dos 150 s em que o Supabase devolve 504 sem corpo. */
+export const PRAZO_TOTAL_MS = 140_000;
+/** Menos que isto para o modelo, e a leitura é recusada antes de ser paga. */
+export const PRAZO_MINIMO_DO_MODELO_MS = 20_000;
+
+/** O erro de quem não lê o anexo: o OpenRouter devolve 404, a OpenAI 400. */
+const NAO_LE_ANEXO = /image|imagem|file|pdf|document|modalit|vision|multimodal/i;
+
 function recusa(status: 400 | 401 | 404 | 409 | 413, erro: string): RespostaDaColeta {
   return { status, corpo: { ok: false, erro } };
 }
 
 function texto(v: unknown, max: number): string {
-  return typeof v === 'string' ? v.trim().slice(0, max) : '';
+  return typeof v === 'string' ? cortar(v.trim(), max) : '';
 }
 
 type Leitura = { site: string; handle: string; perfil: string; materiais: MaterialDoPedido[] };
 
-/** O pedido, só com o tipo e o tamanho conferidos. O conteúdo é conferido por quem o lê. */
+/**
+ * O pedido, só com o tipo e o tamanho conferidos. O conteúdo é conferido por
+ * quem o lê. Nada que vai virar uma decisão é cortado aqui: o nome do arquivo
+ * cortado perdia a extensão, e o PDF que a tela aceitou era recusado como "não
+ * é PDF". Grande demais é recusa dita.
+ */
 function lerPedido(p: PedidoDaColeta): Leitura | string {
-  const site = texto(p.site, 2000);
+  if (typeof p.site === 'string' && p.site.trim().length > 2000) return 'o endereço do site é longo demais';
+  const site = typeof p.site === 'string' ? p.site.trim() : '';
   const ig = p.instagram && typeof p.instagram === 'object' && !Array.isArray(p.instagram)
     ? p.instagram as Record<string, unknown> : {};
-  const handle = texto(ig.handle, 200);
-  // O texto colado vai ao modelo como está: cortar aqui seria o teto do
-  // perfil passando em silêncio. `lerInstagram` corta e diz que cortou.
-  const perfil = typeof ig.texto === 'string' ? ig.texto.slice(0, 50_000) : '';
+  if (typeof ig.handle === 'string' && ig.handle.trim().length > 200) return 'o @ do Instagram é longo demais';
+  const handle = typeof ig.handle === 'string' ? ig.handle.trim() : '';
+  // O texto colado vai ao modelo como está, até o teto do perfil, que
+  // `lerInstagram` aplica dizendo que cortou.
+  const perfil = typeof ig.texto === 'string' ? cortar(ig.texto, 50_000) : '';
   if (p.materiais !== undefined && !Array.isArray(p.materiais)) return 'materiais inválidos';
   const brutos = (p.materiais ?? []) as unknown[];
   if (brutos.length > MAX_ARQUIVOS) return `até ${MAX_ARQUIVOS} arquivos por leitura`;
   const materiais: MaterialDoPedido[] = [];
   for (const m of brutos) {
     const o = m && typeof m === 'object' && !Array.isArray(m) ? m as Record<string, unknown> : null;
-    const nome = o ? texto(o.nome, 200) : '';
+    const nome = o && typeof o.nome === 'string' ? o.nome.trim() : '';
     if (!o || !nome || typeof o.base64 !== 'string') return 'cada arquivo precisa de nome e conteúdo';
+    // O teto do nome de verdade (200) é de `conferirArquivo`, que recusa só o arquivo, dizendo por quê.
+    if (nome.length > 1000) return 'nome de arquivo inválido';
     materiais.push({ nome, origem: o.origem === 'instagram' ? 'instagram' : 'material', base64: o.base64 });
   }
   if (!site && !handle && !perfil.trim() && !materiais.length) {
@@ -106,16 +139,19 @@ function lerPedido(p: PedidoDaColeta): Leitura | string {
   return { site, handle, perfil, materiais };
 }
 
+type Juntada = { parte: Parte; fonte: number };
+
 /**
  * O texto lido entra até o teto, em ordem; o que passa é cortado na fonte que
  * o passou, e a linha dela diz isso. O que vem depois do teto não entra, e
  * também diz.
  */
-function noTeto(partes: { parte: Parte; fonte: number }[], fontes: Fonte[]): Parte[] {
+function noTeto(partes: readonly Juntada[], fontes: Fonte[]): Juntada[] {
   let resta = TETO_DO_TEXTO_LIDO;
-  const saida: Parte[] = [];
-  for (const { parte, fonte } of partes) {
-    if (parte.tipo !== 'texto') { saida.push(parte); continue; }
+  const saida: Juntada[] = [];
+  for (const j of partes) {
+    const { parte, fonte } = j;
+    if (parte.tipo !== 'texto') { saida.push(j); continue; }
     const f = fontes[fonte]!;
     if (resta <= 0) {
       fontes[fonte] = { ...f, lida: false, detalhe: `${f.detalhe}; ficou de fora: o texto das outras fontes já enche a leitura` };
@@ -123,20 +159,22 @@ function noTeto(partes: { parte: Parte; fonte: number }[], fontes: Fonte[]): Par
     }
     if (parte.texto.length > resta) {
       fontes[fonte] = { ...f, detalhe: `${f.detalhe}; cortado no teto da leitura (${TETO_DO_TEXTO_LIDO.toLocaleString('pt-BR')} caracteres somando tudo)` };
-      saida.push({ tipo: 'texto', texto: parte.texto.slice(0, resta) });
+      saida.push({ parte: { tipo: 'texto', texto: cortar(parte.texto, resta) }, fonte });
       resta = 0;
       continue;
     }
     resta -= parte.texto.length;
-    saida.push(parte);
+    saida.push(j);
   }
   return saida;
 }
 
 export async function colherDoPedido(
-  porta: PortaDaColeta, pedido: PedidoDaColeta, rede: RedeDaColeta,
-  criar: (provedor: string) => Leitor = (provedor) => criarLeitor(provedor),
+  porta: PortaDaColeta, pedido: PedidoDaColeta, rede: RedeDaColeta, opcoes: OpcoesDaColeta = {},
 ): Promise<RespostaDaColeta> {
+  const agora = opcoes.agora ?? Date.now;
+  const criar = opcoes.criar ?? ((provedor: string, prazoMs: number) => criarLeitor(provedor, fetch, prazoMs));
+  const inicio = agora();
   if (!(await porta.pessoaLogada())) return recusa(401, 'entre com a sua conta');
 
   const id = typeof pedido.credencial_id === 'string' ? pedido.credencial_id : '';
@@ -155,12 +193,16 @@ export async function colherDoPedido(
   }
 
   const fontes: Fonte[] = [];
-  const partes: { parte: Parte; fonte: number }[] = [];
+  const juntadas: Juntada[] = [];
   let conteudo = false;
+  let conteudoEmTexto = false;
   // `material`: a parte é o que ler, e não só um dado ao lado (o @ sozinho).
   const juntar = (parte: Parte | null, fonte: Fonte | null, material = true) => {
     if (fonte) fontes.push(fonte);
-    if (parte) { partes.push({ parte, fonte: fontes.length - 1 }); conteudo ||= material; }
+    if (!parte) return;
+    juntadas.push({ parte, fonte: fontes.length - 1 });
+    conteudo ||= material;
+    conteudoEmTexto ||= material && parte.tipo === 'texto';
   };
 
   if (lido.site) {
@@ -178,6 +220,7 @@ export async function colherDoPedido(
   }
 
   const modelo = conta.modelo;
+  const erro = (motivo: string): RespostaDaColeta => ({ status: 200, corpo: { ok: true, situacao: 'erro', modelo, fontes, motivo } });
   if (!conteudo) {
     return { status: 200, corpo: { ok: true, situacao: 'nada_lido', modelo, fontes,
       motivo: 'nada do que foi marcado pôde ser lido — o motivo de cada fonte está na lista' } };
@@ -187,23 +230,44 @@ export async function colherDoPedido(
   try {
     credenciais = juntarCredenciais(conta.config, await porta.segredo(id));
   } catch {
-    return { status: 200, corpo: { ok: true, situacao: 'erro', modelo, fontes,
-      motivo: 'o segredo desta conta não pôde ser lido — salve a chave de novo em Configurações' } };
+    return erro('o segredo desta conta não pôde ser lido — salve a chave de novo em Configurações');
   }
 
-  const r = await criar(conta.provedor).ler({
-    credenciais, modelo, sistema: SISTEMA_DA_COLETA, maxTokens: TOKENS_DA_LEITURA,
-    partes: [cabecalhoDaLeitura(texto(pedido.empresa, 120)), ...noTeto(partes, fontes)],
-  });
-  if (!r.ok) return { status: 200, corpo: { ok: true, situacao: 'erro', modelo, fontes, motivo: r.erro } };
+  const cabecalho = cabecalhoDaLeitura(texto(pedido.empresa, 120));
+  const ler = (escolhidas: readonly Juntada[]) => {
+    const prazo = Math.min(PRAZO_DO_MODELO_MS, PRAZO_TOTAL_MS - (agora() - inicio));
+    if (prazo < PRAZO_MINIMO_DO_MODELO_MS) return null;
+    return criar(conta.provedor, prazo).ler({
+      credenciais, modelo, sistema: SISTEMA_DA_COLETA,
+      maxTokens: conta.provedor === 'anthropic' ? TOKENS_DA_LEITURA_CLAUDE : TOKENS_DA_LEITURA,
+      partes: [cabecalho, ...escolhidas.map((j) => j.parte)],
+    });
+  };
+  const SEM_TEMPO = 'a leitura do site levou tempo demais e não sobrou tempo para o modelo: tente de novo, ou sem o site';
+
+  const noLimite = noTeto(juntadas, fontes);
+  let r = await ler(noLimite);
+  if (!r) return erro(SEM_TEMPO);
+  // O modelo que não lê imagem (no OpenRouter, quem lê é o modelo, não o
+  // provedor) recusa o pedido INTEIRO. O anexo sai, dizendo por quê, e o resto
+  // é lido de novo — em vez de o site já lido se perder junto.
+  const deAnexo = noLimite.filter((j) => j.parte.tipo !== 'texto');
+  if (!r.ok && r.definitivo && deAnexo.length && NAO_LE_ANEXO.test(r.erro)) {
+    const motivo = `o modelo ${modelo} não aceitou o anexo (${r.erro}): leia com um modelo que leia imagem e PDF, ou anexe o texto em .txt`;
+    for (const j of deAnexo) fontes[j.fonte] = { ...fontes[j.fonte]!, lida: false, detalhe: motivo };
+    if (!conteudoEmTexto) return erro(motivo);
+    r = await ler(noLimite.filter((j) => j.parte.tipo === 'texto'));
+    if (!r) return erro(SEM_TEMPO);
+  }
+  if (!r.ok) return erro(r.erro);
   if (semInformacao(r.texto)) {
     return { status: 200, corpo: { ok: true, situacao: 'sem_informacao', modelo, fontes,
       motivo: 'o modelo leu e não achou nada sobre a empresa nos materiais' } };
   }
-  const rascunho = r.texto.trim();
+  const { texto: rascunho, conferir } = separarConferir(r.texto);
+  if (!rascunho) return erro('o modelo devolveu só divergências, sem texto sobre a empresa');
   if (rascunho.length > TETOS_DO_AGENTE.contexto) {
-    return { status: 200, corpo: { ok: true, situacao: 'erro', modelo, fontes,
-      motivo: `o rascunho passou de ${TETOS_DO_AGENTE.contexto.toLocaleString('pt-BR')} caracteres; leia menos material de uma vez` } };
+    return erro(`o rascunho passou de ${TETOS_DO_AGENTE.contexto.toLocaleString('pt-BR')} caracteres; leia menos material de uma vez`);
   }
-  return { status: 200, corpo: { ok: true, situacao: 'pronto', texto: rascunho, modelo, fontes } };
+  return { status: 200, corpo: { ok: true, situacao: 'pronto', texto: rascunho, conferir, modelo, fontes } };
 }

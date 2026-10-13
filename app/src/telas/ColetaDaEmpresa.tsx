@@ -51,7 +51,10 @@ export function ColetaDaEmpresa({ contexto, aoUsar, contas, provedores, contaDoA
   const [e, setE] = useState<EstadoDaColeta>(COLETA_VAZIA);
   const [contaId, setContaId] = useState(() => contaPadraoDaLeitura(contas, temAdapter, contaDoAgente || null)?.id ?? '');
   const [lendo, setLendo] = useState(false);
-  const [res, setRes] = useState<ResultadoDaColeta | null>(null);
+  // O resultado leva o nome da conta que LEU: trocar o select depois não muda a quem o texto é atribuído.
+  const [res, setRes] = useState<(ResultadoDaColeta & { lidoCom: string }) | null>(null);
+  // Arquivos sendo lidos do disco: enquanto houver, "Ler" esperaria um pedido sem eles.
+  const [anexando, setAnexando] = useState(0);
   const [erro, setErro] = useState('');
   const [recusas, setRecusas] = useState<string[]>([]);
   // O texto de antes e o que o rascunho deixou: "Desfazer" só enquanto o
@@ -77,24 +80,29 @@ export function ColetaDaEmpresa({ contexto, aoUsar, contas, provedores, contaDoA
   const mudar = (n: Partial<EstadoDaColeta>) => { setE((x) => ({ ...x, ...n })); setErro(''); };
 
   async function anexar(lista: FileList | null, origem: Anexo['origem']) {
-    if (!lista) return;
+    if (!lista?.length) return;
     setRecusas([]);
+    setAnexando((n) => n + 1);
     const novos: Anexo[] = [];
     const recusados: string[] = [];
-    for (const f of Array.from(lista)) {
-      const cabeca = new Uint8Array(await f.slice(0, CABECA).arrayBuffer());
-      // Os que acabaram de entrar contam para o próximo: dez de uma vez não passam do teto juntos.
-      const pode = podeAnexar({ ...e, anexos: [...e.anexos, ...novos] }, { nome: f.name, tamanho: f.size, cabeca }, origem);
-      if (!pode.ok) { recusados.push(pode.motivo); continue; }
-      try {
-        novos.push({ id: crypto.randomUUID(), nome: f.name, tamanho: f.size, tipo: pode.tipo, origem, base64: await base64DoArquivo(f) });
-      } catch (x) {
-        recusados.push(`"${f.name}": ${mensagemDeErro(x)}`);
+    try {
+      for (const f of Array.from(lista)) {
+        const cabeca = new Uint8Array(await f.slice(0, CABECA).arrayBuffer());
+        // Os que acabaram de entrar contam para o próximo: dez de uma vez não passam do teto juntos.
+        const pode = podeAnexar({ ...e, anexos: [...e.anexos, ...novos] }, { nome: f.name, tamanho: f.size, cabeca }, origem);
+        if (!pode.ok) { recusados.push(pode.motivo); continue; }
+        try {
+          novos.push({ id: crypto.randomUUID(), nome: f.name, tamanho: f.size, tipo: pode.tipo, origem, base64: await base64DoArquivo(f) });
+        } catch (x) {
+          recusados.push(`"${f.name}": ${mensagemDeErro(x)}`);
+        }
       }
+      setE((x) => ({ ...x, anexos: [...x.anexos, ...novos] }));
+      // Somando: duas escolhas de arquivo seguidas não apagam a recusa uma da outra.
+      if (recusados.length) setRecusas((r) => [...r, ...recusados]);
+    } finally {
+      setAnexando((n) => n - 1);
     }
-    setE((x) => ({ ...x, anexos: [...x.anexos, ...novos] }));
-    // Somando: duas escolhas de arquivo seguidas não apagam a recusa uma da outra.
-    if (recusados.length) setRecusas((r) => [...r, ...recusados]);
   }
 
   function tirar(id: string) {
@@ -103,10 +111,10 @@ export function ColetaDaEmpresa({ contexto, aoUsar, contas, provedores, contaDoA
   }
 
   async function ler() {
-    if (!conta || falta.length || emCurso.current) return;
+    if (!conta || falta.length || anexando || emCurso.current) return;
     emCurso.current = true;
     setLendo(true); setErro(''); setRes(null);
-    try { setRes(await lerEmpresa(pedidoDaColeta(e, conta.id, empresa))); }
+    try { setRes({ ...await lerEmpresa(pedidoDaColeta(e, conta.id, empresa)), lidoCom: conta.nome }); }
     catch (x) { setErro(mensagemDeErro(x)); }
     finally { setLendo(false); emCurso.current = false; }
   }
@@ -128,7 +136,7 @@ export function ColetaDaEmpresa({ contexto, aoUsar, contas, provedores, contaDoA
           <li key={a.id}>
             <span className="mono">{a.nome}</span>
             <span className="nota-tela">{NOME_DO_TIPO[a.tipo]} · {emMb(a.tamanho)}</span>
-            <button className="link" type="button" disabled={lendo} onClick={() => tirar(a.id)}>tirar</button>
+            <button className="link" type="button" disabled={lendo} aria-label={`tirar ${a.nome}`} onClick={() => tirar(a.id)}>tirar</button>
           </li>
         ))}
       </ul>
@@ -173,7 +181,7 @@ export function ColetaDaEmpresa({ contexto, aoUsar, contas, provedores, contaDoA
               </div>
               <input ref={entradaPrints} type="file" accept={ACEITA_IMAGEM} multiple style={{ display: 'none' }}
                      onChange={(ev) => { void anexar(ev.target.files, 'instagram'); ev.target.value = ''; }} />
-              <button className="btn mini" type="button" disabled={lendo} onClick={() => entradaPrints.current?.click()}>
+              <button className="btn mini" type="button" disabled={lendo || anexando > 0} onClick={() => entradaPrints.current?.click()}>
                 Anexar prints do perfil</button>
               {listaDeAnexos('instagram')}
             </>
@@ -185,7 +193,7 @@ export function ColetaDaEmpresa({ contexto, aoUsar, contas, provedores, contaDoA
               <input id="col-materiais" ref={entradaMateriais} type="file" accept={ACEITA} multiple style={{ display: 'none' }}
                      onChange={(ev) => { void anexar(ev.target.files, 'material'); ev.target.value = ''; }} />
               <div>
-                <button className="btn mini" type="button" disabled={lendo}
+                <button className="btn mini" type="button" disabled={lendo || anexando > 0}
                         onClick={() => entradaMateriais.current?.click()}>Anexar arquivos</button>
               </div>
               {listaDeAnexos('material')}
@@ -216,8 +224,8 @@ export function ColetaDaEmpresa({ contexto, aoUsar, contas, provedores, contaDoA
           </div>
 
           {falta.length > 0 && <p className="nota-tela">Para ler, falta: {falta.join('; ')}.</p>}
-          <button className="btn" type="button" disabled={lendo || falta.length > 0 || !conta} onClick={() => void ler()}>
-            {lendo ? 'Lendo…' : 'Ler e escrever o rascunho'}</button>
+          <button className="btn" type="button" disabled={lendo || anexando > 0 || falta.length > 0 || !conta} onClick={() => void ler()}>
+            {lendo ? 'Lendo…' : anexando > 0 ? 'Anexando…' : 'Ler e escrever o rascunho'}</button>
           {lendo && <p className="nota-tela">Um site e alguns arquivos levam de alguns segundos a um minuto.</p>}
         </>
       )}
@@ -241,16 +249,21 @@ export function ColetaDaEmpresa({ contexto, aoUsar, contas, provedores, contaDoA
               <div className="balao-teste">
                 <b>Rascunho de "Sobre a empresa e a oferta"</b>
                 <p>{res.texto}</p>
-                <span className="nota-tela">{res.texto.length.toLocaleString('pt-BR')} caracteres · lido com {conta?.nome ?? res.modelo}</span>
+                <span className="nota-tela">{res.texto.length.toLocaleString('pt-BR')} caracteres · lido com {res.lidoCom} ({res.modelo})</span>
               </div>
-              <Aviso tipo="neutro">Confira antes de usar, principalmente os números. Preço, carência e prazo que
-                estiverem neste texto o agente passa a poder dizer — o freio confere o que ele escreve contra o que está
-                aqui. Se o modelo errou um valor, corrija depois de usar.</Aviso>
+              {res.conferir && (
+                <Aviso tipo="neutro"><b>Os materiais divergem — nada disto foi para o rascunho:</b>
+                  <span className="conferir">{res.conferir}</span>
+                  Se a condição vale, escreva a versão certa no texto depois de usar.</Aviso>
+              )}
+              <Aviso tipo="neutro">Confira antes de usar, principalmente os números: preço, carência e prazo que
+                estiverem neste texto o agente passa a poder dizer, porque o freio confere o que ele escreve contra o que
+                está aqui. Número errado se corrige no texto acima, antes de salvar o agente.</Aviso>
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                 <button className="btn prim" type="button" onClick={() => usar('usar')}>
                   {contexto.trim() ? 'Usar no lugar do texto' : 'Usar este texto'}</button>
                 {contexto.trim() && <button className="btn" type="button" onClick={() => usar('acrescentar')}>Acrescentar ao texto</button>}
-                <button className="btn" type="button" onClick={() => setRes(null)}>Descartar</button>
+                <button className="btn" type="button" onClick={() => { setRes(null); setErro(''); }}>Descartar</button>
               </div>
             </>
           ) : (

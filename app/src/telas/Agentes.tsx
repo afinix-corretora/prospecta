@@ -184,7 +184,9 @@ function Construtor() {
   const agente = useMemo(() => (novo ? null : dados?.agentes.find((a) => a.id === id) ?? null), [dados, id, novo]);
   const [r, setR] = useState<Rascunho | null>(null);
   const [canais, setCanais] = useState<Set<CanalDoAgente>>(new Set());
-  const [desfazer, setDesfazer] = useState<{ antes: Rascunho; campos: string } | null>(null);
+  // Só os campos que a troca mudou: desfazer o rascunho INTEIRO apagaria o
+  // que foi escrito depois (o texto colhido do site, por exemplo).
+  const [desfazer, setDesfazer] = useState<{ antes: Partial<Rascunho>; campos: string } | null>(null);
   const [canalDaPrevia, setCanalDaPrevia] = useState<CanalDoAgente>('whatsapp');
   const [salvando, setSalvando] = useState(false);
   const [msg, setMsg] = useState<{ tipo: 'erro' | 'ok'; texto: string } | null>(null);
@@ -249,8 +251,11 @@ function Construtor() {
     const nomes: Partial<Record<keyof Rascunho, string>> = {
       tom: '"Como fala"', instrucoes: '"O que faz"', escalar_quando: '"Passa para uma pessoa quando"',
     };
+    const mudados = (Object.keys(troca.rascunho) as (keyof Rascunho)[]).filter((k) => troca.rascunho[k] !== r![k]);
     setDesfazer(troca.perdidos.length
-      ? { antes: r!, campos: troca.perdidos.map((k) => nomes[k] ?? k).join(' e ') } : null);
+      ? { antes: Object.fromEntries(mudados.map((k) => [k, r![k]])) as Partial<Rascunho>,
+          campos: troca.perdidos.map((k) => nomes[k] ?? k).join(' e ') }
+      : null);
     setR(troca.rascunho); setMsg(null);
   }
 
@@ -351,7 +356,7 @@ function Construtor() {
           catálogo depois não muda este agente.</p>
         {desfazer && (
           <Aviso tipo="neutro">O texto de {desfazer.campos} que você tinha ajustado foi trocado pelo do catálogo.{' '}
-            <button className="link" type="button" onClick={() => { setR(desfazer.antes); setDesfazer(null); }}>
+            <button className="link" type="button" onClick={() => { setR({ ...r, ...desfazer.antes }); setDesfazer(null); }}>
               Desfazer</button></Aviso>
         )}
 

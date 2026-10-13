@@ -722,6 +722,8 @@ export async function testarAgente(pedido: {
 export interface ResultadoDaColeta {
   situacao: 'pronto' | 'nada_lido' | 'sem_informacao' | 'erro';
   texto?: string;
+  /** No `pronto`: onde os materiais divergem. Fica FORA do texto — duas versões de um preço liberariam as duas. */
+  conferir?: string;
   motivo?: string;
   modelo?: string;
   fontes: Fonte[];

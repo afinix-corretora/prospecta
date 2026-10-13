@@ -2,15 +2,14 @@
 // não é desenho: o que está marcado, o que vai no pedido, o que falta para
 // ler, que arquivo entra e como o rascunho volta ao texto do agente.
 //
-// Quem confere arquivo e endereço é `@adapters/coleta.ts`, o MESMO arquivo que
+// Quem confere arquivo, endereço e @ é `adapters/coleta.ts`, o MESMO arquivo que
 // a edge function lê: a tela barra antes de mandar, a function confere de
 // novo, e as duas não têm como discordar (D32, D34). Pura, com teste em
 // `tests/coleta_tela.test.ts`.
 
-import { cabemJuntos, conferirArquivo, conferirEndereco } from '../../adapters/coleta.ts';
+import { cabemJuntos, conferirArquivo, conferirEndereco, perfilDoInstagram } from '../../adapters/coleta.ts';
 import type { TipoDeMaterial } from '../../adapters/coleta.ts';
 import { leAnexos } from '../../adapters/ia-leitura.ts';
-import { handleValido, normalizarHandle } from '../../adapters/instagram.ts';
 import { TETOS_DO_AGENTE } from '../../adapters/prompt-do-agente.ts';
 
 export type FonteDaColeta = 'site' | 'instagram' | 'materiais';
@@ -76,7 +75,8 @@ export function podeAnexar(
 /**
  * O que falta para ler, em palavras de quem preenche. Vazio é "pode ler".
  * Só o @ do Instagram não é material — a function responderia "nada lido"
- * depois de a pessoa esperar —, então ele sozinho também falta.
+ * depois de a pessoa esperar —, então ele falta quando é a ÚNICA coisa a ler.
+ * Com o site ou um arquivo indo junto, o @ vai como contato, e não falta nada.
  */
 export function oQueFaltaNaColeta(e: EstadoDaColeta, provedor: string | null): string[] {
   const falta: string[] = [];
@@ -84,27 +84,32 @@ export function oQueFaltaNaColeta(e: EstadoDaColeta, provedor: string | null): s
   if (!provedor) falta.push('a conta de IA que vai ler');
   const vao = anexosQueVao(e);
   const site = e.marcadas.has('site') ? e.site.trim() : '';
+  let siteVai = false;
   if (e.marcadas.has('site')) {
     if (!site) falta.push('o endereço do site');
     else {
       const conf = conferirEndereco(site);
       if (!conf.ok) falta.push(conf.motivo);
+      siteVai = conf.ok;
     }
   }
+  const materiaisVao = e.marcadas.has('materiais') && vao.some((a) => a.origem === 'material');
   if (e.marcadas.has('instagram')) {
-    const h = normalizarHandle(e.handle);
+    const perfil = perfilDoInstagram(e.handle);
     const prints = vao.some((a) => a.origem === 'instagram');
-    if (h && !handleValido(h)) falta.push(`um @ do Instagram válido ("${e.handle.trim()}" não é)`);
+    if (perfil.motivo) falta.push(`corrigir o @ do Instagram: "${e.handle.trim()}" ${perfil.motivo}`);
     else if (!e.perfil.trim() && !prints) {
-      falta.push(h ? 'o texto do perfil ou um print (só o @ não dá o que ler: o Instagram não deixa ler o perfil por robô)'
-        : 'o @, o texto do perfil ou um print');
+      if (!perfil.handle) falta.push('o @, o texto do perfil ou um print');
+      else if (!siteVai && !materiaisVao) {
+        falta.push('o texto do perfil ou um print (só o @ não dá o que ler: o Instagram não deixa ler o perfil por robô)');
+      }
     }
   }
-  if (e.marcadas.has('materiais') && !vao.some((a) => a.origem === 'material')) falta.push('pelo menos um arquivo');
+  if (e.marcadas.has('materiais') && !materiaisVao) falta.push('pelo menos um arquivo');
   const demais = cabemJuntos(vao.map((a) => a.tamanho));
   if (demais) falta.push(demais);
   if (provedor && !leAnexos(provedor) && vao.some((a) => a.tipo === 'pdf' || a.tipo === 'imagem')) {
-    falta.push(`uma conta que leia PDF e imagem (a escolhida é ${provedor}; Claude, OpenAI e OpenRouter leem) — ou tirar esses arquivos`);
+    falta.push(`uma conta que leia PDF e imagem (a escolhida é ${provedor}; Claude e OpenAI leem, e o OpenRouter, se o modelo ler) — ou tirar esses arquivos`);
   }
   return falta;
 }

@@ -21,10 +21,15 @@ import type { Buscador } from './tipos.ts';
 import type { Composicao } from './ia.ts';
 import { criarIa } from './ia.ts';
 
+/**
+ * O que vai ao modelo. PDF e imagem levam o `rotulo` que o modelo lê logo
+ * antes do anexo ("[Arquivo] tabela.pdf"): sem ele, o prompt pede a origem de
+ * cada preço e o modelo não tem de onde tirá-la.
+ */
 export type Parte =
   | { readonly tipo: 'texto'; readonly texto: string }
-  | { readonly tipo: 'pdf'; readonly nome: string; readonly base64: string }
-  | { readonly tipo: 'imagem'; readonly nome: string; readonly mime: 'image/png' | 'image/jpeg'; readonly base64: string };
+  | { readonly tipo: 'pdf'; readonly nome: string; readonly rotulo: string; readonly base64: string }
+  | { readonly tipo: 'imagem'; readonly nome: string; readonly rotulo: string; readonly mime: 'image/png' | 'image/jpeg'; readonly base64: string };
 
 export interface PedidoDeLeitura {
   readonly credenciais: Readonly<Record<string, string>>;
@@ -52,8 +57,8 @@ export function leAnexos(provedor: string): boolean {
   return (LEEM_ANEXOS as readonly string[]).includes(provedor);
 }
 
-/** Um PDF de 10 MB leva tempo para ser lido; mais que isto, a edge function
- *  inteira estouraria o próprio prazo antes de dizer por quê. */
+/** O teto do modelo. Quem chama desconta o que já gastou (o site, por
+ *  exemplo): é a soma que precisa caber nos 150 s da edge function. */
 export const PRAZO_DO_MODELO_MS = 120_000;
 
 function textoDasPartes(partes: readonly Parte[]): string {
@@ -61,20 +66,21 @@ function textoDasPartes(partes: readonly Parte[]): string {
     .map((p) => p.texto).join('\n\n');
 }
 
-/** Os blocos do Claude. A documentação pede o documento antes do texto que fala dele. */
+/** Os blocos do Claude: cada anexo com o rótulo em texto logo antes, e o
+ *  documento com o nome em `title`. */
 export function blocosDoClaude(partes: readonly Parte[]): unknown[] {
-  return partes.map((p) => p.tipo === 'texto' ? { type: 'text', text: p.texto }
-    : p.tipo === 'pdf'
-      ? { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: p.base64 } }
-      : { type: 'image', source: { type: 'base64', media_type: p.mime, data: p.base64 } });
+  return partes.flatMap((p) => p.tipo === 'texto' ? [{ type: 'text', text: p.texto }]
+    : [{ type: 'text', text: p.rotulo }, p.tipo === 'pdf'
+      ? { type: 'document', title: p.nome, source: { type: 'base64', media_type: 'application/pdf', data: p.base64 } }
+      : { type: 'image', source: { type: 'base64', media_type: p.mime, data: p.base64 } }]);
 }
 
-/** As partes do "chat completions" (OpenAI e OpenRouter). */
+/** As partes do "chat completions" (OpenAI e OpenRouter), com o mesmo rótulo antes de cada anexo. */
 export function partesDoChat(partes: readonly Parte[]): unknown[] {
-  return partes.map((p) => p.tipo === 'texto' ? { type: 'text', text: p.texto }
-    : p.tipo === 'pdf'
+  return partes.flatMap((p) => p.tipo === 'texto' ? [{ type: 'text', text: p.texto }]
+    : [{ type: 'text', text: p.rotulo }, p.tipo === 'pdf'
       ? { type: 'file', file: { filename: p.nome, file_data: `data:application/pdf;base64,${p.base64}` } }
-      : { type: 'image_url', image_url: { url: `data:${p.mime};base64,${p.base64}` } });
+      : { type: 'image_url', image_url: { url: `data:${p.mime};base64,${p.base64}` } }]);
 }
 
 /**

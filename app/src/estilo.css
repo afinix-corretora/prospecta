@@ -846,7 +846,7 @@ button.resp:hover { background: var(--surface-2) }
   border: 1px solid var(--accent-line);
 }
 .balao-teste b { font-size: 12.5px; color: var(--ink-2) }
-.balao-teste p { margin: 6px 0; white-space: pre-wrap; color: var(--ink) }
+.balao-teste p { margin: 6px 0; white-space: pre-wrap; overflow-wrap: anywhere; color: var(--ink) }
 .balao-teste .nota-tela { margin: 0 }
 
 /* Colher a empresa de site, Instagram e materiais (D78b). */
@@ -862,6 +862,9 @@ button.resp:hover { background: var(--surface-2) }
 .lista-anexos .nota-tela { margin: 0 }
 .lista-fontes > li > span:last-child { flex: 1 1 260px; min-width: 0; overflow-wrap: anywhere; line-height: 1.45 }
 .coleta-resultado { margin-bottom: 12px }
+/* Endereço e nome de arquivo digitados pela pessoa voltam nos motivos: sem quebra, o celular rola de lado. */
+.coleta .nota-tela, .coleta .aviso { overflow-wrap: anywhere }
+.coleta .aviso .conferir { display: block; margin: 6px 0; white-space: pre-wrap; color: var(--ink) }
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: .01ms !important; animation-delay: 0s !important; transition-duration: .01ms !important }
