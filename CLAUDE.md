@@ -546,6 +546,72 @@ e elas têm teste automatizado obrigatório.**
 - **Nunca** dar INSERT de tabela inteira numa tabela que guarda ponteiro de Vault. Por coluna, sem
   o ponteiro — o D59 vale para toda tabela de credencial, e `sender_accounts` é uma delas (D62).
 
+- **Nunca** reaproveitar um segredo guardado para um destino que ele não conhece. A chave em branco
+  vale "manter" só com o MESMO provedor, nenhuma chave nova e o MESMO endereço — os campos que o
+  catálogo marca `destino` (`base_url`, `dominio`, `data_center`…), comparados por
+  `privado.mesmo_destino`. Trocar o provedor com a chave em branco mandava a chave da OpenAI para o
+  provedor novo; trocar a `base_url`, para um servidor que a pessoa digitou (D77).
+- **Nunca** apagar a configuração não secreta só porque o pedido não a trouxe de novo. Campo ausente
+  mantém o valor antigo, e só do mesmo provedor: o formulário que pede a chave de novo não pede a
+  organização, e salvar sem redigitá-la a apagava (D77).
+- **Nunca** deixar o funil decidir se a resposta é gravada. `mover_deal` chamado pelo motor com um
+  estágio que não existe mais AVISA e devolve falso; levantar ali desfazia o evento, o encerramento da
+  cadência e a supressão do "pare" — e o slug era editável pela tela. Agora não é: estágio se
+  renomeia pelo `nome`, e `slug` não tem porta (D57, D77).
+- **Nunca** selecionar trabalho que o lote vai jogar fora. `processar_vencidos` pegava as 100
+  inscrições vencidas mais antigas e só DEPOIS pulava as de campanha desligada: cem delas paravam o
+  agendador de todas as campanhas. O filtro mora no SELECT, com `FOR UPDATE OF en SKIP LOCKED` (D77).
+- **Nunca** testar a busca da tela só no banco. O filtro `or` do PostgREST com coluna de tabela
+  embutida era recusado (PGRST100) e a busca de Contatos nunca funcionou; ela é `buscar_contatos`,
+  com `%`, `_` e `\` escapados e o cliente dito em voz alta (D77).
+- **Nunca** dizer "pronto" de uma campanha sem conta no POOL dela. O pool exige o mesmo tipo: chip
+  frio não manda pela campanha morna, e o passo é adiado para sempre sem erro. O Início, o Painel, o
+  fim do setup e a prévia de inscrição perguntam a mesma coisa que `remetentes_disponiveis` (D77) —
+  a prévia a `privado.pool_da_campanha`, as telas a `poolDaCampanha`, e `tests/pool_para_sql.ts` põe
+  as duas frente a frente em 1024 cenários (D55, D77b).
+- **Nunca** deixar uma ação automática desfazer o freio que a conversa acabou de pôr. A coleta corta o
+  chip novo no ponto de partida; o cartão de quota que roda sozinho nunca SOBE além dele — o que
+  falta é "faltam N contas", e acima disso quem sobe é uma pessoa, na tela do canal (D67, D77).
+- **Nunca** deixar uma sugestão do agente de setup entrar sem que a pessoa tenha dito aquilo. A
+  sugestão vale como clique e dispara configuração: canal e família do WhatsApp só passam se a fala
+  os menciona, porque "quero telegram" virou WhatsApp, e-mail e SMS, e "lista que comprei" virou
+  "não oficial" — com a regra certa no prompt (D66, D77).
+- **Nunca** pedir na tela um valor que ela joga fora. O passo do modelo dizia "digite o nome" e mandava
+  o texto ao agente, que não pode preencher modelo: o Perplexity, que não lista, nunca conectava pelo
+  chat. Para onde vai o que se digita é `comoEntra`, puro e testado (D77).
+- **Nunca** consertar o agendador sem olhar o despachante, nem o contrário. O D77 tirou a fila travada
+  de `processar_vencidos` e deixou a mesma em `reivindicar_pendentes`, o gêmeo dele (D40): a
+  correção também é uma mudança, e o "o que mais assume isso?" do D37 vale para ela (D77b).
+- **Nunca** filtrar do lote mais do que a função seguraria. O filtro de campanha desligada no
+  despachante tirava também quem pediu para sair (D39), a resposta do agente (D76) e o encerramento
+  por resposta (D40): desligar a campanha adiava o `cancelado` do opt-out (D77b).
+- **Nunca** devolver à fila com a data de agora o que foi segurado. Ia para trás de toda mensagem nova
+  e morria de fome; a fila é por vez, `coalesce(reivindicada_em + lease, criado_em)`, e a segurada leva
+  `now() - lease` (D77b).
+- **Nunca** responder "há conta no pool?" lendo uma tabela que só quem administra lê. Numa função
+  INVOKER, o operador via "sem conta" sempre. A pergunta é `privado.pool_da_campanha`, DEFINER, que
+  dá o FATO (`ok`, `desligada`, `sem_conta`) a quem opera e nunca a linha — e o teste roda no papel de
+  quem usa, porque o superusuário não tinha como ver o defeito (D41, D77b). A tela que repete a regra
+  (`poolDaCampanha`) só existe com a ponte que a compara ao banco: escrevê-la sem ela foi o D55 que o
+  fechamento do D77b achou na própria documentação.
+- **Nunca** herdar a configuração de um segredo para outro. O não secreto que o pedido não traz se
+  mantém só quando a chave fica: com chave nova, o endereço guardado e invisível era o destino contra o
+  qual a chave nova seria conferida. E o formulário que muda de credencial pelo nome digitado não leva
+  os valores da anterior (D77b).
+- **Nunca** pôr num campo comum, sem perguntar, o que tem formato de chave. Só o client_id, que é
+  aleatório como uma chave, aceita o valor longo — e mesmo ali prefixo de provedor e JWT são barrados.
+  O passo que vem antes do da chave é um campo comum, e colar a chave nele a gravava em `config` (D77b).
+- **Nunca** deixar um freio de fala decidir pela palavra sem o sentido. "Minha meta" não é a API da
+  Meta, "e-mail oficial" não é WhatsApp oficial, a negação vale na oração, e os dois sentidos na mesma
+  fala devolvem a pergunta. Numa resposta de várias escolhas, o valor barrado leva a resposta inteira:
+  gravada pela metade, ela não se troca depois (D77b).
+- **Nunca** escrever `\uXXXX` num arquivo que vai para uma edge function. A chamada que publica
+  decodifica o escape, e o publicado deixa de ser o do repositório: a regex funciona, a conferência do
+  D52 não. Escreve-se o caractere, e `conferir-publicado.py` recusa o escape (D77b).
+- **Nunca** supor que um push não publica. O push deste branch publica o app na Vercel, e o do D77 pôs
+  no ar um app que chamava funções que o banco ainda não tinha. A migration vem antes do push, e as
+  edge functions de que o app depende também — o D31 com o push no lugar do worker (D77).
+
 ---
 
 ## Convenções
@@ -711,6 +777,20 @@ e elas têm teste automatizado obrigatório.**
 > `montarPedido` e pelos mesmos freios do worker, com a blacklist do cliente lendo a fala antes. A
 > fila do D69 (`respostas_para_o_agente`) ficou sem chamador e sai pelo SQL Editor (D63).
 >
+> O **D77** é o resto da auditoria que pediu o D76, e o **D77b**, o que a revisão adversarial achou
+> nele, em duas rodadas (24 e 14 achados). Os críticos: a chave do CLIENTE colada no texto livre do
+> setup ia para a OpenAI pela chave da PLATAFORMA (`pareceSegredo` não via chave de 24 a 39
+> caracteres); a chave guardada ia para outro provedor ou outro endereço quando a pessoa editava a
+> credencial com o campo em branco — "em branco mantém" vale só com o mesmo provedor, nenhuma chave
+> nova e os mesmos campos `destino`; e o `slug` do funil, editável, derrubava a gravação da resposta
+> pelo gatilho. Agendador e despachante deixaram de travar por campanha desligada, com a fila do
+> despachante por vez; a busca de Contatos passou a existir (`buscar_contatos`); conectar conta é uma
+> transação (`conectar_conta`); e "há conta no pool desta campanha?" tem uma regra só, em dois
+> lugares: `privado.pool_da_campanha`, que a prévia pergunta, e `poolDaCampanha`, que o Início, o
+> Painel e o fim do setup perguntam — a quarta ponte do suite (`tests/pool_para_sql.ts`) as compara.
+> A campanha de produção é morna e o chip é frio, e agora todas as telas dizem isso. O agente de setup não preenche
+> canal nem família do WhatsApp que a pessoa não disse, pelo sentido e não pela palavra.
+>
 > A **identidade visual** é a da referência escolhida pelo usuário desde o **D71**: Anek Latin e
 > Roboto empacotadas no build, escuro por padrão com o claro guardado por pessoa, item ativo em
 > pílula, cores de gráfico conferidas pelo validador nos dois temas. O **Início** virou painel de
@@ -806,8 +886,12 @@ e elas têm teste automatizado obrigatório.**
 >
 > As edge functions são oito desde o D76 (`agente-testar` v1, chamada pela TELA como
 > `verificar-remetente`, que compõe com o texto da tela sem gravar nem enviar). Eram sete desde o D72
-> (`ia-modelos` v1 e `agente-setup` v4) e cinco desde o D64. `motor-worker` está na **versão 8** desde
-> 12/10, com a fila `fila_do_agente`, o prompt por canal e os freios do D76 — publicada DEPOIS da
+> (`ia-modelos` v1 e `agente-setup` v4) e cinco desde o D64. `agente-setup` está na **versão 7** desde
+> 13/10, com o freio da fala do D77b; a v5 e a v6 foram descartadas porque o escape `\u0300` voltou do
+> projeto como caractere, e a v7 foi conferida por leitura, porque a resposta veio inline. `motor-worker`
+> está na **versão 9** desde 13/10, com os exemplos de valor ignorado só de card que entrou (D77b) —
+> publicada DEPOIS da migration que os guarda. A **versão 8**, de 12/10, trouxe a fila
+> `fila_do_agente`, o prompt por canal e os freios do D76 — publicada DEPOIS da
 > migration do D76, pela ordem do D31: o v7 seguia na fila antiga, que não entrega agente de todos os
 > canais, e por isso era o rollback seguro. A **versão 7**, de 06/10, trouxe o
 > dreno da outbox e a leitura das fontes de CRM (D64), os rascunhos do agente (D66) e o envio da
@@ -826,7 +910,7 @@ e elas têm teste automatizado obrigatório.**
 > justamente para as três não mudarem de bundle — e a do agente (`motor/porta-agente.ts`,
 > `_shared/banco-agente.ts`) pelo mesmo motivo. O `motor-worker` v6 foi lido de volta pela
 > resposta que a MCP salvou em arquivo, e comparado SEM transcrição (26/26); o `crm-descobrir`,
-> 6/6; o `motor-worker` v7, 26/26; o v8, 27/27, e o `agente-testar` v1, 7/7 — as portas
+> 6/6; o `motor-worker` v7, 26/26; o v8 e o v9, 27/27, e o `agente-testar` v1, 7/7 — as portas
 > (`motor/porta*.ts`) são `import type` e não voltam (D52). Quem responde pela pergunta daqui para frente são os dois
 > verificadores — `conferir-publicado.py`, no suite, pelo digest do que cada function empacota, e
 > `conferir-contra-projeto.py`, fora do suite porque precisa de rede, pela comparação com o que o

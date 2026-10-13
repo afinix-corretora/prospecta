@@ -270,7 +270,7 @@ export function lerSaida(
   falaDaPessoa?: string,
 ): SaidaSetup {
   const fala = falaDaPessoa === undefined ? null
-    : falaDaPessoa.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+    : falaDaPessoa.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
   let o: Record<string, unknown> = {};
   try { o = JSON.parse(conteudo) as Record<string, unknown>; } catch { /* resposta fora do formato */ }
   const mensagem = typeof o.mensagem === 'string' && o.mensagem.trim()

@@ -30,6 +30,7 @@ import sys
 RAIZ = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 FUNCOES = os.path.join(RAIZ, 'supabase', 'functions')
 REGISTRO = os.path.join(FUNCOES, 'PUBLICADO.json')
+ESCAPE_U = re.compile(r'\\u(?:[0-9a-fA-F]{4}|\{)')
 
 
 def fecho(entrada):
@@ -68,6 +69,18 @@ def main():
         arquivos = fecho(entrada)
         atual = digest(arquivos)
         anotado = registro.get(nome)
+
+        # Publicar pela MCP é uma chamada de ferramenta, e essa camada decodifica
+        # `\uXXXX` no texto: `/[\u0300-\u036f]/` chegou ao projeto com os
+        # caracteres, duas vezes, mandado escapado das duas formas (D77b). A
+        # regex funcionava; o que deixava de funcionar era a conferência do D52,
+        # que compara byte a byte e não tem como confirmar um arquivo assim.
+        # Escreve-se o caractere, como `adapters/csv.ts` sempre fez.
+        for f in arquivos:
+            if ESCAPE_U.search(open(f, encoding='utf-8').read()):
+                problemas.append(
+                    f'{nome}: {os.path.relpath(f, RAIZ)} tem escape \\u, que não volta '
+                    f'igual da publicação — escreva o caractere')
 
         if anotado is None:
             problemas.append(f'{nome}: não está em PUBLICADO.json')

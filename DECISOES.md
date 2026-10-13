@@ -3301,3 +3301,266 @@ grade de `anon`. O resto fica para o D77, e o que não pode esperar está no top
   operador lendo "nada" onde o RLS só esconde, textos que envelheceram, e a blacklist padrão que não
   pega "não me procure mais" (o "Testar" sugere justamente essa frase, porque ela chega ao agente — que
   deve escalá-la como `[SAIR]`, e o freio barra a confirmação de saída se ele não escalar).
+
+
+### D77 — O que a auditoria achou (13/10)
+
+O D76 corrigiu o que a auditoria achou no agente; o D77 é o resto, pela ordem de gravidade que o D76
+registrou. A regra foi a de sempre: cada correção com o teste que a cobra e uma sabotagem que acende
+esse teste, e nenhuma asserção antiga afrouxada — onde um teste velho quebrou, o que mudou foi o
+cenário (D58).
+
+**A chave que ia para quem não devia (crítico).** `pareceSegredo` só via os prefixos `sk-`, `AIza`
+e `eyJ` ou 40 caracteres seguidos, e as chaves reais do catálogo têm 24 a 39: o token da UAZAPI e a
+chave da Comtele são UUID, Gupshup, Evolution e Locaweb usam 32 alfanuméricos, a RD Station 24 hex, a
+Resend `re_` com 32. Todas passavam, e a chave do CLIENTE colada no texto livre do setup ia para a
+OpenAI pela chave da PLATAFORMA e ficava no `localStorage` — o pior vazamento do D72, por baixo do
+filtro que existe para impedi-lo. A regra nova olha os prefixos conhecidos, UUID, JWT e as "corridas"
+do texto (o que fica entre separadores): 40 ou mais caracteres, 20 ou mais misturando letra e dígito,
+ou 24 ou mais misturando caixas. Hífen e ponto separam, e é isso que deixa passar nome de modelo e
+endereço; dentro de URL, barra e parâmetro também separam. `tests/agente_setup.test.ts` tem uma
+amostra SINTÉTICA no formato de cada segredo do catálogo, sozinha, no meio da frase e na URL, e o
+outro lado: nome de modelo, endereço, telefone, CNPJ, e-mail e conversa.
+
+O filtro mais largo barrava o client_id do Pipefy e a consumer key do Salesforce, que o catálogo diz
+NÃO serem segredo e que a conversa pede na caixa comum. Para onde vai o que se digita passou a ser
+`comoEntra` (`app/src/setupChat.ts`, puro e testado): num campo não secreto, o valor sozinho é o
+valor; o nome do modelo entra direto, mas só DEPOIS do filtro, porque o passo vem logo depois do da
+chave e colar a chave no lugar errado a gravaria em `config`; o resto vai ao agente. Antes, todo texto
+do passo do modelo ia ao agente, que não pode preencher modelo — e o Perplexity, que não lista,
+nunca conectava pelo chat.
+
+**A chave que ia para o provedor errado (crítico).** Editar uma credencial de IA ou de CRM trocando
+o provedor, com a chave em branco, mandava a chave guardada para o provedor novo. A chave em branco
+continua valendo "manter", mas só com o MESMO provedor, nenhuma chave nova e o MESMO destino: os campos
+que o catálogo passou a marcar `"destino": true` (`base_url`, `dominio`, `dominio_empresa`,
+`data_center`, `host`), comparados por `privado.mesmo_destino` (minúsculas, sem barra final, sem
+espaço nas pontas). Trocar uma das chaves pede as outras — o par do Pipefy foi dado junto. O mesmo vale
+para remetente e para o servidor de provedor: mudar a URL do servidor UAZAPI com o token em branco
+mandava o token de administração para o servidor digitado. E a configuração não secreta que o pedido
+não trouxe passou a ser mantida (do mesmo provedor só): o formulário que pede a chave de novo não pede
+a organização, e salvar sem redigitá-la a apagava. A tela diz a regra antes do botão.
+
+**O funil que derrubava a resposta (crítico).** O operador podia renomear o `slug` de um estágio,
+e `mover_deal` levantava quando o motor pedia o estágio que não existia mais — no gatilho de
+`message_events`, desfazendo o evento, o encerramento da cadência e a supressão do "pare". Duas
+correções, porque são dois erros: `slug` saiu da grade (estágio se renomeia pelo `nome`, e
+`pipelines` e `pipeline_stages` não têm mais INSERT nem DELETE da tela), e o motor nunca deixa o funil
+decidir se a resposta é gravada — estágio que falta é AVISO e `false`. Pela pessoa, continua erro.
+`TRUNCATE` saiu de `authenticated` em todas as tabelas de `public`: o RLS não vale para ele.
+
+**O agendador que parava (alto).** `processar_vencidos` pegava as cem inscrições vencidas mais
+antigas e só depois pulava as de campanha desligada: uma campanha desligada com cem vencidas parava o
+agendador de TODAS. O filtro foi para o SELECT, com `FOR UPDATE OF en SKIP LOCKED`.
+
+**A busca que nunca funcionou (alto).** O filtro `or` com coluna de tabela embutida era recusado
+pelo PostgREST (PGRST100), e a tela de Contatos dizia erro a qualquer termo. Virou
+`buscar_contatos(p_tenant, p_termo)`, INVOKER (o RLS decide), com `%`, `_` e `\` escapados, e o número
+casando pelos dígitos: "(15) 99123-4567" acha "5515991234567".
+
+**A conta órfã (alto).** Conectar conta era um INSERT e depois `salvar_credencial_remetente`: com a
+credencial recusada, a conta ficava ativa, sem segredo, no pool. `conectar_conta` faz as duas numa
+transação. O INSERT de `sender_accounts` para `authenticated` ficou, porque o app em produção ainda
+era o de antes e cadastrava por ele. Com o app novo no ar desde o push do D77b, ele sai numa
+migration própria — que é a próxima, e não entrou aqui para não misturar uma revogação com a
+corretiva.
+
+**O que a tela dizia e não era (alto).**
+
+- A tela da campanha quebrava inteira para o papel leitor: uma leitura que exige operar derrubava o
+  `Promise.all`. As leituras essenciais e as acessórias se separaram, e o que não carregou é dito.
+- A fonte de CRM descartava o valor que parecia telefone, e a tela prometia que ele aparecia no
+  resumo. O resumo traz os cinco primeiros ignorados com card, coluna, valor e motivo
+  (`motor/crm.ts`), e a tela os mostra.
+- A única campanha de produção é morna e o único chip é frio. O pool exige o mesmo tipo, então nada
+  sai — e o Início, o Painel, o fim do setup e a prévia de inscrição diziam que estava pronto. Os
+  quatro passaram a perguntar o que `remetentes_disponiveis` pergunta (conta ativa, do tipo da
+  campanha, de provedor com adapter). A prévia continua inscrevendo — conectar a conta depois é uso
+  legítimo, e o passo espera (D31) —, mas diz. **A campanha de produção não foi mexida: escolher
+  entre conectar um chip morno e trocar o tipo dela é decisão de operação.**
+
+**O setup (alto).**
+
+- O chip criado na conversa com 40 por dia (o teto de chip frio) tinha a quota levada ao pedido logo
+  depois, por um cartão que roda sozinho — até os 100000 que o agente sugerisse. Subir nunca passa do
+  ponto de partida; o que falta vira "faltam N contas", e acima disso quem sobe é uma pessoa, na tela
+  do canal. Baixar continua, e o que alguém já pôs acima do teto não é mexido.
+- Os avisos do plano ("WhatsApp ficou sem conta", "faltam N contas") eram calculados e nunca
+  mostrados, e a última fala era fixa: "está configurado". Os avisos aparecem quando surgem, e o fim
+  (`fechamento`) diz o que falta, lido do banco, e quantas peças ficaram de fora.
+- O agente de setup escolhia sozinho "não oficial" para quem disse "lista que comprei" — a regra 7 do
+  prompt empurrava — e devolvia WhatsApp, e-mail e SMS para quem pediu Telegram. A sugestão entra como
+  clique e dispara configuração. A regra mudou (oficial ou não é decisão da pessoa; canal fora do
+  vocabulário não vira outro), e, como instrução sozinha não freia (D66), `lerSaida` passou a receber
+  a fala da pessoa: canal e família do WhatsApp só passam se ela os mencionou.
+
+**O que ficou de fora, e por quê.**
+
+- A blacklist padrão não pega "não me procure mais". Ampliar a padrão tem falso positivo sem volta —
+  "não, me procure mais tarde" casa — e a supressão é imutável (D48). Desde o D76 o pedido que a lista
+  não pega chega ao agente, que escala como `[SAIR]` para uma pessoa; e a lista é do cliente, em
+  Configurações ▸ Blacklist.
+- Os modelos de cadência e os agentes do catálogo antigo falam em nome da "Afinix". Hoje o único
+  cliente é a própria Afinix; trocar por `{{empresa}}` pede decidir de onde vem o nome, e fica para
+  quando houver o segundo.
+- Médios e baixos: telas que não filtram pelo cliente escolhido, contagens sobre listas truncadas,
+  operador lendo "nada" onde o RLS só esconde, textos envelhecidos, o Painel engolindo erros, o
+  writeback acusando "dreno parado" com a conexão desligada, resposta duplicada em
+  `respostas_recebidas`, o atraso que vira 24h, a capacidade somando conta fora do pool, os downs
+  antigos que não são inversos exatos, o seq scan do webhook e `ia-modelos` alcançando qualquer
+  `base_url`.
+
+**Um teste que era um relógio.** `tests/agente.test.ts` (D76) conferia que o erro transitório não
+vira linha com a resposta fixa em 12/10 10h e o relógio real: seis horas depois, o prazo do
+transitório venceu e o teste passou a falhar — virou o outro teste, "transitório velho vira erro". O
+relógio agora é do cenário.
+
+### D77b — O que a revisão do D77 achou (13/10)
+
+A revisão adversarial do D77 rodou depois de ele já estar no projeto — o push publicou o app antes
+da migration (ver "No projeto", abaixo) — e foi em duas rodadas: 24 achados confirmados sobre o D77,
+e 14 sobre a primeira correção deles. A migration `20261013110000` é a corretiva, e cada corpo que ela
+troca partiu do que estava no projeto, não de uma cópia (D59). Mesma regra do D77: teste que cobra,
+sabotagem que acende, e teste velho que codificava o mundo de antes reescrito no cenário, não na
+asserção (D58).
+
+**O despachante que o D77 esqueceu.** O D77 tirou a fila travada do agendador e não olhou o gêmeo
+dele (D40): `reivindicar_pendentes` pegava as mais antigas e só depois segurava as de campanha
+desligada ou pausada, e cem delas paravam o despacho de todos os clientes. A primeira correção levou o
+filtro para o SELECT, e a segunda rodada achou dois defeitos nela:
+
+- o filtro tirava do lote também o que a função NÃO seguraria — a mensagem de quem pediu para sair,
+  que vira `cancelado` (D39), a resposta do agente, que segue a janela de 24h e não a cadência (D69,
+  D76), e a de enrollment encerrado por resposta (D40). Desligar a campanha adiava a supressão. O
+  filtro agora exclui só o que seria segurado: mensagem de cadência (`rascunho_id` nulo), de
+  enrollment não encerrado de vez, de contato não suprimido;
+- a mensagem segurada ganhava `reivindicada_em = now()` e ia para trás de toda mensagem nova; com o
+  agendador produzindo o limite a cada batida, ela morria de fome. A fila agora é por vez: ordena por
+  `coalesce(reivindicada_em + lease, criado_em)`, e a segurada é carimbada `now() - lease` — volta com
+  a vez de quem chegou agora, atrás de quem já esperava, e não no fim de tudo.
+
+`tests/despacho_concorda.sql` (18) cobra a cabeça da fila, a supressão com a campanha desligada e a
+fome; `tests/agente_responde.sql` (39), a resposta do agente com a campanha desligada.
+
+**O pool que só o administrador via.** A prévia de inscrição é INVOKER, e `sender_accounts` só é
+legível por quem administra: para o operador, toda linha dizia "sem conta". A checagem do D77 também
+copiava `remetentes_disponiveis` à mão, ignorava a conta de e-mail escolhida pela campanha
+(`remetente_email_id`, D62) e tratava circuito aberto como conta que falta. Agora a pergunta é uma
+função, `privado.pool_da_campanha(tenant, campanha, canal)`, DEFINER, que responde `ok`, `desligada`
+ou `sem_conta` a quem pode operar o cliente — e NULL a quem não pode —, sem devolver conta nenhuma: o
+fato, nunca a linha. Circuito aberto é pool (ele volta sozinho); conta arquivada não é. A prévia diz
+"sem conta fria em whatsapp" ou "a conta morna de e-mail está desligada", e que a inscrição entra e o
+passo espera (D31); a tela de Contatos mostra o aviso agrupado — antes só tinha leitor o problema de
+quem ficava de fora. O Início (`situacao`) casa só contas do cliente escolhido, segue a conta escolhida
+pela campanha e, para quem não administra, não diz nada, porque não lê. `tests/previa_inscricao.sql`
+(23) passou a rodar no papel de operador (D41): no papel de superusuário, ele não tinha como ver o
+defeito.
+
+A regra mora em dois lugares, e isso só apareceu ao escrever esta entrada: a prévia pergunta ao banco,
+mas o Início, o Painel e o fim do setup leem o que a tela já tem e repetem a regra em TypeScript — a
+primeira versão desta entrada dizia que as quatro perguntavam a `pool_da_campanha`. É o D55. A regra
+da tela virou `poolDaCampanha` (`app/src/assistente.ts`), e `tests/pool_para_sql.ts`, a quarta ponte
+do suite, põe as duas frente a frente: as combinações de sete contas-modelo (ativa, em circuito
+aberto, desligada, de outro pool, de provedor que não entrega, arquivada, de outro canal), no WhatsApp
+e no e-mail, nos dois tipos de campanha, e no e-mail cada conta que a campanha pode escolher — 1024
+cenários, cada um num cliente próprio. Seis sabotagens, três de cada lado (circuito aberto, conta
+escolhida e catálogo na tela; arquivada, circuito aberto e provedor desligado no banco), acendem a
+ponte; e ela confere que as três respostas aparecem dos dois lados, para uma regra que dissesse
+sempre "ok" não passar (D36). A conta arquivada não chega à tela porque `lerRemetentes` lê só
+`removido_em` nulo; a ponte reproduz essa leitura, e diz isso.
+
+**A busca que casava e-mail.** Qualquer termo com quatro dígitos casava telefones pelos dígitos,
+inclusive um e-mail. Os dígitos só contam quando o termo é um telefone (`^[0-9 ()+.-]+$`). E a
+asserção "`%` é texto, não curinga" passava com e sem o escape: reescrita para cair sem ele (D36).
+
+**Os exemplos que sumiam.** O exemplo de valor ignorado da fonte de CRM era sobrescrito na passada
+seguinte, que quase nunca lê card novo. `registrar_execucao_fonte` guarda os cinco últimos distintos
+(card, coluna, valor), do mais novo, com a data; e o worker só manda como exemplo o valor de card que
+ENTROU (`motor/crm.ts`): o recusado volta em toda passada e já aparece nos erros — como exemplo, ele
+ocupava os cinco lugares repetindo o mesmo card. A tela diz "Últimos valores ignorados: … em <data>".
+
+**A credencial que herdava.** A configuração não secreta que o pedido não traz é mantida (D77) — mas
+só quando a chave fica. Com chave nova, a `base_url` e a organização antigas ficavam guardadas sem
+aparecer, e a chave nova era conferida contra um destino que a pessoa não via. A tela repete a regra
+em `app/src/credencial.ts` (`oQueFalta`), pura e com os casos de `tests/auditoria.sql` (46), um de cada
+lado: o botão desabilita e diz o que falta e por quê — outro provedor, outro endereço, ou uma das
+chaves trocada (o Zoho pede o par). O formulário abre com o que não é segredo já preenchido, e digitar
+o nome de uma credencial e seguir até outra não leva os valores da primeira (`preencher`): salvar
+sobrescrevia o client_id da segunda sem aviso. `tests/credencial.test.ts` (13).
+
+**A chave no campo comum, e o modelo de verdade.** `comoEntra` (D77) mandava ao campo não secreto o
+valor sozinho ANTES de perguntar se era chave: um `sk-…` colado no passo que vem antes do da chave ia
+para o estado, o `localStorage` e `config`. Agora o filtro inteiro vale nos campos não secretos, e a
+exceção é só o client_id, que é aleatório como uma chave (Pipefy, Salesforce, Zoho): ali só se barra o
+que tem FORMATO de chave (`temFormatoDeChave`: prefixo de provedor, `AIza`, JWT). No passo do modelo,
+`pareceSegredo` barrava nomes reais (`accounts/fireworks/models/qwen3-235b-a22b`), porque fora de URL
+a barra não separa: `chaveNoLugarDoModelo` mede pedaço a pedaço, e chave sem prefixo é um bloco só.
+Frase nesse passo vai ao agente.
+
+**O setup pelo sentido.**
+
+- O freio da fala (D77) passava justamente o que existe para barrar: "minha meta" virava a API da
+  Meta, "o e-mail oficial da empresa" virava WhatsApp oficial, "tudo bem" e "todos os dias" escolhiam
+  todos os canais, e a negação valia nos dois sentidos. Agora: quem a pessoa nomeou e em que sentido,
+  com a negação valendo na oração ("sem chip", "não é oficial") e sem atravessar a vírgula; os dois
+  sentidos na mesma fala não escolhem nada, e a pergunta volta. "Todos", "tudo" e "os três" voltaram a
+  escolher os canais, sem "tudo bem" e "todos os dias".
+- Numa resposta de várias escolhas, o freio que tira um valor tira a resposta inteira: "todos,
+  começando pelo WhatsApp" gravava só o WhatsApp, e a resposta dada não se troca depois.
+- A quota pedida é REPARTIDA entre as contas, em água: cada uma até o maior entre a quota que já tem e
+  o ponto de partida do chip, das menores para as maiores, e o que não cabe vira aviso. A primeira
+  correção baixava uma conta mesmo quando a pessoa pedia mais do que já tinha.
+- O aviso "a conta de IA fica escolhida só quando houver campanha" aparecia antes de a campanha ser
+  perguntada; agora só quando a pessoa disse que não quer campanha.
+
+**O que a tela dizia e não era.** A tela da campanha dizia "cadência ainda não ligada" quando a lista
+de cadências não carregou, e "nenhuma conta escolhida" quando a de contas não carregou: o que o banco
+tem na própria campanha (`flow_version_id`, `remetente_email_id`) responde quando a lista acessória
+falha.
+
+**No projeto (13/10).**
+
+- **O push publica o app.** O commit do D77 foi para o branch às 00:03 como "em revisão", com a
+  migration ainda por aplicar, na suposição de que o push deste branch não chegava à produção. Chega:
+  a Vercel publicou o app novo, que chama `conectar_conta` e `buscar_contatos`, num banco que ainda não
+  as tinha. A migration entrou às 00:07, pelo `apply_migration`, como `o_que_a_auditoria_achou` — a
+  janela foi de uns três minutos, e o que o app novo faria nela era chamar funções que ainda não
+  existiam e mostrar erro. Conferido depois: nenhuma linha nasceu ou mudou entre 00:00 e 00:08 nas
+  tabelas que têm data (credenciais, contas, contatos, inscrições, campanhas, servidores), e ninguém
+  entrou no app nesse intervalo. Daí em diante o push só saiu com o banco pronto: o do D77b depois
+  da migration, e o deste fechamento depois das edge functions. É o D31 de novo, com o push no lugar
+  do worker.
+- **A migration do D77b** entrou às 01:49 como `o_que_a_revisao_do_d77_achou`, o texto exato do
+  arquivo, sem DROP (D63). São 76 registros no projeto para 67 arquivos.
+- **Conferido pelo digest estrutural** contra o banco de teste nas dez categorias: corpos de função,
+  privilégio de execução, colunas, constraints, índices, políticas, gatilhos e RLS iguais. A grade
+  inteira não bate por diferença de ambiente, e o que importa dela foi comparado à parte: o banco de
+  teste não tem `service_role`, e no projeto `anon` não tem grant nas oito tabelas mais novas (o D76
+  já cobra que `anon` não escreve em tabela nenhuma). A grade de `authenticated` bate inteira, e a de
+  `anon` bate nas 29 tabelas que os dois têm.
+- **Os downs** foram conferidos de verdade, cada um contra o banco de antes: o do D77 (1545 linhas de
+  digest) e o do D77b (1561), iguais.
+- **`get_advisors`** depois de cada uma não achou nada novo: só a família WARN conhecida das funções
+  de credencial que checam `pode_administrar` em código.
+- **`agente-setup` v7.** A v5 e a v6 foram descartadas: a regex `[̀-ͯ]` voltou do projeto
+  com os caracteres nas duas, mandada escapada das duas formas — a chamada que publica decodifica o
+  escape, e a mesma decodificação apareceu num comando de terminal na mesma sessão. A regex
+  funcionava; o que não funcionava era a conferência do D52, que compara byte a byte. O arquivo passou
+  a escrever o caractere, como `adapters/csv.ts` e `prompt-do-agente.ts` sempre fizeram, e
+  `conferir-publicado.py` recusa escape `\u` no fecho de qualquer function. A v7 voltou inline, e não
+  salva em arquivo: os 5 arquivos foram conferidos por leitura — a comparação sem transcrição só
+  existe quando a resposta vai para arquivo, e isto fica dito em `PUBLICADO.json`. Ao vivo, com a
+  chave anon: 401 "entre com a sua conta", do código.
+- **`motor-worker` v9**, depois da migration que ele usa (D31): 27/27 pela resposta salva, comparados
+  sem transcrição; as três portas são `import type` e não voltam (D52). A passada do cron das 02:15,
+  30 segundos depois de publicar, voltou 200 com as quatro partes sem erro.
+
+**O que fica para a operação decidir.**
+
+- A única campanha do projeto é morna e o único chip é frio: nada sai por ela, e agora todas as telas
+  dizem isso. Conectar um chip morno ou trocar o tipo da campanha é decisão de operação.
+- Revogar o INSERT de `sender_accounts` de `authenticated` (o app novo já cadastra por
+  `conectar_conta`).
+- "Afinix" nos textos do catálogo virar `{{empresa}}`, quando houver o segundo cliente.
+- A blacklist padrão continua sem "não me procure mais", pelo falso positivo sem volta.
+- O backlog médio e baixo da auditoria, na lista do D77.

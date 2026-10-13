@@ -298,6 +298,15 @@ BANCO_VAR="$(novo_banco variaveis)"
 node --experimental-strip-types "$RAIZ/tests/variaveis_para_sql.ts" \
   | psql -v ON_ERROR_STOP=1 -d "$BANCO_VAR" -f -
 
+# A quarta: "há conta no pool desta campanha?" é `privado.pool_da_campanha`
+# na prévia e `poolDaCampanha` no Início, no Painel e no fim do setup (D77b).
+# Divergir é a tela dizendo "pronto" onde a prévia diz que nada sai.
+echo ""
+echo "→ conta no pool da campanha: tela x banco"
+BANCO_POOL="$(novo_banco pool)"
+node --experimental-strip-types "$RAIZ/tests/pool_para_sql.ts" \
+  | psql -q -v ON_ERROR_STOP=1 -d "$BANCO_POOL" -f -
+
 # ---------------------------------------------------------------------------
 # Concorrência: o agendador precisa de SKIP LOCKED de verdade, não só no texto
 # da função. Duas sessões simultâneas têm que pegar lotes disjuntos.

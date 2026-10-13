@@ -936,6 +936,26 @@ export interface Item {
   readonly detalhe: string;
 }
 
+/**
+ * A conta do pool desta campanha neste canal: a MESMA regra de
+ * `privado.pool_da_campanha` (D77b), e `tests/pool_para_sql.ts` põe as duas
+ * frente a frente (D55). 'desligada' é a conta do pool — ou a escolhida pela
+ * campanha, no e-mail — que existe e está desligada; 'sem_conta' é não haver
+ * nenhuma. A conta arquivada não chega aqui: `lerRemetentes` lê só as que têm
+ * `removido_em` nulo.
+ */
+export function poolDaCampanha(
+  f: Pick<Foto, 'provedores' | 'remetentes'>,
+  c: { readonly tipo?: Pool; readonly remetente_email_id?: string | null },
+  canal: string,
+): 'ok' | 'desligada' | 'sem_conta' {
+  const entregam = new Set(f.provedores.filter(entregavel).map((p) => p.slug));
+  const contas = f.remetentes.filter((r) => r.canal === canal && r.tipo_permitido === c.tipo
+    && entregam.has(r.provedor) && (canal !== 'email' || !c.remetente_email_id || r.id === c.remetente_email_id));
+  if (contas.some((r) => r.estado === 'ativo' || r.estado === 'circuito_aberto')) return 'ok';
+  return contas.length ? 'desligada' : 'sem_conta';
+}
+
 /** A lista do topo da tela. Lida do banco, nunca guardada (ver o topo). */
 export function situacao(f: Foto): Item[] {
   const contas = CANAIS_DE_ENVIO.map((c) => {
@@ -955,15 +975,7 @@ export function situacao(f: Foto): Item[] {
   // (fecha sozinho), e no e-mail vale a conta que a campanha escolheu (D62). E
   // só para quem administra: o RLS de `sender_accounts` não mostra conta
   // nenhuma ao operador, e "sem conta" para ele seria falso.
-  const entregam = new Set(f.provedores.filter((p) => p.tem_adapter && p.ativo).map((p) => p.slug));
-  // Como `pool_da_campanha`: 'desligada' é a conta do pool (ou a escolhida)
-  // que existe e está desligada; 'sem_conta' é não haver nenhuma.
-  const pool = (c: Foto['campanhas'][number], canal: CanalEnvio): 'ok' | 'desligada' | 'sem_conta' => {
-    const contas = f.remetentes.filter((r) => r.canal === canal && r.tipo_permitido === c.tipo
-      && entregam.has(r.provedor) && (canal !== 'email' || !c.remetente_email_id || r.id === c.remetente_email_id));
-    if (contas.some((r) => r.estado === 'ativo' || r.estado === 'circuito_aberto')) return 'ok';
-    return contas.length ? 'desligada' : 'sem_conta';
-  };
+  const pool = (c: Foto['campanhas'][number], canal: CanalEnvio) => poolDaCampanha(f, c, canal);
   const semPool = !f.administra ? [] : camps.flatMap((c) => (c.canais_habilitados ?? [])
     .filter((canal): canal is CanalEnvio => (CANAIS_DE_ENVIO as readonly string[]).includes(canal))
     .filter(() => !!c.tipo)
