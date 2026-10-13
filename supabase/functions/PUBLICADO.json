@@ -1,6 +1,8 @@
 {
   "agente-contexto": {
-    "pendente": "D78b: escrita e em revisão, ainda não publicada"
+    "digest": "c1a263fa197f959b",
+    "em": "2026-10-13 (v1, D78b; colhe a empresa de site, Instagram e materiais para um rascunho, sem gravar nada. Os 10 arquivos que o bundle devolve lidos de volta pela resposta salva da MCP e comparados sem transcrição, 10/10; motor/porta.ts e adapters/tipos.ts são import type, D52. Ao vivo, pelo pg_net: a chave anon recebe 401 \"entre com a sua conta\", do código)",
+    "versao": 1
   },
   "agente-setup": {
     "digest": "23680a040620a6c1",

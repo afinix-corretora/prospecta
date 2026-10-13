@@ -3701,3 +3701,16 @@ tela mostra. Os testes são `tests/coleta.test.ts` (45), `tests/contexto_da_empr
 - Os valores de um PDF ou de um print não são conferidos por código contra o arquivo — quem confere é
   quem lê o rascunho antes de usar. O freio do agente segue valendo sobre o texto que ficar.
 - O modelo pode errar a origem de uma condição; o rótulo existe para a pessoa conferir, não como prova.
+
+**No projeto (13/10).** Sem migration: o D78b não mexe no banco. `agente-contexto` v1 foi publicada
+ANTES do push, porque o app novo a chama (D77). Os 10 arquivos que o bundle devolveu, lidos de volta
+pela resposta salva da MCP, conferem byte a byte com o repositório, sem transcrição; `motor/porta.ts` e
+`adapters/tipos.ts` só entram por `import type` e não voltam (D52). Ao vivo, pelo `pg_net` do próprio
+banco (o proxy da sessão não alcança o projeto): a chave anon recebe 401 "entre com a sua conta", do
+código, e sem JWT o gateway recusa antes. `get_advisors`: nada novo.
+
+O que NÃO foi exercitado ao vivo, dito para não parecer conferido: a leitura de um site e a chamada ao
+modelo, que pedem uma pessoa logada com uma conta de IA, e o `Deno.resolveDns` no runtime do Supabase,
+que o edge-runtime expõe desde o PR que acrescentou o módulo de TLS. Se ele se comportar diferente do
+Deno, a falha é fechada: o site não é lido e a lista de fontes diz por quê. A primeira leitura de
+verdade é a conferência que falta.

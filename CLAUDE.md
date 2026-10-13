@@ -914,7 +914,9 @@ e elas têm teste automatizado obrigatório.**
 > linha discordar. O do projeto não dá para conferir do suite (precisa de rede), então quem mexer
 > no schema confere pelo `list_migrations` junto com o `get_advisors` que já é obrigatório.
 >
-> As edge functions são oito desde o D76 (`agente-testar` v1, chamada pela TELA como
+> As edge functions são nove desde o D78b (`agente-contexto` v1, chamada pela TELA, que lê site,
+> Instagram colado e materiais e devolve um rascunho sem gravar nada; 10/10 lidos de volta). Eram oito
+> desde o D76 (`agente-testar` v1, chamada pela TELA como
 > `verificar-remetente`, que compõe com o texto da tela sem gravar nem enviar). Eram sete desde o D72
 > (`ia-modelos` v1 e `agente-setup` v4) e cinco desde o D64. `agente-setup` está na **versão 7** desde
 > 13/10, com o freio da fala do D77b; a v5 e a v6 foram descartadas porque o escape `\u0300` voltou do
