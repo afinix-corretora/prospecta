@@ -33,6 +33,8 @@ export interface CampoProvedor {
   obrigatorio: boolean;
   segredo: boolean;
   ajuda: string | null;
+  /** D77: o campo decide para onde a chave vai; mudá-lo pede a chave de novo. */
+  destino?: boolean;
 }
 
 export interface Remetente {
@@ -216,12 +218,16 @@ export const lerConexoesCRM = () =>
  *  ela — mas sai de toda lista. O filtro é aqui, na leitura, e não em cada
  *  tela: uma tela que esquecesse mostraria a conta "fora do pool à mão", e a
  *  pessoa a devolveria ao pool sem saber que a tinha removido. */
-export async function lerRemetentes(): Promise<Remetente[]> {
-  const { data, error } = await sb.from('sender_accounts')
+export async function lerRemetentes(tenant?: string): Promise<Remetente[]> {
+  let q = sb.from('sender_accounts')
     .select('id, canal, identificador, apelido, provedor, tipo_permitido, quota_diaria, ' +
       'enviados_na_janela, estado, health_score, webhook_token, provider_server_id, config, ' +
       'verificado_em, verificacao_ok, verificacao_detalhe')
     .is('removido_em', null);
+  // D77b: quem pertence a dois clientes lê os dois pelo RLS; quem diz de qual
+  // cliente é a pergunta é quem chama.
+  if (tenant) q = q.eq('tenant_id', tenant);
+  const { data, error } = await q;
   if (error) throw error;
   return (data ?? []) as unknown as Remetente[];
 }
@@ -229,10 +235,15 @@ export async function lerRemetentes(): Promise<Remetente[]> {
 export const lerServidores = () =>
   tabela<Servidor>('provider_servers', 'id, provedor, nome, base_url, admin_secret_id, ativo', 'nome');
 
-export const lerCampanhas = () =>
-  tabela<Campanha>('campaigns',
+export async function lerCampanhas(tenant?: string): Promise<Campanha[]> {
+  let q = sb.from('campaigns').select(
     'id, nome, tipo, objetivo, ativa, canais_habilitados, template_slug, flow_version_id, remetente_email_id, ' +
     'ai_credential_id');
+  if (tenant) q = q.eq('tenant_id', tenant);
+  const { data, error } = await q;
+  if (error) throw error;
+  return (data ?? []) as unknown as Campanha[];
+}
 
 export const lerModelos = () =>
   tabela<Modelo>('campaign_templates', 'slug, nome, descricao, objetivo, tipo, canais, passos, ordem', 'ordem');

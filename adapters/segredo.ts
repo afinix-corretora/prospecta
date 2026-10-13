@@ -49,8 +49,31 @@ function corridaDeChave(c: string): boolean {
   return c.length >= 24 && maiusculas >= 3 && minusculas >= 3;
 }
 
+/**
+ * O formato que só chave tem: prefixo de provedor, `AIza`, JWT ou UUID. Mais
+ * estreito que `pareceSegredo`, que também desconfia de qualquer texto longo e
+ * aleatório — e por isso barra o client_id que o catálogo diz não ser segredo.
+ * Num campo não secreto vale esta pergunta, não a outra (D77b).
+ */
+export function temFormatoDeChave(texto: string): boolean {
+  return PREFIXO.test(texto) || GOOGLE.test(texto) || JWT.test(texto) || UUID.test(texto);
+}
+
+/**
+ * O nome digitado no passo do modelo é uma chave? Nome de modelo tem barra,
+ * hífen e dois-pontos ("accounts/fireworks/models/qwen3-235b-a22b",
+ * "cognitivecomputations/dolphin3.0-mistral-24b:free"), e `pareceSegredo`, que
+ * não separa na barra fora de URL, barrava os reais. Aqui cada pedaço é medido
+ * sozinho: chave sem prefixo é um bloco só de 20 ou mais com letra e dígito
+ * (D77b).
+ */
+export function chaveNoLugarDoModelo(texto: string): boolean {
+  if (temFormatoDeChave(texto)) return true;
+  return texto.split(/[-/.:_@]+/).some((p) => p.length >= 32 || (p.length >= 20 && /[A-Za-z]/.test(p) && /\d/.test(p)));
+}
+
 export function pareceSegredo(texto: string): boolean {
-  if (PREFIXO.test(texto) || GOOGLE.test(texto) || JWT.test(texto) || UUID.test(texto)) return true;
+  if (temFormatoDeChave(texto)) return true;
   return corridas(texto).some(corridaDeChave);
 }
 

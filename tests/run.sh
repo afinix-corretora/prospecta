@@ -243,6 +243,11 @@ node --experimental-strip-types --test "$RAIZ/tests/setup_chat.test.ts" \
   | grep -E "^# (tests|pass|fail)|^not ok"
 
 echo ""
+echo "→ credencial: o que falta para salvar, a mesma regra do banco (TypeScript)"
+node --experimental-strip-types --test "$RAIZ/tests/credencial.test.ts" \
+  | grep -E "^# (tests|pass|fail)|^not ok"
+
+echo ""
 echo "→ o que a tela lê como variável de template (TypeScript)"
 node --experimental-strip-types --test "$RAIZ/tests/variaveis.test.ts" \
   | grep -E "^# (tests|pass|fail)|^not ok"

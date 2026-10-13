@@ -193,6 +193,26 @@ test('usar o chip que existe nunca sobe a quota além do ponto de partida (D77)'
   assert.deepEqual(doTipo(decidido.acoes, 'ajustar_quota'), []);
 });
 
+test('o plano não baixa a conta de quem pediu MAIS do que já tinha (D77b)', () => {
+  const chip = (id: string, quota: number) => ({ id, canal: 'whatsapp', provedor: 'uazapi', tipo_permitido: 'fria' as const,
+    quota_diaria: quota, estado: 'ativo', apelido: id, identificador: id });
+  const p = montarPlano({ ...FOTO, remetentes: [chip('a', 40), chip('b', 150)] },
+    { ...COMPLETO, canais: ['whatsapp'], porDia: { whatsapp: 200 }, 'provedor:whatsapp': USAR });
+  assert.deepEqual(doTipo(p.acoes, 'ajustar_quota'), [], 'pedir 200 com 190 não baixa a de 150');
+  // Pedir menos do que se tem continua distribuindo para baixo.
+  const menos = montarPlano({ ...FOTO, remetentes: [chip('a', 40), chip('b', 150)] },
+    { ...COMPLETO, canais: ['whatsapp'], porDia: { whatsapp: 60 }, 'provedor:whatsapp': USAR });
+  assert.deepEqual(doTipo(menos.acoes, 'ajustar_quota').map((a) => [a.remetente, a.para]), [['a', 30], ['b', 30]]);
+});
+
+test('o aviso da conta de IA só aparece quando a pessoa recusou a campanha (D77b)', () => {
+  const aviso = /A conta de IA fica escolhida só quando houver campanha/;
+  const semCampanhaAinda = { ...COMPLETO, ia: 'anthropic' } as Record<string, unknown>;
+  delete semCampanhaAinda.campanha;
+  assert.ok(!montarPlano(FOTO, semCampanhaAinda as Respostas).avisos.some((x) => aviso.test(x)), 'a campanha nem foi perguntada');
+  assert.ok(montarPlano(FOTO, { ...COMPLETO, ia: 'anthropic', campanha: NAO }).avisos.some((x) => aviso.test(x)));
+});
+
 test('"configurar depois" sem conta nenhuma avisa que o canal fica parado', () => {
   const plano = montarPlano(FOTO, { ...COMPLETO, 'provedor:email': NAO });
   assert.ok(plano.avisos.some((x) => /E-mail ficou sem conta.*nada sai/.test(x)));
@@ -372,14 +392,28 @@ test('situação: campanha ligada sem conta no PRÓPRIO pool não está pronta (
   const s = Object.fromEntries(situacao(f).map((i) => [i.id, i]));
   assert.equal(s.canais!.feito, true, 'há conta, então o item de canais segue feito');
   assert.equal(s.campanha!.feito, false);
-  assert.match(s.campanha!.detalhe, /não tem conta WhatsApp no pool morna/);
+  assert.match(s.campanha!.detalhe, /não tem conta WhatsApp ativa no pool morna/);
 
   const comMorno = { ...f, remetentes: [chipFrio, { ...chipFrio, id: 'b', tipo_permitido: 'morna' as const }] };
   assert.equal(Object.fromEntries(situacao(comMorno).map((i) => [i.id, i])).campanha!.feito, true);
 
-  // Conta morna com o circuito aberto (fora do pool) não conta.
-  const parada = { ...f, remetentes: [chipFrio, { ...chipFrio, id: 'b', tipo_permitido: 'morna' as const, estado: 'circuito_aberto' }] };
-  assert.equal(Object.fromEntries(situacao(parada).map((i) => [i.id, i])).campanha!.feito, false);
+  // Conta morna desligada não conta; com o circuito aberto conta — ele fecha
+  // sozinho, e o agendador espera até lá (D77b, como `pool_da_campanha`).
+  const desligada = { ...f, remetentes: [chipFrio, { ...chipFrio, id: 'b', tipo_permitido: 'morna' as const, estado: 'desativado' }] };
+  assert.equal(Object.fromEntries(situacao(desligada).map((i) => [i.id, i])).campanha!.feito, false);
+  const circuito = { ...f, remetentes: [chipFrio, { ...chipFrio, id: 'b', tipo_permitido: 'morna' as const, estado: 'circuito_aberto' }] };
+  assert.equal(Object.fromEntries(situacao(circuito).map((i) => [i.id, i])).campanha!.feito, true);
+
+  // E-mail: vale a conta que a campanha escolheu (D62), mesmo com outra ativa.
+  const conta = (id: string, estado: string) => ({ id, canal: 'email', provedor: 'resend', tipo_permitido: 'morna' as const,
+    quota_diaria: 100, estado, apelido: id, identificador: `${id}@x.com` });
+  const email = { ...FOTO, remetentes: [conta('x', 'desativado'), conta('y', 'ativo')],
+    campanhas: [{ id: 'c2', nome: 'Pela X', ativa: true, tipo: 'morna' as const, canais_habilitados: ['email'], remetente_email_id: 'x' }] };
+  assert.equal(Object.fromEntries(situacao(email).map((i) => [i.id, i])).campanha!.feito, false);
+
+  // Para o operador, o RLS não mostra conta nenhuma: "sem conta" seria falso.
+  const operador = { ...f, administra: false, remetentes: [] };
+  assert.doesNotMatch(Object.fromEntries(situacao(operador).map((i) => [i.id, i])).campanha!.detalhe, /não tem conta/);
 });
 
 // ---------------------------------------------------------------------------

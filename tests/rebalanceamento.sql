@@ -118,9 +118,11 @@ SELECT rb.confere('pool vazio: nada é entregue',
   (SELECT count(*) FROM lote2) = 0,
   (SELECT count(*)::text FROM lote2));
 
+-- D77b: pronta para a próxima batida é o lease já vencido (ou nulo): a retida
+-- vai para trás das que nunca foram olhadas, e não volta à cabeça da fila.
 SELECT rb.confere('e a mensagem volta para a fila, pronta para a próxima batida',
   (SELECT status FROM messages LIMIT 1) = 'pendente'
-  AND (SELECT reivindicada_em FROM messages LIMIT 1) IS NULL);
+  AND coalesce((SELECT reivindicada_em FROM messages LIMIT 1) <= now() - interval '5 minutes', true));
 
 -- ---------------------------------------------------------------------------
 -- Circuito vencido volta sozinho

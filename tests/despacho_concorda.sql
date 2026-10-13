@@ -182,6 +182,106 @@ END;
 $$;
 
 -- ---------------------------------------------------------------------------
+-- A fila não trava (D77b)
+-- ---------------------------------------------------------------------------
+--
+-- O D77 tirou do lote do agendador a campanha desligada: cem vencidos dela
+-- ocupavam o LIMIT de toda batida. O despachante tinha a mesma fila — escolhia
+-- as pendentes mais antigas e só depois segurava as da campanha desligada, que
+-- voltavam à cabeça. Os dois cenários põem MAIS retidas que o limite antes da
+-- mensagem que pode sair; com o limite acima delas, passariam sem a correção.
+
+-- 1. Campanha desligada: doze mensagens, mais antigas que a da campanha ligada.
+INSERT INTO campaigns (id, nome, tipo, base_legal, canais_habilitados)
+VALUES ('ac000000-0000-0000-0000-0000000000c2','Desligada','morna','opt-in','{whatsapp}');
+DO $$
+DECLARE v uuid; i int;
+BEGIN
+  FOR i IN 1..12 LOOP
+    SELECT contact_id INTO v FROM ingerir_contato('00000000-0000-0000-0000-0000000000aa','planilha',
+      format('[{"canal":"whatsapp","valor":"159944%s","valor_norm":"55159944%s"}]', lpad(i::text, 4, '0'), lpad(i::text, 4, '0'))::jsonb,
+      'Desligada ' || i);
+    PERFORM inscrever(v, 'ac000000-0000-0000-0000-0000000000c2', 'ac000000-0000-0000-0000-000000000003',
+                      now() - interval '1 minute');
+  END LOOP;
+END;
+$$;
+SELECT count(*) FROM processar_vencidos(50, 'real');
+UPDATE campaigns SET ativa = false WHERE id = 'ac000000-0000-0000-0000-0000000000c2';
+UPDATE messages m SET criado_em = now() - interval '1 hour', reivindicada_em = NULL
+  FROM enrollments e WHERE e.id = m.enrollment_id AND e.campaign_id = 'ac000000-0000-0000-0000-0000000000c2';
+
+DO $$
+DECLARE v uuid; v_enr uuid;
+BEGIN
+  SELECT contact_id INTO v FROM ingerir_contato('00000000-0000-0000-0000-0000000000aa','planilha',
+    '[{"canal":"whatsapp","valor":"15995550001","valor_norm":"5515995550001"}]'::jsonb, 'Pode sair');
+  SELECT inscrever(v, 'ac000000-0000-0000-0000-000000000001', 'ac000000-0000-0000-0000-000000000003',
+                   now() - interval '1 minute') INTO v_enr;
+  INSERT INTO dc.quem VALUES ('pode_sair', v, v_enr, NULL);
+END;
+$$;
+SELECT count(*) FROM processar_vencidos(50, 'real');
+UPDATE dc.quem q SET mensagem = m.id FROM messages m WHERE m.enrollment_id = q.enrollment AND q.rotulo = 'pode_sair';
+
+CREATE TEMP TABLE lote5 AS SELECT * FROM reivindicar_pendentes(10);
+SELECT dc.confere('doze retidas de campanha desligada não seguram a que pode sair (limite 10)',
+  EXISTS (SELECT 1 FROM lote5 l JOIN dc.quem q ON q.mensagem = l.message_id WHERE q.rotulo = 'pode_sair'),
+  (SELECT count(*)::text || ' no lote' FROM lote5));
+SELECT dc.confere('e as da campanha desligada seguem pendentes, sem serem tocadas',
+  (SELECT count(*) FROM messages m JOIN enrollments e ON e.id = m.enrollment_id
+    WHERE e.campaign_id = 'ac000000-0000-0000-0000-0000000000c2'
+      AND m.status = 'pendente' AND m.reivindicada_em IS NULL) = 12);
+
+-- 2. Sem conta no pool: doze mensagens de uma campanha fria cujo único chip
+-- caiu. Elas esperam (D37, D69) — mas atrás das que nunca foram olhadas.
+INSERT INTO sender_accounts (id, canal, identificador, apelido, provedor, tipo_permitido, quota_diaria, config)
+VALUES ('ac000000-0000-0000-0000-0000000000f1','whatsapp','+5511900000099','Frio','gupshup','fria',200,
+        '{"app_name":"b","source":"2"}'::jsonb);
+INSERT INTO campaigns (id, nome, tipo, base_legal, canais_habilitados)
+VALUES ('ac000000-0000-0000-0000-0000000000c3','Fria','fria','prospeccao','{whatsapp}');
+DO $$
+DECLARE v uuid; i int;
+BEGIN
+  FOR i IN 1..12 LOOP
+    SELECT contact_id INTO v FROM ingerir_contato('00000000-0000-0000-0000-0000000000aa','planilha',
+      format('[{"canal":"whatsapp","valor":"159966%s","valor_norm":"55159966%s"}]', lpad(i::text, 4, '0'), lpad(i::text, 4, '0'))::jsonb,
+      'Fria ' || i);
+    PERFORM inscrever(v, 'ac000000-0000-0000-0000-0000000000c3', 'ac000000-0000-0000-0000-000000000003',
+                      now() - interval '1 minute');
+  END LOOP;
+END;
+$$;
+SELECT count(*) FROM processar_vencidos(50, 'real');
+UPDATE sender_accounts SET estado = 'desativado' WHERE id = 'ac000000-0000-0000-0000-0000000000f1';
+UPDATE messages m SET criado_em = now() - interval '1 hour', reivindicada_em = NULL
+  FROM enrollments e WHERE e.id = m.enrollment_id AND e.campaign_id = 'ac000000-0000-0000-0000-0000000000c3';
+
+DO $$
+DECLARE v uuid; v_enr uuid;
+BEGIN
+  SELECT contact_id INTO v FROM ingerir_contato('00000000-0000-0000-0000-0000000000aa','planilha',
+    '[{"canal":"whatsapp","valor":"15995550002","valor_norm":"5515995550002"}]'::jsonb, 'Pode sair 2');
+  SELECT inscrever(v, 'ac000000-0000-0000-0000-000000000001', 'ac000000-0000-0000-0000-000000000003',
+                   now() - interval '1 minute') INTO v_enr;
+  INSERT INTO dc.quem VALUES ('pode_sair_2', v, v_enr, NULL);
+END;
+$$;
+SELECT count(*) FROM processar_vencidos(50, 'real');
+UPDATE dc.quem q SET mensagem = m.id FROM messages m WHERE m.enrollment_id = q.enrollment AND q.rotulo = 'pode_sair_2';
+
+CREATE TEMP TABLE lote6 AS SELECT * FROM reivindicar_pendentes(10);
+CREATE TEMP TABLE lote7 AS SELECT * FROM reivindicar_pendentes(10);
+SELECT dc.confere('doze retidas sem conta no pool não seguram a que pode sair: sai em duas batidas',
+  EXISTS (SELECT 1 FROM (SELECT * FROM lote6 UNION ALL SELECT * FROM lote7) l
+            JOIN dc.quem q ON q.mensagem = l.message_id WHERE q.rotulo = 'pode_sair_2'),
+  (SELECT count(*)::text FROM lote6) || ' + ' || (SELECT count(*)::text FROM lote7));
+SELECT dc.confere('e as retidas seguem pendentes, no chip delas (a fria não vai para o chip morno)',
+  (SELECT count(*) FROM messages m JOIN enrollments e ON e.id = m.enrollment_id
+    WHERE e.campaign_id = 'ac000000-0000-0000-0000-0000000000c3' AND m.status = 'pendente'
+      AND m.sender_account_id = 'ac000000-0000-0000-0000-0000000000f1') = 12);
+
+-- ---------------------------------------------------------------------------
 
 \echo ''
 \echo '============= DESPACHO CONCORDA COM O AGENDADOR ============='

@@ -155,15 +155,26 @@ $$;
 -- O caso de produção: campanha morna, e o único chip do cliente é frio. A
 -- inscrição entra, e o agendador adia o passo de hora em hora para sempre —
 -- sem erro, como o `sem_canal` de cima. A prévia diz.
+--
+-- D77b: a pergunta do pool é de `privado.pool_da_campanha`, que responde a
+-- quem opera o cliente — e é um operador quem pergunta aqui (D41). O
+-- circuito aberto passou a contar como pool: ele fecha sozinho. O teste no
+-- papel `authenticated`, com o RLS de `sender_accounts`, está em
+-- `tests/auditoria.sql`.
+
+INSERT INTO tenant_users (tenant_id, user_id, papel)
+VALUES ('00000000-0000-0000-0000-0000000000aa', 'dd000000-0000-0000-0000-0000000000d1', 'operador');
 
 DO $$
 DECLARE v_alvo uuid[] := (SELECT array_agg(id) FROM quem WHERE rotulo = 'alcancavel');
         v_p text; v_a text;
 BEGIN
+  PERFORM set_config('request.jwt.claims', '{"sub":"dd000000-0000-0000-0000-0000000000d1"}', true);
+
   SELECT acao, problema INTO v_a, v_p FROM prever_inscricao('00000000-0000-0000-0000-0000000000aa',
     'dd000000-0000-0000-0000-000000000001', 'dd000000-0000-0000-0000-000000000003', v_alvo);
   PERFORM pi.confere('sem conta no pool da campanha, a prévia avisa e não recusa',
-    v_a = 'inscrever' AND v_p LIKE 'sem conta morna ativa em whatsapp:%', v_a || ' / ' || coalesce(v_p, '(nulo)'));
+    v_a = 'inscrever' AND v_p LIKE 'sem conta morna em whatsapp:%', v_a || ' / ' || coalesce(v_p, '(nulo)'));
 
   INSERT INTO sender_accounts (tenant_id, canal, identificador, provedor, tipo_permitido, quota_diaria)
   VALUES ('00000000-0000-0000-0000-0000000000aa', 'whatsapp', '5515990000001', 'evolution', 'fria', 50);
@@ -173,17 +184,30 @@ BEGIN
     v_p LIKE 'sem conta morna%', coalesce(v_p, '(nulo)'));
 
   INSERT INTO sender_accounts (tenant_id, canal, identificador, provedor, tipo_permitido, quota_diaria, estado)
-  VALUES ('00000000-0000-0000-0000-0000000000aa', 'whatsapp', '5515990000002', 'evolution', 'morna', 50, 'circuito_aberto');
+  VALUES ('00000000-0000-0000-0000-0000000000aa', 'whatsapp', '5515990000002', 'evolution', 'morna', 50, 'desativado');
   SELECT problema INTO v_p FROM prever_inscricao('00000000-0000-0000-0000-0000000000aa',
     'dd000000-0000-0000-0000-000000000001', 'dd000000-0000-0000-0000-000000000003', v_alvo);
-  PERFORM pi.confere('conta morna fora do pool (circuito aberto) não conta',
-    v_p LIKE 'sem conta morna%', coalesce(v_p, '(nulo)'));
+  PERFORM pi.confere('conta morna desligada é dita desligada, não "conecte uma"',
+    v_p LIKE 'a conta morna de whatsapp está desligada%', coalesce(v_p, '(nulo)'));
 
-  UPDATE sender_accounts SET estado = 'ativo'
+  UPDATE sender_accounts SET estado = 'circuito_aberto', circuito_aberto_ate = now() + interval '30 minutes'
+   WHERE tenant_id = '00000000-0000-0000-0000-0000000000aa' AND identificador = '5515990000002';
+  SELECT problema INTO v_p FROM prever_inscricao('00000000-0000-0000-0000-0000000000aa',
+    'dd000000-0000-0000-0000-000000000001', 'dd000000-0000-0000-0000-000000000003', v_alvo);
+  PERFORM pi.confere('circuito aberto fecha sozinho: não é conta que falta', v_p IS NULL, coalesce(v_p, '(nulo)'));
+
+  UPDATE sender_accounts SET estado = 'ativo', circuito_aberto_ate = NULL
    WHERE tenant_id = '00000000-0000-0000-0000-0000000000aa' AND identificador = '5515990000002';
   SELECT problema INTO v_p FROM prever_inscricao('00000000-0000-0000-0000-0000000000aa',
     'dd000000-0000-0000-0000-000000000001', 'dd000000-0000-0000-0000-000000000003', v_alvo);
   PERFORM pi.confere('com conta morna ativa, nada a avisar', v_p IS NULL, coalesce(v_p, '(nulo)'));
+
+  -- Quem não opera o cliente não recebe resposta nenhuma sobre as contas dele.
+  PERFORM set_config('request.jwt.claims', '{"sub":"dd000000-0000-0000-0000-0000000000ff"}', true);
+  PERFORM pi.confere('o pool não responde a quem não opera o cliente',
+    privado.pool_da_campanha('00000000-0000-0000-0000-0000000000aa', 'dd000000-0000-0000-0000-000000000001',
+                             'whatsapp') IS NULL);
+  PERFORM set_config('request.jwt.claims', '', true);
 END;
 $$;
 

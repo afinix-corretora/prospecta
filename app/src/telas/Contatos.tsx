@@ -383,6 +383,15 @@ function Inscricao({ tenant, contatos, aoTerminar }: {
             </Aviso>
           )}
 
+          {/* D77b: quem entra pode entrar e não sair — a campanha sem conta no
+              próprio pool, ou desligada. A prévia diz isso na linha de quem
+              entra, e era a única linha que a tela não mostrava. */}
+          {[...new Set(previsao.filter((p) => p.acao === 'inscrever' && p.problema).map((p) => p.problema!))].map((pr) => (
+            <Aviso key={pr} tipo="erro">
+              {previsao.filter((p) => p.acao === 'inscrever' && p.problema === pr).length} dos que entram: {pr}.
+            </Aviso>
+          ))}
+
           <Fora previsao={previsao} />
 
           {passo === 'previsto' && (

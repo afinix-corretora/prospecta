@@ -82,6 +82,22 @@ test('canal e família do WhatsApp só entram se a pessoa os disse (D77)', () =>
   assert.deepEqual(lerSaida(tudo, mapa, [], 'WhatsApp não oficial, num chip, e e-mail').respostas,
     { canais: ['whatsapp', 'email'], 'familia:whatsapp': 'nao' });
   assert.deepEqual(lerSaida(tudo, mapa, [], 'todos os canais').respostas, { canais: ['whatsapp', 'email', 'sms'] });
+  // D77b: o assunto não basta — o sentido e o contexto contam.
+  assert.deepEqual(lerSaida(tudo, mapa, [], 'oi, tudo bem? quero telegram').respostas, {});
+  assert.deepEqual(lerSaida(tudo, mapa, [], 'telegram, 100 todos os dias').respostas, {});
+  assert.deepEqual(lerSaida(tudo, mapa, [], 'no zap, minha meta é 50 reuniões por mês, lista que comprei').respostas,
+    { canais: ['whatsapp'] });
+  assert.deepEqual(lerSaida(tudo, mapa, [], 'zap, lista que comprei, o e-mail oficial da empresa é x@y.com').respostas,
+    { canais: ['whatsapp', 'email'] }, 'e-mail oficial não é WhatsApp não oficial');
+  assert.deepEqual(lerSaida(tudo, mapa, [], 'quero o WhatsApp oficial').respostas, { canais: ['whatsapp'] },
+    '"oficial" não autoriza "não oficial"');
+  const oficial = saida([{ chave: 'familia:whatsapp', valores: ['oficial'], numeros: [] }]);
+  assert.deepEqual(lerSaida(oficial, mapa, [], 'quero o WhatsApp oficial').respostas, { 'familia:whatsapp': 'oficial' });
+  assert.deepEqual(lerSaida(oficial, mapa, [], 'WhatsApp não oficial').respostas, {});
+  assert.deepEqual(lerSaida(oficial, mapa, [], 'pela API da Meta').respostas, { 'familia:whatsapp': 'oficial' });
+  const textoEmail = saida([{ chave: 'canais', valores: ['sms', 'email'], numeros: [] }]);
+  assert.deepEqual(lerSaida(textoEmail, mapa, [], 'quero mandar mensagens de texto e e-mails').respostas,
+    { canais: ['sms', 'email'] }, 'plural também é o canal');
   // Sem a fala (quem chama sem ela), nada muda: o filtro de vocabulário segue.
   assert.deepEqual(lerSaida(tudo, mapa).respostas, { canais: ['whatsapp', 'email', 'sms'], 'familia:whatsapp': 'nao' });
 });

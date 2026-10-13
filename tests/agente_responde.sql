@@ -282,8 +282,10 @@ SELECT ar.responde((SELECT evento FROM ar.ev WHERE n = 7), 'Qual a idade?');
 UPDATE sender_accounts SET estado = 'desativado' WHERE id = :chipa;
 CREATE TABLE ar.lote7 AS SELECT * FROM reivindicar_pendentes(50);
 SELECT ar.confere('com o chip A fora, a mensagem do agente fica pendente e NÃO vai para o chip B',
+  -- D77b: "volta para a fila" é elegível na próxima batida — atrás das que
+  -- nunca foram olhadas, por isso o lease já vencido em vez de nulo.
   (SELECT m.status = 'pendente' AND m.sender_account_id = 'ae000000-0000-0000-0000-0000000000e1'::uuid
-          AND m.reivindicada_em IS NULL
+          AND (m.reivindicada_em IS NULL OR m.reivindicada_em <= now() - interval '5 minutes')
      FROM messages m JOIN rascunhos r ON r.id = m.rascunho_id
     WHERE r.message_event_id = (SELECT evento FROM ar.ev WHERE n = 7))
   AND NOT EXISTS (SELECT 1 FROM ar.lote7 l JOIN messages m ON m.id = l.message_id

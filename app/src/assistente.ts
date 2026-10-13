@@ -101,6 +101,7 @@ export interface Foto {
    *  (D77): conta fria não manda pela campanha morna. */
   readonly campanhas: readonly {
     id: string; nome: string; ativa: boolean; tipo?: Pool; canais_habilitados?: readonly string[];
+    remetente_email_id?: string | null;
   }[];
   readonly contatos: number;
   /** Servidores de provedor que hospeda instância (D25). Com um, o setup por
@@ -725,8 +726,12 @@ export function montarPlano(f: Foto, bruto: Respostas): Plano {
       const cada = Math.max(1, Math.ceil(alvo / existentes.length));
       const tetoDe = (x: { provedor: string }) => tetoPorConta(canal,
         canal === 'whatsapp' && !f.provedores.find((p) => p.slug === x.provedor)?.oficial ? 'nao' : 'oficial', pool);
+      // D77b: e baixar só quando a pessoa pediu MENOS do que as contas já
+      // somam. Pedir 200 com contas de 40 e 150 baixava a de 150 para 100.
+      const total = existentes.reduce((s, x) => s + x.quota_diaria, 0);
       const paraDe = (x: { quota_diaria: number; provedor: string }) =>
-        cada > x.quota_diaria ? Math.max(x.quota_diaria, Math.min(cada, tetoDe(x))) : cada;
+        cada > x.quota_diaria ? Math.max(x.quota_diaria, Math.min(cada, tetoDe(x)))
+          : alvo < total ? cada : x.quota_diaria;
       for (const x of existentes) {
         const para = paraDe(x);
         if (x.quota_diaria === para) continue;
@@ -879,7 +884,9 @@ export function montarPlano(f: Foto, bruto: Respostas): Plano {
         avisos.push(`Nenhum canal desta campanha traz a resposta da pessoa (${d.semResposta.map((c) => NOME[c]).join(', ')}): não há agente para pôr.`);
       }
     }
-  } else if (credencial !== undefined) {
+  } else if (credencial !== undefined && camp === NAO) {
+    // D77b: só quando a pessoa disse que não quer campanha agora. Antes, o
+    // aviso aparecia na conversa antes de a campanha ser perguntada.
     avisos.push('A conta de IA fica escolhida só quando houver campanha: escolha-a na tela da campanha, em "Quem responde".');
   }
 
@@ -934,12 +941,20 @@ export function situacao(f: Foto): Item[] {
   // adapter (D31): uma conta fria não manda pela campanha morna. Sem isto, o
   // Início dizia que estava tudo pronto, a prévia inscrevia, e o agendador
   // adiava cada passo de hora em hora, para sempre, sem erro.
+  //
+  // D77b: a mesma regra de `privado.pool_da_campanha` — circuito aberto conta
+  // (fecha sozinho), e no e-mail vale a conta que a campanha escolheu (D62). E
+  // só para quem administra: o RLS de `sender_accounts` não mostra conta
+  // nenhuma ao operador, e "sem conta" para ele seria falso.
   const entregam = new Set(f.provedores.filter((p) => p.tem_adapter && p.ativo).map((p) => p.slug));
-  const semPool = camps.flatMap((c) => (c.canais_habilitados ?? [])
+  const noPool = (c: Foto['campanhas'][number], canal: CanalEnvio) => f.remetentes.some((r) =>
+    r.canal === canal && (r.estado === 'ativo' || r.estado === 'circuito_aberto')
+    && r.tipo_permitido === c.tipo && entregam.has(r.provedor)
+    && (canal !== 'email' || !c.remetente_email_id || r.id === c.remetente_email_id));
+  const semPool = !f.administra ? [] : camps.flatMap((c) => (c.canais_habilitados ?? [])
     .filter((canal): canal is CanalEnvio => (CANAIS_DE_ENVIO as readonly string[]).includes(canal))
-    .filter((canal) => !!c.tipo && !f.remetentes.some((r) => r.canal === canal && r.estado === 'ativo'
-      && r.tipo_permitido === c.tipo && entregam.has(r.provedor)))
-    .map((canal) => `"${c.nome}" (${c.tipo}) não tem conta ${NOME[canal]} no pool ${c.tipo}`));
+    .filter((canal) => !!c.tipo && !noPool(c, canal))
+    .map((canal) => `"${c.nome}" (${c.tipo}) não tem conta ${NOME[canal]} ativa no pool ${c.tipo}`));
   return [
     { id: 'canais', titulo: 'Canais', feito: contas.length > 0,
       detalhe: contas.length

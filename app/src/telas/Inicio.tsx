@@ -53,11 +53,11 @@ export async function lerFoto(administra: boolean, opera: boolean,
   cliente?: { id: string; nome: string }): Promise<Foto> {
   const [provedores, remetentes, provedoresIA, credenciaisIA, provedoresCRM, conexoesCRM,
          modelos, agentes, campanhas, contatos, servidores, agentesPorCanal] = await Promise.all([
-    lerProvedoresCanal(), lerRemetentes(), lerProvedoresIA(), lerCredenciaisIA(), lerProvedoresCRM(),
+    lerProvedoresCanal(), lerRemetentes(cliente?.id), lerProvedoresIA(), lerCredenciaisIA(), lerProvedoresCRM(),
     // A RLS de conexão de CRM é só de quem administra, inclusive na leitura:
     // operador vê uma lista vazia, e o assistente não deve tratar isso como erro.
     administra ? lerConexoesCRM() : Promise.resolve([]),
-    lerModelos(), lerAgentes(), lerCampanhas(), contarContatos(),
+    lerModelos(), lerAgentes(), lerCampanhas(cliente?.id), contarContatos(),
     // Servidor ativo é o que deixa a conversa CRIAR o chip (D25, D73). Erro
     // aqui não derruba o setup: sem servidor, a conversa conecta uma instância.
     sb.from('provider_servers').select('id, provedor, nome').eq('ativo', true)

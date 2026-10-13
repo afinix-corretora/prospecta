@@ -286,19 +286,19 @@ function resumoDaFonte(f: FonteCRM): string {
   const insc = (r.inscricao ?? {}) as Record<string, number>;
   const naoInscritos = Object.entries(insc).filter(([k]) => k !== 'inscrito' && k !== 'sem_campanha');
   // D77: o que se perdeu aparece — é o que a ajuda da fonte promete (D33).
+  // D77b: os exemplos ficam de uma passada para a outra (o card ignorado ganha
+  // vínculo e não volta), os cinco mais recentes, cada um com a data dele.
   const exemplos = (Array.isArray(r.ignorados_exemplos) ? r.ignorados_exemplos : []) as
-    { card: string; coluna: string; valor: string; motivo: string }[];
+    { card: string; coluna: string; valor: string; motivo: string; em?: string }[];
+  const dia = (x: { em?: string }) => (x.em ? ` em ${new Date(x.em).toLocaleDateString('pt-BR')}` : '');
   return `${quando}: ${n('lidos')} cards, ${n('novos')} novos, ${n('criados')} contatos criados`
     + (n('atualizados') ? `, ${n('atualizados')} atualizados` : '')
     + (insc.inscrito ? `, ${insc.inscrito} inscritos` : '')
     + (naoInscritos.length ? `, não inscritos: ${naoInscritos.map(([k, v]) => `${v} ${k.replace(/_/g, ' ')}`).join(', ')}` : '')
     + (n('recusados') ? `, ${n('recusados')} recusados` : '')
-    + (n('ignorados')
-      ? `, ${n('ignorados')} ${n('ignorados') === 1 ? 'valor ignorado' : 'valores ignorados'}`
-        + (exemplos.length
-          ? ` (${exemplos.map((x) => `card ${x.card}, ${x.coluna} "${x.valor}": ${x.motivo}`).join('; ')}`
-            + `${n('ignorados') > exemplos.length ? '; …' : ''})`
-          : '')
+    + (n('ignorados') ? `, ${n('ignorados')} ${n('ignorados') === 1 ? 'valor ignorado' : 'valores ignorados'}` : '')
+    + (exemplos.length
+      ? `. Últimos valores ignorados: ${exemplos.map((x) => `card ${x.card}, ${x.coluna} "${x.valor}": ${x.motivo}${dia(x)}`).join('; ')}`
       : '');
 }
 

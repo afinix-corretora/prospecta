@@ -171,7 +171,42 @@ test('o fim da conversa diz o que ficou de fora, lido do banco (D77)', () => {
 
   const outroPool = fechamento({ ...FOTO, remetentes: [chip('fria')], campanhas: [camp] }, est({}));
   assert.equal(outroPool.tipo, 'aviso', 'campanha morna com chip frio não está pronta');
-  assert.match(outroPool.texto, /não tem conta WhatsApp no pool morna/);
+  assert.match(outroPool.texto, /não tem conta WhatsApp ativa no pool morna/);
+});
+
+test('chave com formato de chave é barrada em QUALQUER campo; nome de modelo real entra (D77b)', () => {
+  // O passo que vem antes da chave é um campo não secreto (o base_url do
+  // compatível, o client_id): colar a chave ali a gravava em `config`.
+  const f: Foto = { ...FOTO, provedoresIA: [...FOTO.provedoresIA,
+    { slug: 'compativel', nome: 'Compatível', tem_adapter: true, modelos_sugeridos: [],
+      campos: [campo('base_url'), campo('api_key', true)] }] };
+  const r: Respostas = { ...R_EMAIL, 'provedor:email': USAR, ia: 'compativel' };
+  const col = coletaDa(f, r, 'ia')!;
+  const passoDe = (chave: string): PassoSetup => ({ tipo: 'campo', coleta: col, campo: col.campos.find((c) => c.chave === chave)! });
+  const e = est(r);
+  const sk = 'sk-proj-' + 'Ab12Cd34Ef56Gh78Ij90Kl12';
+  const jwt = 'eyJhbGciOiJIUzI1NiJ9.' + 'eyJzdWIiOiIxMjM0NTY3ODkwIn0.abc';
+  assert.equal(comoEntra(e, passoDe('base_url'), sk, true), 'chave');
+  assert.equal(comoEntra(e, passoDe('base_url'), jwt, true), 'chave');
+  assert.equal(comoEntra(e, passoDe('base_url'), '3f2a9c4e-8b1d-4e7a-9c2f-5d6e7f8a9b0c', true), 'chave', 'UUID fora do client_id');
+  assert.equal(comoEntra(e, passoDe('base_url'), 'https://gw.exemplo.com/v1', true), 'campo');
+
+  // O client_id pode ser um UUID; uma chave com prefixo, não.
+  const crm: Foto = { ...FOTO, provedoresCRM: [{ slug: 'pipefy', nome: 'Pipefy', tem_adapter: true,
+    campos: [campo('client_id'), campo('client_secret', true)] }] };
+  const colCrm = coletaDa(crm, { ...R_EMAIL, 'provedor:email': USAR, ia: NAO, crm: 'pipefy' }, 'crm')!;
+  const cid: PassoSetup = { tipo: 'campo', coleta: colCrm, campo: colCrm.campos.find((c) => c.chave === 'client_id')! };
+  assert.equal(comoEntra(est({}), cid, '3f2a9c4e-8b1d-4e7a-9c2f-5d6e7f8a9b0c', true), 'campo');
+  assert.equal(comoEntra(est({}), cid, sk, true), 'chave');
+
+  // Modelo: os ids reais com barra, hífen e dois-pontos entram; a chave não.
+  const modelo: PassoSetup = { tipo: 'campo', coleta: col, campo: col.campos.find((c) => c.chave === 'modelo')! };
+  for (const id of ['accounts/fireworks/models/qwen3-235b-a22b', 'cognitivecomputations/dolphin3.0-mistral-24b:free',
+                    'HuggingFaceTB/SmolLM3-3B', 'meta-llama/Llama-3.3-70B-Instruct-Turbo', 'gpt-4o-2024-08-06']) {
+    assert.equal(comoEntra(e, modelo, id, true), 'campo', id);
+  }
+  assert.equal(comoEntra(e, modelo, 'a1b2c3d4e5f60718293a4b5c6d7e8f90', true), 'chave', 'hex de 32 não é modelo');
+  assert.equal(comoEntra(e, modelo, sk, true), 'chave');
 });
 
 test('quem não administra não configura conta, e a conversa diz isso em vez de pedir a chave', () => {

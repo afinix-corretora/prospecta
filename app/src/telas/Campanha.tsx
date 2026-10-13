@@ -388,6 +388,12 @@ function Cadencia({ campanha, versoes, podeOperar, aoMudar, aoFalhar }: {
             {atual.passos} {atual.passos === 1 ? 'passo' : 'passos'} em{' '}
             {atual.canais.map((c) => NOME_CANAL[c] ?? c).join(', ')}
           </p>
+        ) : campanha.flow_version_id ? (
+          // D77b: a leitura das cadências pode ter falhado (o aviso do topo
+          // diz) — aí a campanha aponta uma, e a tela não pode negar.
+          <p style={{ color: 'var(--ink-2)', fontSize: 13, marginTop: 0 }}>
+            A campanha aponta uma cadência, mas a lista de cadências não carregou.
+          </p>
         ) : (
           <Aviso tipo="erro">
             Esta campanha não aponta cadência nenhuma. Inscrever alguém agora
@@ -478,7 +484,7 @@ function EmailDaCampanha({ campanha, contas, podeOperar, aoMudar, aoFalhar }: {
 
   return (
     <>
-      <Secao titulo="Provedor de e-mail" nota={atual ? 'escolhido para esta campanha' : 'rodízio do pool'} />
+      <Secao titulo="Provedor de e-mail" nota={campanha.remetente_email_id ? 'escolhido para esta campanha' : 'rodízio do pool'} />
       <div className="painel">
         {atual ? (
           <p style={{ color: 'var(--ink-2)', fontSize: 13, marginTop: 0 }}>
@@ -492,6 +498,13 @@ function EmailDaCampanha({ campanha, contas, podeOperar, aoMudar, aoFalhar }: {
             {atual.verificacao_ok === false && (
               <b style={{ color: 'var(--crit)' }}> · última verificação falhou</b>
             )}
+          </p>
+        ) : campanha.remetente_email_id ? (
+          // D77b: a conta é escolhida, mas a lista não veio — ela é de quem
+          // opera, ou a leitura falhou. Dizer "rodízio" seria negar o banco.
+          <p style={{ color: 'var(--ink-2)', fontSize: 13, marginTop: 0 }}>
+            Uma conta está escolhida para esta campanha{podeOperar ? ', mas a lista de contas não carregou' : ' (os detalhes são de quem opera)'}:
+            o e-mail sai só por ela.
           </p>
         ) : (
           <p style={{ color: 'var(--ink-2)', fontSize: 13, marginTop: 0 }}>

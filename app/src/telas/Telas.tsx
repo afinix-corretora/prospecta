@@ -1,3 +1,4 @@
+import { oQueFalta, textoDoSegredo, valoresGuardados } from '../credencial';
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useSessao } from '../sessao';
@@ -612,8 +613,20 @@ function FormularioDeIA(props: PropsFormularioIA) {
   // Trocar o provedor mantendo o nome pede a chave nova — o banco recusa, e a
   // tela diz antes, para o botão não parecer quebrado.
   const trocaDeProvedor = !!existente && existente.provedor !== provedor.slug;
-  const faltaChave = (!existente || trocaDeProvedor)
-    && provedor.campos.some((c) => c.segredo && c.obrigatorio && !(valores[c.chave] ?? '').trim());
+  // D77b: a regra inteira (provedor, endereço, uma chave sem as outras) mora em
+  // `credencial.ts`, com os mesmos casos do teste do banco.
+  const guardada = existente
+    ? { provedor: existente.provedor, temSegredo: !!existente.chave_secret_id, config: existente.config ?? {} } : null;
+  const { faltam, porQue } = oQueFalta(provedor.campos, provedor.slug, valores, guardada);
+  // O formulário abre com o que não é segredo já preenchido: em branco passa a
+  // ser em branco, e a lista de modelos usa o destino que será salvo (D77b).
+  const idGuardada = existente && existente.provedor === provedor.slug ? existente.id : null;
+  useEffect(() => {
+    if (!existente || !idGuardada) return;
+    setValores((v) => ({ ...valoresGuardados(provedor.campos, guardada, provedor.slug),
+      ...Object.fromEntries(Object.entries(v).filter(([, x]) => x.trim())) }));
+    setModelo((m) => m || existente.modelo);
+  }, [idGuardada]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // D72: a lista de modelos vem do provedor, com a chave recém-colada — ou,
   // editando conta salva do mesmo provedor sem redigitar, com a do Vault.
@@ -703,11 +716,7 @@ function FormularioDeIA(props: PropsFormularioIA) {
         <Campo key={c.chave} id={`ia-${c.chave}`} rotulo={c.rotulo} tipo={c.tipo}
                valor={valores[c.chave] ?? ''} obrigatorio={c.obrigatorio}
                aoMudar={(v) => setValores({ ...valores, [c.chave]: v })} ajuda={c.ajuda}
-               vault={c.segredo
-                 ? existente && !trocaDeProvedor
-                   ? 'Vai para o Vault. Em branco na edição, a chave guardada fica como está — a não ser que o endereço mude: aí ela é pedida de novo.'
-                   : 'Vai para o Vault.'
-                 : undefined} />
+               vault={c.segredo ? textoDoSegredo(guardada, provedor.slug, porQue) : undefined} />
       ))}
 
       <div className="campo">
@@ -752,12 +761,15 @@ function FormularioDeIA(props: PropsFormularioIA) {
       </div>
 
       {msg && <Aviso tipo={msg.tipo}>{msg.texto}</Aviso>}
-      <button className="btn prim" disabled={estado === 'salvando' || !nome.trim() || !modelo.trim() || faltaChave}>
+      <button className="btn prim" disabled={estado === 'salvando' || !nome.trim() || !modelo.trim() || faltam.length > 0}>
         {estado === 'salvando' ? 'Salvando…' : existente ? 'Atualizar credencial' : 'Salvar credencial'}
       </button>
-      {faltaChave && nome.trim() && (
+      {faltam.length > 0 && nome.trim() && (
         <span className="ajuda">
-          {trocaDeProvedor ? 'Trocar o provedor pede a chave nova.' : 'Falta a chave.'}
+          Falta preencher: {faltam.map((c) => c.rotulo).join(', ')}
+          {porQue === 'provedor' ? ' — trocar o provedor pede a chave nova.'
+            : porQue === 'endereco' ? ' — o endereço mudou, e a chave guardada foi dada para o anterior.'
+            : porQue === 'outra_chave' ? ' — trocar uma das chaves pede as outras junto.' : '.'}
         </span>
       )}
     </form>
@@ -946,21 +958,25 @@ export function ConfigVinculadas() {
  * `config` (D28). É por não conhecer nenhum que esta tela sobrevive a um CRM
  * novo — que é uma linha de catálogo e zero mudança aqui.
  */
-function FormularioCRM(props: {
+interface PropsFormularioCRM {
   provedores: ProvedorCRM[]; conexoes: ConexaoCRM[]; tenant: string;
   aoSalvar(): Promise<void>;
-}) {
+}
+
+// Sem catálogo não há formulário. O retorno mora aqui, fora do componente que
+// usa hooks: hook depois de return condicional muda a ordem entre renders.
+function FormularioCRM(props: PropsFormularioCRM) {
+  return props.provedores.length ? <FormularioDeCRM {...props} /> : null;
+}
+
+function FormularioDeCRM(props: PropsFormularioCRM) {
   const [slug, setSlug] = useState('');
   const [nome, setNome] = useState('');
   const [valores, setValores] = useState<Record<string, string>>({});
   const [estado, setEstado] = useState<'parado' | 'salvando'>('parado');
   const [msg, setMsg] = useState<{ tipo: 'erro' | 'ok'; texto: string } | null>(null);
 
-  const escolhido = props.provedores.find((x) => x.slug === slug) ?? props.provedores[0];
-  if (!escolhido) return null;
-  // A anotação não é decorativa: sem ela o narrowing do guard acima não chega
-  // dentro de `salvar`, que é uma closure. Mesmo motivo do FormularioIA.
-  const provedor: ProvedorCRM = escolhido;
+  const provedor: ProvedorCRM = props.provedores.find((x) => x.slug === slug) ?? props.provedores[0]!;
 
   // Reenviar o mesmo nome EDITA, e dizer isso antes de salvar evita a descoberta
   // pelo caminho ruim: duas conexões quase iguais e nenhuma pista de qual vale.
@@ -980,11 +996,17 @@ function FormularioCRM(props: {
   // D77: e só para a MESMA plataforma — trocar a plataforma mantendo o nome
   // pede a credencial nova, porque a guardada foi dada à de antes.
   const trocaDePlataforma = !!existente && existente.provedor !== provedor.slug;
-  const faltando = provedor.campos.filter((c) => {
-    if (!c.obrigatorio) return false;
-    if ((valores[c.chave] ?? '').trim()) return false;
-    return !(c.segredo && existente?.credencial_secret_id && !trocaDePlataforma);
-  });
+  // D77b: a regra inteira — plataforma, domínio, uma chave sem as outras (o
+  // Zoho guarda duas) — mora em `credencial.ts`, com os casos do teste do banco.
+  const guardada = existente
+    ? { provedor: existente.provedor, temSegredo: !!existente.credencial_secret_id, config: existente.config ?? {} } : null;
+  const { faltam: faltando, porQue } = oQueFalta(provedor.campos, provedor.slug, valores, guardada);
+  const idGuardada = existente && existente.provedor === provedor.slug ? existente.id : null;
+  useEffect(() => {
+    if (!idGuardada) return;
+    setValores((v) => ({ ...valoresGuardados(provedor.campos, guardada, provedor.slug),
+      ...Object.fromEntries(Object.entries(v).filter(([, x]) => x.trim())) }));
+  }, [idGuardada]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function salvar(e: React.FormEvent) {
     e.preventDefault();
@@ -1044,11 +1066,7 @@ function FormularioCRM(props: {
         <Campo key={c.chave} id={`crm-${c.chave}`} rotulo={c.rotulo} tipo={c.tipo}
                valor={valores[c.chave] ?? ''} obrigatorio={c.obrigatorio}
                aoMudar={(v) => setValores({ ...valores, [c.chave]: v })} ajuda={c.ajuda}
-               vault={c.segredo
-                 ? existente && !trocaDePlataforma
-                   ? 'Vai para o Vault. Em branco na edição, a credencial guardada fica como está — a não ser que o endereço ou o domínio mude: aí ela é pedida de novo.'
-                   : 'Vai para o Vault.'
-                 : undefined} />
+               vault={c.segredo ? textoDoSegredo(guardada, provedor.slug, porQue) : undefined} />
       ))}
 
       {msg && <Aviso tipo={msg.tipo}>{msg.texto}</Aviso>}
@@ -1060,7 +1078,10 @@ function FormularioCRM(props: {
       </button>
       {faltando.length > 0 && nome.trim() && (
         <span className="ajuda">
-          Falta preencher: {faltando.map((c) => c.rotulo).join(', ')}.
+          Falta preencher: {faltando.map((c) => c.rotulo).join(', ')}
+          {porQue === 'provedor' ? ' — trocar a plataforma pede a credencial nova.'
+            : porQue === 'endereco' ? ' — o domínio mudou, e a credencial guardada foi dada para o anterior.'
+            : porQue === 'outra_chave' ? ' — trocar uma das chaves pede as outras junto.' : '.'}
         </span>
       )}
     </form>

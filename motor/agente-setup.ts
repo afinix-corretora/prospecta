@@ -224,16 +224,29 @@ export function corpoDoPedido(modelo: string, p: PedidoSetup): Record<string, un
  * a sugestão entra como clique e dispara configuração. Com a fala da pessoa na
  * mão, canal e família só passam se ELA os mencionou (D77).
  */
-const FALA_DE_FAMILIA = /oficial|\bapi\b|chip|\bqr\b|cloud|\bmeta\b|business|uazapi|evolution|gupshup/;
+// Quem a pessoa nomeou, e em que sentido. O assunto não basta: "minha meta é
+// 50 reuniões" não é a API da Meta, "o e-mail oficial da empresa" não é o
+// WhatsApp oficial, e "WhatsApp oficial" não autoriza "não oficial" (D77b).
+const FALA_DE_NAO_OFICIAL = /nao[ -]?oficial|\bchip\b|\bqr\b|qr ?code|uazapi|evolution|celular comum/;
+const FALA_DE_OFICIAL = new RegExp([
+  '(?:whats\\w*|zap|wpp)[^.;!?]{0,15}(?<!nao[ -]?)oficial',
+  '(?<!nao[ -]?)oficial[^.;!?]{0,15}(?:whats|zap|wpp)',
+  // "WhatsApp Business" sozinho é também o aplicativo do celular: ambíguo, fica de fora.
+  'cloud api', 'api oficial', 'api da meta', 'meta cloud', '\\bwaba\\b', 'business api', 'gupshup',
+].join('|'));
 const FALA_DE_CANAL: Record<string, RegExp> = {
-  whatsapp: /whats|\bzap|\bwpp\b|wats|uazapi|evolution|gupshup/,
-  email: /e-?mail|\bmail\b|resend|locaweb|smtp/,
-  sms: /\bsms\b|torpedo|mensagem de texto|comtele/,
+  whatsapp: /whats|wats|uats|zap|\bwpp\b|uazapi|evolution|gupshup/,
+  email: /e-?mails?\b|\bmails?\b|correio eletronico|resend|locaweb|smtp/,
+  sms: /\bsmss?\b|torpedos?\b|mensage(?:m|ns) de texto|comtele/,
 };
-const FALA_DE_TODOS = /\btod[oa]s\b|\btudo\b|\bos tres\b|\btodos os canais\b/;
+// "Todos" só quando fala de canal: "tudo bem" e "todos os dias" não escolhem
+// WhatsApp, e-mail e SMS.
+const FALA_DE_TODOS = /\btodos os (?:tres |3 )?canais\b|\bos (?:tres|3) canais\b|\btodos os tres\b|\btodas as opcoes\b|\btodos eles\b/;
 
 function disse(fala: string, chave: string, valor: string): boolean {
-  if (chave.startsWith('familia:')) return FALA_DE_FAMILIA.test(fala);
+  if (chave.startsWith('familia:')) {
+    return valor === 'nao' ? FALA_DE_NAO_OFICIAL.test(fala) : valor === 'oficial' ? FALA_DE_OFICIAL.test(fala) : false;
+  }
   if (chave === 'canais') return FALA_DE_TODOS.test(fala) || (FALA_DE_CANAL[valor]?.test(fala) ?? false);
   return true;
 }

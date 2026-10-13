@@ -135,10 +135,11 @@ SELECT au.confere('IA: trocar o provedor COM a chave nova passa da regra e vai a
   (SELECT saida FROM au.r WHERE caso = 'ia_provedor_com_chave'));
 
 -- CRM: o Zoho guarda DUAS chaves num objeto só. Mandar uma e deixar a outra em
--- branco perderia a segunda.
+-- branco perderia a segunda. O formulário abre com o que não é segredo
+-- preenchido (D77b), então o pedido traz o Client ID e o data center.
 INSERT INTO au.r VALUES ('crm_uma_chave', au.como_dono(
   $$SELECT salvar_credencial_crm('a7000000-0000-0000-0000-0000000000a0', 'Zoho da matriz', 'zoho_crm',
-                                 '{"refresh_token":"novo-refresh","client_secret":""}'::jsonb)$$));
+                                 '{"client_id":"1000.ABC","data_center":"com","refresh_token":"novo-refresh","client_secret":""}'::jsonb)$$));
 SELECT au.confere('CRM: trocar uma das chaves pede as outras junto',
   (SELECT saida LIKE '22023: trocar uma das chaves pede as outras junto%' FROM au.r WHERE caso = 'crm_uma_chave'),
   (SELECT saida FROM au.r WHERE caso = 'crm_uma_chave'));
@@ -244,6 +245,9 @@ INSERT INTO contacts (id, tenant_id, nome, origem) VALUES
   ('a7000000-0000-0000-0000-000000000a01', :ta, 'Maria Souza', 'planilha'),
   ('a7000000-0000-0000-0000-000000000a02', :ta, 'João 50% Off', 'planilha'),
   ('a7000000-0000-0000-0000-000000000a03', :ta, 'Ana Lima', 'planilha'),
+  -- D77b: com "50" sem "%", o termo "50%" sem escape ("%50%%") acharia este
+  -- também — sem ele, a asserção do "%" passava com e sem o escape.
+  ('a7000000-0000-0000-0000-000000000a04', :ta, 'Plano 50 vidas', 'planilha'),
   ('a7000000-0000-0000-0000-000000000b01', :tb, 'Maria do Outro Cliente', 'planilha');
 INSERT INTO contact_identities (tenant_id, contact_id, canal, valor, valor_norm, origem) VALUES
   (:ta, 'a7000000-0000-0000-0000-000000000a01', 'whatsapp', '+55 15 99123-4567', '5515991234567', 'planilha'),
@@ -264,6 +268,10 @@ SELECT au.confere('busca: pelo endereço', au.achou(:ta, 'exemplo.com') = 'Ana L
 SELECT au.confere('busca: "%" é texto, não curinga', au.achou(:ta, '50%') = 'João 50% Off', au.achou(:ta, '50%'));
 SELECT au.confere('busca: "_" é texto, não curinga', au.achou(:ta, '_') = '(nada)', au.achou(:ta, '_'));
 SELECT au.confere('busca: termo vazio não devolve a base inteira', au.achou(:ta, '   ') = '(nada)', au.achou(:ta, '   '));
+-- D77b: pelos dígitos só quando o termo é telefone. Antes, o "1234" deste
+-- e-mail achava o número da Maria, e a tela marca todos e inscreve.
+SELECT au.confere('busca: e-mail com dígitos não casa telefone pelos dígitos',
+  au.achou(:ta, 'carlos1234@exemplo.com') = '(nada)', au.achou(:ta, 'carlos1234@exemplo.com'));
 
 -- No papel de quem usa o produto: o RLS decide, e pedir o cliente do outro
 -- não abre nada.
@@ -337,12 +345,131 @@ SELECT au.confere('chip: o mesmo endereço reaproveita o token guardado',
         WHERE s.identificador = '5515990004444'),
   (SELECT saida FROM au.r WHERE caso = 'chip_mesmo'));
 
+-- D77b: com a chave NOVA, a configuração não secreta é a que a tela mandou —
+-- o formulário abre preenchido com ela. Herdar aqui guardava a organização
+-- (e o base_url) que a pessoa não via, e a lista de modelos validava a chave
+-- contra outro destino.
+INSERT INTO au.r VALUES ('ia_chave_nova', au.como_dono(
+  $$SELECT salvar_credencial_ia('a7000000-0000-0000-0000-0000000000a0', 'OpenAI da matriz', 'openai', 'gpt-4o',
+                                '{"api_key":"chave-nova-de-teste"}'::jsonb)$$));
+SELECT au.confere('IA: com a chave nova, a configuração é a que a tela mandou (não herda a organização)',
+  (SELECT saida = 'ok' FROM au.r WHERE caso = 'ia_chave_nova')
+  AND (SELECT config = '{}'::jsonb AND chave_secret_id <> 'a7000000-0000-0000-0000-0000000077c1'
+         FROM ai_credentials WHERE id = 'a7000000-0000-0000-0000-0000000000c1'),
+  (SELECT saida FROM au.r WHERE caso = 'ia_chave_nova') || ' / '
+    || (SELECT config::text FROM ai_credentials WHERE id = 'a7000000-0000-0000-0000-0000000000c1'));
+
 DROP SCHEMA vault CASCADE;
+
+-- ===========================================================================
+-- 6. A prévia pergunta o pool pelo operador (D77b)
+-- ===========================================================================
+--
+-- A prévia é INVOKER e `sender_accounts` só se lê administrando: perguntado
+-- direto, o pool respondia "sem conta" para todo operador. As asserções rodam
+-- no papel de quem usa o produto (D41). O chip morno do cliente A é o que
+-- `conectar_conta` criou acima.
+
+INSERT INTO flows (id, tenant_id, nome) VALUES ('a7000000-0000-0000-0000-00000000f001', :ta, 'Toque');
+INSERT INTO flow_versions (id, tenant_id, flow_id, versao)
+VALUES ('a7000000-0000-0000-0000-00000000f002', :ta, 'a7000000-0000-0000-0000-00000000f001', 1);
+INSERT INTO flow_steps (tenant_id, flow_version_id, ordem, canal, atraso_horas, template) VALUES
+  (:ta, 'a7000000-0000-0000-0000-00000000f002', 1, 'whatsapp', 0, 'oi'),
+  (:ta, 'a7000000-0000-0000-0000-00000000f002', 2, 'email', 24, 'Assunto: oi' || chr(10) || chr(10) || 'corpo');
+INSERT INTO campaigns (id, tenant_id, nome, tipo, base_legal, canais_habilitados) VALUES
+  ('a7000000-0000-0000-0000-00000000ca01', :ta, 'Morna', 'morna', 'opt-in', '{whatsapp}'),
+  ('a7000000-0000-0000-0000-00000000ca02', :ta, 'Fria', 'fria', 'prospeccao', '{whatsapp}');
+-- E-mail: duas contas mornas; a campanha escolhe a X (D62).
+INSERT INTO sender_accounts (id, tenant_id, canal, identificador, provedor, tipo_permitido, quota_diaria) VALUES
+  ('a7000000-0000-0000-0000-00000000e0a1', :ta, 'email', 'x@exemplo.com', 'resend', 'morna', 100),
+  ('a7000000-0000-0000-0000-00000000e0a2', :ta, 'email', 'y@exemplo.com', 'resend', 'morna', 100);
+INSERT INTO campaigns (id, tenant_id, nome, tipo, base_legal, canais_habilitados, remetente_email_id) VALUES
+  ('a7000000-0000-0000-0000-00000000ca03', :ta, 'E-mail pela X', 'morna', 'opt-in', '{email}',
+   'a7000000-0000-0000-0000-00000000e0a1');
+
+CREATE FUNCTION au.problema(p_campanha uuid, p_contato uuid) RETURNS text
+LANGUAGE sql AS $$
+  SELECT coalesce(problema, '(nenhum)') FROM prever_inscricao('a7000000-0000-0000-0000-0000000000a0',
+    p_campanha, 'a7000000-0000-0000-0000-00000000f002', ARRAY[p_contato])
+$$;
+GRANT EXECUTE ON FUNCTION au.problema(uuid, uuid) TO authenticated;
+
+BEGIN;
+  SET LOCAL role authenticated;
+  SET LOCAL request.jwt.claims = '{"sub":"a7000000-0000-0000-0000-0000000000d1"}';
+  SELECT au.confere('prévia: para o operador, o chip morno ativo é pool (não "sem conta")',
+    au.problema('a7000000-0000-0000-0000-00000000ca01', 'a7000000-0000-0000-0000-000000000a01') = '(nenhum)',
+    au.problema('a7000000-0000-0000-0000-00000000ca01', 'a7000000-0000-0000-0000-000000000a01'));
+  SELECT au.confere('prévia: e a campanha fria, sem chip frio, diz que falta conta',
+    au.problema('a7000000-0000-0000-0000-00000000ca02', 'a7000000-0000-0000-0000-000000000a01')
+      LIKE 'sem conta fria em whatsapp:%',
+    au.problema('a7000000-0000-0000-0000-00000000ca02', 'a7000000-0000-0000-0000-000000000a01'));
+  SELECT au.confere('prévia: o e-mail segue a conta escolhida pela campanha, ativa',
+    au.problema('a7000000-0000-0000-0000-00000000ca03', 'a7000000-0000-0000-0000-000000000a03') = '(nenhum)',
+    au.problema('a7000000-0000-0000-0000-00000000ca03', 'a7000000-0000-0000-0000-000000000a03'));
+COMMIT;
+
+UPDATE sender_accounts SET estado = 'circuito_aberto', circuito_aberto_ate = now() + interval '30 minutes'
+ WHERE identificador = '5515990004444';
+UPDATE sender_accounts SET estado = 'desativado' WHERE id = 'a7000000-0000-0000-0000-00000000e0a1';
+
+BEGIN;
+  SET LOCAL role authenticated;
+  SET LOCAL request.jwt.claims = '{"sub":"a7000000-0000-0000-0000-0000000000d1"}';
+  SELECT au.confere('prévia: circuito aberto fecha sozinho — não é conta que falta',
+    au.problema('a7000000-0000-0000-0000-00000000ca01', 'a7000000-0000-0000-0000-000000000a01') = '(nenhum)',
+    au.problema('a7000000-0000-0000-0000-00000000ca01', 'a7000000-0000-0000-0000-000000000a01'));
+  SELECT au.confere('prévia: a conta de e-mail ESCOLHIDA desligada é pool parado, mesmo com outra ativa',
+    au.problema('a7000000-0000-0000-0000-00000000ca03', 'a7000000-0000-0000-0000-000000000a03')
+      LIKE 'a conta morna de email está desligada:%',
+    au.problema('a7000000-0000-0000-0000-00000000ca03', 'a7000000-0000-0000-0000-000000000a03'));
+COMMIT;
+
+UPDATE sender_accounts SET estado = 'desativado', circuito_aberto_ate = NULL WHERE identificador = '5515990004444';
+
+BEGIN;
+  SET LOCAL role authenticated;
+  SET LOCAL request.jwt.claims = '{"sub":"a7000000-0000-0000-0000-0000000000d1"}';
+  SELECT au.confere('prévia: o chip morno desligado é dito como desligado, não como "conecte um"',
+    au.problema('a7000000-0000-0000-0000-00000000ca01', 'a7000000-0000-0000-0000-000000000a01')
+      LIKE 'a conta morna de whatsapp está desligada:%',
+    au.problema('a7000000-0000-0000-0000-00000000ca01', 'a7000000-0000-0000-0000-000000000a01'));
+COMMIT;
+
+SELECT au.confere('o pool da campanha não é de anon',
+  NOT has_function_privilege('anon', 'privado.pool_da_campanha(uuid, uuid, canal)', 'EXECUTE')
+  AND NOT has_function_privilege('public', 'privado.pool_da_campanha(uuid, uuid, canal)', 'EXECUTE'));
+
+-- ===========================================================================
+-- 7. Os ignorados da fonte de CRM ficam até alguém ver (D77b)
+-- ===========================================================================
+
+INSERT INTO crm_fontes (id, tenant_id, conexao_id, nome, pipe_id, fases, mapa)
+VALUES ('a7000000-0000-0000-0000-00000000fc01', :ta, 'a7000000-0000-0000-0000-0000000000e1', 'Fonte', 'p1', '{f1}',
+        '{"tel":"telefone"}');
+SELECT registrar_execucao_fonte('a7000000-0000-0000-0000-00000000fc01',
+  '{"lidos":2,"ignorados":2,"ignorados_exemplos":[{"card":"c1","coluna":"tel","valor":"123","motivo":"curto"},
+                                                   {"card":"c2","coluna":"tel","valor":"456","motivo":"curto"}]}');
+SELECT registrar_execucao_fonte('a7000000-0000-0000-0000-00000000fc01',
+  '{"lidos":0,"ignorados":0,"ignorados_exemplos":[]}');
+SELECT au.confere('fonte: a passada sem ignorados não apaga os exemplos da anterior',
+  (SELECT jsonb_array_length(ultimo_resultado -> 'ignorados_exemplos') = 2
+          AND (ultimo_resultado ->> 'ignorados')::int = 0
+     FROM crm_fontes WHERE id = 'a7000000-0000-0000-0000-00000000fc01'),
+  (SELECT ultimo_resultado::text FROM crm_fontes WHERE id = 'a7000000-0000-0000-0000-00000000fc01'));
+SELECT registrar_execucao_fonte('a7000000-0000-0000-0000-00000000fc01',
+  '{"lidos":4,"ignorados":4,"ignorados_exemplos":[{"card":"c3"},{"card":"c4"},{"card":"c5"},{"card":"c6"}]}');
+SELECT au.confere('fonte: e guarda os cinco mais recentes, os novos na frente',
+  (SELECT jsonb_array_length(ultimo_resultado -> 'ignorados_exemplos') = 5
+          AND ultimo_resultado -> 'ignorados_exemplos' -> 0 ->> 'card' = 'c3'
+          AND ultimo_resultado -> 'ignorados_exemplos' -> 4 ->> 'card' = 'c1'
+     FROM crm_fontes WHERE id = 'a7000000-0000-0000-0000-00000000fc01'),
+  (SELECT ultimo_resultado -> 'ignorados_exemplos' FROM crm_fontes WHERE id = 'a7000000-0000-0000-0000-00000000fc01')::text);
 
 -- ===========================================================================
 
 \echo ''
-\echo '============= O QUE A AUDITORIA ACHOU (D77) ============='
+\echo '============= O QUE A AUDITORIA ACHOU (D77 e D77b) ============='
 SELECT CASE WHEN ok THEN 'PASS' ELSE 'FALHA' END AS status, nome,
        CASE WHEN ok THEN '' ELSE detalhe END AS detalhe
   FROM au.resultado ORDER BY id;

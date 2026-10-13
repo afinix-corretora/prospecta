@@ -39,7 +39,7 @@ import {
 import type { Acao, CanalEnvio, Familia, Foto, Pergunta, Pool, Respostas } from './assistente.ts';
 import { normalizarTelefone, telefoneValido } from '../../adapters/telefone.ts';
 import { emailValido, normalizarEmail } from '../../adapters/email.ts';
-import { pareceSegredo } from '../../adapters/segredo.ts';
+import { chaveNoLugarDoModelo, pareceSegredo, temFormatoDeChave } from '../../adapters/segredo.ts';
 
 const NOME: Record<string, string> = { whatsapp: 'WhatsApp', email: 'e-mail', sms: 'SMS' };
 
@@ -291,19 +291,28 @@ export function fechamento(f: Foto, e: EstadoSetup): { tipo: 'feito' | 'aviso'; 
   return { tipo: 'aviso', texto: partes.join('\n\n') };
 }
 
+/** `temFormatoDeChave` sem o UUID — o que um client_id nunca é. */
+function formatoDeChaveSemUuid(m: string): boolean {
+  return temFormatoDeChave(m.replace(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi, ''));
+}
+
 /**
  * Para onde vai o que a pessoa digitou na caixa de texto comum (o campo
  * protegido não passa por aqui): o `campo` do passo, a recusa de `chave`, ou o
  * `agente`. Pura, para o teste ver a mesma decisão que a tela toma (D77).
  *
  * - Num campo que NÃO é segredo, o valor digitado sozinho é o valor, mesmo com
- *   cara de chave: o client_id do Pipefy e a consumer key do Salesforce são
- *   aleatórios como uma, e barrá-los deixava a conversa sem saída. Ele não vai
- *   ao agente — vai para o campo, que o catálogo diz não ser segredo (D28).
- * - O NOME DO MODELO entra direto, mas só depois do filtro de chave: o passo
- *   vem logo depois do da chave, e colar a chave no lugar errado a gravaria em
- *   `config`. Antes, todo texto do passo ia ao agente, que não pode preencher
- *   modelo — e quem não tem a lista (Perplexity) não conectava nunca.
+ *   cara de chave aleatória: o client_id do Pipefy e a consumer key do
+ *   Salesforce são aleatórios como uma, e barrá-los deixava a conversa sem
+ *   saída. Ele não vai ao agente — vai para o campo, que o catálogo diz não ser
+ *   segredo (D28). Mas o que tem FORMATO de chave (prefixo de provedor, JWT,
+ *   UUID) é barrado em qualquer campo: o passo que vem antes da chave é um
+ *   desses, e colá-la ali a gravava em `config` e na memória do navegador
+ *   (D77b). O UUID só passa no client_id, que pode ser um.
+ * - O NOME DO MODELO entra direto, medido pedaço a pedaço
+ *   (`chaveNoLugarDoModelo`): o passo vem logo depois do da chave. Antes, todo
+ *   texto do passo ia ao agente, que não pode preencher modelo — e quem não tem
+ *   a lista (Perplexity) não conectava nunca.
  * - Pergunta, e frase em volta de telefone ou e-mail, vão ao agente.
  */
 export function comoEntra(e: EstadoSetup, passo: PassoSetup, texto: string, agenteLigado: boolean): 'campo' | 'chave' | 'agente' {
@@ -312,10 +321,16 @@ export function comoEntra(e: EstadoSetup, passo: PassoSetup, texto: string, agen
   const pergunta = m.endsWith('?');
   const umaPalavra = !/\s/.test(m);
   const aceita = !!campo && aceitarValor(e, campo.coleta, campo.campo.chave, m).ok;
-  if (campo && campo.campo.tipo !== 'modelo' && umaPalavra && !pergunta && aceita) return 'campo';
+  if (campo && campo.campo.tipo === 'modelo') {
+    if (chaveNoLugarDoModelo(m)) return 'chave';
+    return aceita && umaPalavra && !pergunta ? 'campo' : 'agente';
+  }
+  // O UUID é o único formato de chave que um client_id também pode ter.
+  const soUuid = !formatoDeChaveSemUuid(m);
+  const formatoDeChave = temFormatoDeChave(m) && !(campo?.campo.chave === 'client_id' && soUuid);
+  if (campo && !formatoDeChave && umaPalavra && !pergunta && aceita) return 'campo';
   if (pareceSegredo(m)) return 'chave';
   if (!campo || pergunta) return 'agente';
-  if (campo.campo.tipo === 'modelo') return aceita && umaPalavra ? 'campo' : 'agente';
   const frase = (campo.campo.tipo === 'email' || campo.campo.tipo === 'telefone') && !umaPalavra && agenteLigado;
   return aceita || !frase ? 'campo' : 'agente';
 }
