@@ -8,6 +8,8 @@ import { sb } from './supabase';
 import { cruzarEntregaveis } from './entregaveis';
 import type { CanalEntregavel, MotivoDoCanal } from './entregaveis';
 import type { EntradaDoPrompt } from '@adapters/prompt-do-agente.ts';
+import type { Fonte } from '@adapters/coleta.ts';
+import type { PedidoDaColetaNaTela } from './coleta';
 
 export type { CanalEntregavel, MotivoDoCanal };
 
@@ -713,6 +715,25 @@ export async function testarAgente(pedido: {
     throw new Error(corpo?.erro ?? error.message);
   }
   return data as ResultadoDoTeste;
+}
+
+/** O que a leitura da empresa devolve (D78b): um RASCUNHO, e o que cada
+ *  fonte deu. Nada foi gravado — o texto só entra no agente pela mão da pessoa. */
+export interface ResultadoDaColeta {
+  situacao: 'pronto' | 'nada_lido' | 'sem_informacao' | 'erro';
+  texto?: string;
+  motivo?: string;
+  modelo?: string;
+  fontes: Fonte[];
+}
+
+export async function lerEmpresa(pedido: PedidoDaColetaNaTela): Promise<ResultadoDaColeta> {
+  const { data, error } = await sb.functions.invoke('agente-contexto', { body: pedido });
+  if (error) {
+    const corpo = await (error as { context?: Response }).context?.json?.().catch(() => null);
+    throw new Error(corpo?.erro ?? error.message);
+  }
+  return data as ResultadoDaColeta;
 }
 
 /** Se a chave da plataforma está no cofre. Fato, nunca o valor (D44, D72). */

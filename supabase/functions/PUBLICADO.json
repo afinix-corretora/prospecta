@@ -1,4 +1,7 @@
 {
+  "agente-contexto": {
+    "pendente": "D78b: escrita e em revisão, ainda não publicada"
+  },
   "agente-setup": {
     "digest": "23680a040620a6c1",
     "em": "2026-10-13 (v7, D77 e D77b; freio em código da fala da pessoa — canal e família só passam se ela os disse —, chave pega de 24 a 39 caracteres e o modelo pela barra. As v5 e v6 foram descartadas: a regex `[\\u0300-\\u036f]` voltou do projeto com os caracteres nas duas, porque a chamada que publica decodifica o escape; o arquivo passou a escrever o caractere, como `adapters/csv.ts`, e `conferir-publicado.py` recusa o escape. Os 5 arquivos que o bundle devolve lidos de volta pela MCP e conferidos por leitura, porque a resposta voltou inline e não em arquivo: a comparação sem transcrição só existe quando a MCP salva; motor/porta.ts e adapters/tipos.ts são import type, D52. Ao vivo pelo pg_net com a chave anon: 401 \"entre com a sua conta\", do código, não do gateway)",

@@ -25,6 +25,7 @@ import {
 } from '../agentes';
 import type { CanalDoAgente, Rascunho } from '../agentes';
 import { useDados } from './Telas';
+import { ColetaDaEmpresa } from './ColetaDaEmpresa';
 
 /** Só os agentes deste cliente: os cinco do catálogo antigo (tenant nulo)
  *  continuam no banco para `atribuir_agente` e o demo, mas não são mais o
@@ -364,6 +365,9 @@ function Construtor() {
             {r.objetivo && r.contexto.trim().length < CONTEXTO_MINIMO
               && ` Faltam ${CONTEXTO_MINIMO - r.contexto.trim().length} caracteres.`}</span>
         </div>
+        <ColetaDaEmpresa contexto={r.contexto} aoUsar={(texto) => mudar({ contexto: texto })}
+                         contas={contas} provedores={dados.provedores} contaDoAgente={r.ai_credential_id}
+                         administra={administra} opera={opera} empresa={tenant?.nome ?? ''} />
 
         <details className="recolhe">
           <summary>Ajustar o texto <span>{resumoDoTexto}</span></summary>

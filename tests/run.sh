@@ -252,6 +252,21 @@ echo "→ o que a tela lê como variável de template (TypeScript)"
 node --experimental-strip-types --test "$RAIZ/tests/variaveis.test.ts" \
   | grep -E "^# (tests|pass|fail)|^not ok"
 
+echo ""
+echo "→ coleta da empresa: arquivo, endereço do site, página em texto e o pedido com anexos (TypeScript)"
+node --experimental-strip-types --test "$RAIZ/tests/coleta.test.ts" \
+  | grep -E "^# (tests|pass|fail)|^not ok"
+
+echo ""
+echo "→ coleta da empresa: o que a edge function decide, e em que ordem (TypeScript)"
+node --experimental-strip-types --test "$RAIZ/tests/contexto_da_empresa.test.ts" \
+  | grep -E "^# (tests|pass|fail)|^not ok"
+
+echo ""
+echo "→ coleta da empresa na tela: múltipla escolha, o que falta e a ponte com a function (TypeScript)"
+node --experimental-strip-types --test "$RAIZ/tests/coleta_tela.test.ts" \
+  | grep -E "^# (tests|pass|fail)|^not ok"
+
 # ---------------------------------------------------------------------------
 # A fronteira. Os testes acima trabalham com cópias — o de TypeScript repete
 # as expressões da trava, o de SQL usa identidades escritas à mão. Aqui a
