@@ -615,6 +615,23 @@ e elas têm teste automatizado obrigatório.**
   coluna de `sender_accounts` era a conta órfã do D77 a uma chamada de PostgREST: ativa, no pool, sem
   segredo. E a asserção que fecha é `has_any_column_privilege`, porque `has_table_privilege` já era
   falso com a porta aberta — conferir pela tabela não separa os dois mundos (D78a).
+- **Nunca** ler um endereço que veio da tela sem tratá-lo como vindo de um atacante. Qualquer pessoa
+  logada digita o site: só https, conferência em TODO salto e em toda página extra, DNS em que só "não
+  existe" vira vazio, e IPv6 por lista de permissão — lista de proibição esquece o 6to4, o NAT64 e o
+  Teredo, que embrulham o IPv4 interno (D78b).
+- **Nunca** escrever num texto que o agente vai citar uma forma que o freio lê ao contrário. `aplicarFreios`
+  aceita todo número da frase que fala de preço e lê carência sem escopo: "(página 2)" liberava o 2
+  como valor, e "sem carência" do Odonto liberava a carência do Saúde. O rótulo da origem não tem dígito,
+  ausência de carência é sempre "não há carência para…", e o que vier de outro jeito sai para conferir
+  (D78b).
+- **Nunca** pôr no rascunho uma das versões de uma divergência. Dois materiais discordando é decisão de
+  quem conhece a empresa; o texto não leva nenhuma, PARA CONFERIR leva as duas, e o aviso não some
+  enquanto a pessoa não dispensar — usar com ela escondida é escolher sem ver (D78b).
+- **Nunca** ler o corpo de um pedido antes de saber quem pede. A chave anon passa pelo gateway, e 15 MB
+  não se leem para quem não entrou; depois de autenticar, o corpo é contado enquanto chega (D78b).
+- **Nunca** ler o Instagram por robô. Ele fecha o perfil para quem não entrou, e raspar com sessão é
+  contra os termos dele: entra o @, o texto colado e os prints — e o link colado só vira @ quando aponta
+  para um perfil (D78b).
 
 ---
 
@@ -795,6 +812,14 @@ e elas têm teste automatizado obrigatório.**
 > Painel e o fim do setup perguntam — a quarta ponte do suite (`tests/pool_para_sql.ts`) as compara.
 > A campanha de produção é morna e o chip é frio, e agora todas as telas dizem isso. O agente de setup não preenche
 > canal nem família do WhatsApp que a pessoa não disse, pelo sentido e não pela palavra.
+>
+> Desde o **D78b** o "Sobre a empresa e a oferta" do agente pode ser **colhido** de Site, Instagram e
+> Materiais (pdf, jpg, png, html, txt), em múltipla escolha. A edge function `agente-contexto` lê o
+> site com SSRF conferido a cada salto (`adapters/coleta.ts`), recebe os arquivos e pede à conta de IA
+> do PRÓPRIO cliente um rascunho (`adapters/ia-leitura.ts`, sem mudar `ia.ts` nem os freios); nada é
+> gravado, e a tela mostra o que cada fonte deu antes de Usar, Acrescentar ou Descartar. O texto é
+> escrito na forma que o freio do agente lê certo, e a divergência entre materiais vai para conferir,
+> fora dele. O Instagram não se lê por robô, e o site que monta o conteúdo no navegador também não.
 >
 > A **identidade visual** é a da referência escolhida pelo usuário desde o **D71**: Anek Latin e
 > Roboto empacotadas no build, escuro por padrão com o claro guardado por pessoa, item ativo em

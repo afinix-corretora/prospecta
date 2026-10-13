@@ -3597,3 +3597,81 @@ projeto é o do banco de teste pós-D78, e a grade de `sender_accounts` — INSE
 por coluna, para `authenticated` e `anon` — é idêntica. O down volta o corpo e a grade exatamente ao de
 antes, conferido contra o banco pré-D78. `get_advisors`: nada novo, só a família WARN conhecida.
 
+
+### D78b — A empresa lida de fora: site, Instagram e materiais (13/10)
+
+O pedido da operação: no construtor de agentes, a coleta de "Sobre a empresa e a oferta" poder vir
+também do site, do Instagram ou de materiais — múltipla escolha, e Materiais abrindo o anexo de pdf,
+jpg, png, html e txt. O campo existe desde o D76 e é obrigatório no agente novo, porque agente autônomo
+que não sabe em nome de quem fala inventa; o que faltava era não ter de digitá-lo.
+
+**O desenho.** Três botões de múltipla escolha (`aria-pressed`) logo abaixo do campo, e cada um abre o
+que ele pede: Site, um endereço; Instagram, o @, o texto do perfil colado e os prints; Materiais, o
+anexo. "Ler" chama a edge function `agente-contexto`, que lê tudo e pede à **conta de IA do próprio
+cliente** (D59, D68) um RASCUNHO. Nada é gravado: a tela mostra o rascunho, o que cada fonte deu —
+lida, lida até onde, recusada e por quê — e só então a pessoa escolhe **Usar**, **Acrescentar** ou
+**Descartar**. O agente continua guardando só o texto, que ela leu.
+
+- **O Instagram não se lê por robô.** O perfil fecha para quem não entrou, e raspar com sessão é contra
+  os termos dele; entra o @ (que só identifica), o texto colado e os prints. O link colado vira @ só
+  quando aponta para um perfil — publicação, story, explore e share não são perfil.
+- **Site** com SSRF tratado como se o endereço viesse de um atacante, porque vem de qualquer pessoa
+  logada: só https (o http digitado é promovido, e redirecionar para http é recusado — o rebinding não
+  completa uma conexão TLS para o nome), conferência em todo salto e nas páginas extras, DNS pelo
+  resolvedor injetado em que só "não existe" vira vazio, e IPv6 por **lista de permissão** (só 2000::/3
+  é público; 6to4 e NAT64 são desembrulhados, Teredo e documentação contam como internos). Instagram e
+  Facebook são recusados ali: não leem sem sessão, e o lugar deles é o outro botão. A página que a
+  pessoa deu e até três do mesmo domínio que ela liga (sobre, oferta, contato, pelo pedaço do slug), com
+  prazo por página e prazo total, 2 MB por página. Página que quase não tem texto diz que o site monta o
+  conteúdo no navegador — a leitura não roda JavaScript — e sugere colar o texto ou anexar a página
+  salva.
+- **HTML lido numa varredura linear**, e não por regex com retrocesso: o texto entre duas tags reais é
+  uma fatia só, a fronteira de tag inline se resolve pelos caracteres em volta (`R$ 89<sup>90</sup>`
+  não vira `R$ 8990`, e e-mail, telefone e domínio não se partem), e bloco sem fechamento (`script`,
+  `style`) para a leitura como o navegador faria — a página cortada no teto mandava o JSON de hidratação
+  ao modelo.
+- **Arquivo conferido pelo conteúdo**, não pela extensão (os bytes mágicos de PDF, PNG e JPG), com teto
+  por formato e total (`FORMATOS`, `TETO_TOTAL`), nome longo recusado e não cortado, e o texto
+  decodificado pelo BOM, depois pelo rótulo declarado, depois UTF-8 estrito, depois windows-1252. PDF
+  e imagem vão ao modelo como anexo só nos provedores que leem anexo (`LEEM_ANEXOS`); nos outros, a tela
+  avisa antes. A tela e a function leem o MESMO `adapters/coleta.ts` (D32).
+
+**O freio do agente decide como o texto é escrito.** O rascunho vira o contexto que o agente cita, e
+`aplicarFreios` (D66, D76) — que não muda aqui, porque está no bundle do worker — aceita todo número
+de uma frase que fala de preço e lê carência por tipo de afirmação, sem escopo. Por isso:
+
+- a origem de cada condição é um rótulo sem dígito ("Site A", "Arquivo B", "Print A"): "(página 2)"
+  numa linha de preço liberava o 2 como valor;
+- ausência de carência é escrita sempre "não há carência para … no Plano X", a única forma que a
+  `PROIBITIVA` tira da fonte; "sem carência" do Odonto liberava a carência do Saúde. O que o modelo
+  escrever mesmo assim sai do texto e vai para conferir (`tirarCarenciaSemEscopo`);
+- divergência entre materiais não entra no texto em versão nenhuma: vai depois de **PARA CONFERIR**,
+  que a tela separa (`separarConferir`) e mostra num aviso que não some até a pessoa dispensar —
+  usar o rascunho com a divergência escondida era escolher uma das versões sem ver.
+
+**O modelo.** Claude e a família chat completions, por `adapters/ia-leitura.ts`, que embrulha o
+`criarIa` de sempre trocando só o conteúdo da mensagem (`ia.ts` e `prompt-do-agente.ts` não mudam). O
+Claude conta raciocínio e texto no mesmo `max_tokens`, então lê com 16000 — pelo provedor `anthropic`
+ou por modelo `claude` no OpenRouter. O 402 do OpenRouter ("só pode pagar M") relê uma vez com o M,
+se ele couber; o modelo que recusa o anexo pelo tipo, pelo arquivo ilegível ou pelo tamanho relê sem
+os anexos e diz quais ficaram de fora — saldo e limite por minuto não tiram arquivo nenhum. O prazo
+conta desde a chegada do pedido: o Supabase corta em 150 s, e o envio de 15 MB também é desse tempo.
+
+**A function** autentica ANTES de ler o corpo (a anon passa pelo gateway, e 15 MB não se leem para
+quem não entrou), lê o corpo contado enquanto chega, com teto, lê a conta de IA com o JWT de quem
+pediu (o RLS decide) e o segredo pela chave do serviço — o desenho de `agente-testar`. Erro interno
+volta com uma frase que não carrega nada; a mensagem fica no log.
+
+**Revisão.** Quatro rodadas adversariais antes de publicar: 37, 20 e 14 achados confirmados nas três
+primeiras, cada correção com teste que acende sem ela (35 sabotagens conferidas), e a quarta só sobre o
+diff da terceira. Os testes são `tests/coleta.test.ts` (44), `tests/contexto_da_empresa.test.ts` (16) e
+`tests/coleta_tela.test.ts` (9, inclusive a ponte da tela até `colherDoPedido`).
+
+**O que isto NÃO faz, dito para não parecer que faz.**
+
+- Não lê Instagram nem site que monta o conteúdo no navegador; não roda JavaScript.
+- Não guarda os arquivos: eles vão ao modelo do cliente e morrem com o pedido.
+- HTML escondido por CSS (`display:none`) continua sendo lido: a leitura não aplica estilo.
+- Os valores de um PDF ou de um print não são conferidos por código contra o arquivo — quem confere é
+  quem lê o rascunho antes de usar. O freio do agente segue valendo sobre o texto que ficar.
+- O modelo pode errar a origem de uma condição; o rótulo existe para a pessoa conferir, não como prova.
