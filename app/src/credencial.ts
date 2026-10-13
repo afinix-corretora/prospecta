@@ -67,6 +67,23 @@ export function textoDoSegredo(guardada: CredencialGuardada | null, provedor: st
   return 'Vai para o Vault.';
 }
 
+/**
+ * O que o formulário mostra quando o nome digitado passa a casar com outra
+ * credencial (ou com nenhuma): o que não é segredo, da guardada, mais SÓ o que
+ * a pessoa digitou. Mesclar com o que estava na tela levava os valores de
+ * "Pipefy" para "Pipefy matriz" enquanto o nome era digitado, e salvar
+ * sobrescrevia o client_id da segunda sem aviso (D77b).
+ */
+export function preencher(
+  campos: readonly CampoDaCredencial[], guardada: CredencialGuardada | null, provedor: string,
+  valores: Readonly<Record<string, string>>, digitados: ReadonlySet<string>,
+): Record<string, string> {
+  return {
+    ...valoresGuardados(campos, guardada, provedor),
+    ...Object.fromEntries(Object.entries(valores).filter(([k, v]) => digitados.has(k) && v.trim())),
+  };
+}
+
 /** O formulário abre com o que não é segredo já preenchido: em branco passa a
  *  significar em branco, e a lista de modelos usa o mesmo destino que será salvo. */
 export function valoresGuardados(

@@ -207,6 +207,21 @@ test('chave com formato de chave é barrada em QUALQUER campo; nome de modelo re
   }
   assert.equal(comoEntra(e, modelo, 'a1b2c3d4e5f60718293a4b5c6d7e8f90', true), 'chave', 'hex de 32 não é modelo');
   assert.equal(comoEntra(e, modelo, sk, true), 'chave');
+  // D77b: frase no passo do modelo é conversa, não chave — vai ao agente.
+  for (const frase of ['qual modelo você recomenda para atender clientes?', 'quero o modelo mais inteligente que tiver',
+                       'não sei qual escolher, me ajuda a decidir']) {
+    assert.equal(comoEntra(e, modelo, frase, true), 'agente', frase);
+  }
+
+  // D77b: chave SEM prefixo no campo não secreto que vem antes dela (o
+  // domínio do Pipedrive, o número de origem da Gupshup) também é barrada —
+  // só o client_id aceita valor aleatório.
+  const pipe: Foto = { ...FOTO, provedoresCRM: [{ slug: 'pipedrive', nome: 'Pipedrive', tem_adapter: false,
+    campos: [campo('dominio_empresa'), campo('api_token', true)] }] };
+  const colPipe = coletaDa(pipe, { ...R_EMAIL, 'provedor:email': USAR, ia: NAO, crm: 'pipedrive' }, 'crm')!;
+  const dom: PassoSetup = { tipo: 'campo', coleta: colPipe, campo: colPipe.campos.find((c) => c.chave === 'dominio_empresa')! };
+  assert.equal(comoEntra(est({}), dom, 'a1b2c3d4e5f60718293a4b5c6d7e8f9012345678', true), 'chave');
+  assert.equal(comoEntra(est({}), dom, 'afinix', true), 'campo');
 });
 
 test('quem não administra não configura conta, e a conversa diz isso em vez de pedir a chave', () => {

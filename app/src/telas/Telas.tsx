@@ -1,5 +1,5 @@
-import { oQueFalta, textoDoSegredo, valoresGuardados } from '../credencial';
-import { useEffect, useState } from 'react';
+import { oQueFalta, preencher, textoDoSegredo } from '../credencial';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useSessao } from '../sessao';
 import { mensagemDeErro } from '../supabase';
@@ -620,12 +620,14 @@ function FormularioDeIA(props: PropsFormularioIA) {
   const { faltam, porQue } = oQueFalta(provedor.campos, provedor.slug, valores, guardada);
   // O formulário abre com o que não é segredo já preenchido: em branco passa a
   // ser em branco, e a lista de modelos usa o destino que será salvo (D77b).
+  // Só o que a pessoa digitou atravessa a troca: os valores preenchidos de
+  // uma credencial não vão para a outra enquanto o nome é digitado (D77b).
   const idGuardada = existente && existente.provedor === provedor.slug ? existente.id : null;
+  const digitados = useRef(new Set<string>());
+  const modeloDigitado = useRef(false);
   useEffect(() => {
-    if (!existente || !idGuardada) return;
-    setValores((v) => ({ ...valoresGuardados(provedor.campos, guardada, provedor.slug),
-      ...Object.fromEntries(Object.entries(v).filter(([, x]) => x.trim())) }));
-    setModelo((m) => m || existente.modelo);
+    setValores((v) => preencher(provedor.campos, idGuardada ? guardada : null, provedor.slug, v, digitados.current));
+    if (!modeloDigitado.current) setModelo(idGuardada && existente ? existente.modelo : '');
   }, [idGuardada]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // D72: a lista de modelos vem do provedor, com a chave recém-colada — ou,
@@ -663,6 +665,8 @@ function FormularioDeIA(props: PropsFormularioIA) {
     // Campo de provedor anterior não sobrevive à troca: o banco recusaria a
     // chave que o provedor novo não declara, e o erro sairia sem explicação.
     setValores({});
+    digitados.current = new Set();
+    modeloDigitado.current = false;
     setMsg(null);
   }
 
@@ -715,7 +719,7 @@ function FormularioDeIA(props: PropsFormularioIA) {
       {provedor.campos.map((c) => (
         <Campo key={c.chave} id={`ia-${c.chave}`} rotulo={c.rotulo} tipo={c.tipo}
                valor={valores[c.chave] ?? ''} obrigatorio={c.obrigatorio}
-               aoMudar={(v) => setValores({ ...valores, [c.chave]: v })} ajuda={c.ajuda}
+               aoMudar={(v) => { digitados.current.add(c.chave); setValores({ ...valores, [c.chave]: v }); }} ajuda={c.ajuda}
                vault={c.segredo ? textoDoSegredo(guardada, provedor.slug, porQue) : undefined} />
       ))}
 
@@ -725,7 +729,7 @@ function FormularioDeIA(props: PropsFormularioIA) {
           <select id="ia-modelo" value={lista.includes(modelo) ? modelo : ''}
                   onChange={(e) => {
                     if (e.target.value === '__outro') { setDigitarOutro(true); return; }
-                    setModelo(e.target.value);
+                    modeloDigitado.current = true; setModelo(e.target.value);
                   }}>
             <option value="" disabled>Escolha entre {lista.length} modelos da sua conta</option>
             {lista.map((m) => <option key={m} value={m}>{m}</option>)}
@@ -734,7 +738,7 @@ function FormularioDeIA(props: PropsFormularioIA) {
         ) : (
           <>
             <input id="ia-modelo" list="modelos-ia" value={modelo}
-                   onChange={(e) => setModelo(e.target.value)}
+                   onChange={(e) => { modeloDigitado.current = true; setModelo(e.target.value); }}
                    placeholder={provedor.modelos_sugeridos[0] ?? 'nome do modelo'} />
             <datalist id="modelos-ia">
               {[...new Set([...lista, ...provedor.modelos_sugeridos])].map((m) => <option key={m} value={m} />)}
@@ -987,6 +991,7 @@ function FormularioDeCRM(props: PropsFormularioCRM) {
     // Campo do provedor anterior não sobrevive à troca: o banco recusaria a
     // chave que o provedor novo não declara, e o erro sairia sem explicação.
     setValores({});
+    digitados.current = new Set();
     setMsg(null);
   }
 
@@ -1001,11 +1006,11 @@ function FormularioDeCRM(props: PropsFormularioCRM) {
   const guardada = existente
     ? { provedor: existente.provedor, temSegredo: !!existente.credencial_secret_id, config: existente.config ?? {} } : null;
   const { faltam: faltando, porQue } = oQueFalta(provedor.campos, provedor.slug, valores, guardada);
+  // Só o que a pessoa digitou atravessa a troca de nome (D77b).
   const idGuardada = existente && existente.provedor === provedor.slug ? existente.id : null;
+  const digitados = useRef(new Set<string>());
   useEffect(() => {
-    if (!idGuardada) return;
-    setValores((v) => ({ ...valoresGuardados(provedor.campos, guardada, provedor.slug),
-      ...Object.fromEntries(Object.entries(v).filter(([, x]) => x.trim())) }));
+    setValores((v) => preencher(provedor.campos, idGuardada ? guardada : null, provedor.slug, v, digitados.current));
   }, [idGuardada]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function salvar(e: React.FormEvent) {
@@ -1065,7 +1070,7 @@ function FormularioDeCRM(props: PropsFormularioCRM) {
       {provedor.campos.map((c) => (
         <Campo key={c.chave} id={`crm-${c.chave}`} rotulo={c.rotulo} tipo={c.tipo}
                valor={valores[c.chave] ?? ''} obrigatorio={c.obrigatorio}
-               aoMudar={(v) => setValores({ ...valores, [c.chave]: v })} ajuda={c.ajuda}
+               aoMudar={(v) => { digitados.current.add(c.chave); setValores({ ...valores, [c.chave]: v }); }} ajuda={c.ajuda}
                vault={c.segredo ? textoDoSegredo(guardada, provedor.slug, porQue) : undefined} />
       ))}
 

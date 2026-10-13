@@ -203,6 +203,15 @@ test('o plano não baixa a conta de quem pediu MAIS do que já tinha (D77b)', ()
   const menos = montarPlano({ ...FOTO, remetentes: [chip('a', 40), chip('b', 150)] },
     { ...COMPLETO, canais: ['whatsapp'], porDia: { whatsapp: 60 }, 'provedor:whatsapp': USAR });
   assert.deepEqual(doTipo(menos.acoes, 'ajustar_quota').map((a) => [a.remetente, a.para]), [['a', 30], ['b', 30]]);
+  // Pedir menos do que se tem não baixa além do necessário: o que o teto corta
+  // de uma vai para a outra (D77b, achado da revisão).
+  const misto = montarPlano({ ...FOTO, remetentes: [chip('a', 10), chip('b', 500)] },
+    { ...COMPLETO, canais: ['whatsapp'], porDia: { whatsapp: 300 }, 'provedor:whatsapp': USAR });
+  assert.deepEqual(doTipo(misto.acoes, 'ajustar_quota').map((a) => [a.remetente, a.de, a.para]), [['a', 10, 40], ['b', 500, 260]]);
+  assert.ok(!misto.avisos.some((x) => /faltam/.test(x)), misto.avisos.join('\n'));
+  const quase = montarPlano({ ...FOTO, remetentes: [chip('a', 40), chip('b', 150)] },
+    { ...COMPLETO, canais: ['whatsapp'], porDia: { whatsapp: 189 }, 'provedor:whatsapp': USAR });
+  assert.deepEqual(doTipo(quase.acoes, 'ajustar_quota').map((a) => [a.remetente, a.para]), [['b', 149]]);
 });
 
 test('o aviso da conta de IA só aparece quando a pessoa recusou a campanha (D77b)', () => {
@@ -410,6 +419,10 @@ test('situação: campanha ligada sem conta no PRÓPRIO pool não está pronta (
   const email = { ...FOTO, remetentes: [conta('x', 'desativado'), conta('y', 'ativo')],
     campanhas: [{ id: 'c2', nome: 'Pela X', ativa: true, tipo: 'morna' as const, canais_habilitados: ['email'], remetente_email_id: 'x' }] };
   assert.equal(Object.fromEntries(situacao(email).map((i) => [i.id, i])).campanha!.feito, false);
+  assert.match(Object.fromEntries(situacao(email).map((i) => [i.id, i])).campanha!.detalhe,
+    /a conta de E-mail escolhida para ela está desligada/, 'desligada não é "conecte uma"');
+  assert.match(Object.fromEntries(situacao(desligada).map((i) => [i.id, i])).campanha!.detalhe,
+    /a conta WhatsApp do pool morna está desligada/);
 
   // Para o operador, o RLS não mostra conta nenhuma: "sem conta" seria falso.
   const operador = { ...f, administra: false, remetentes: [] };

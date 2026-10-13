@@ -7,7 +7,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { mesmoDestino, oQueFalta, textoDoSegredo, valoresGuardados } from '../app/src/credencial.ts';
+import { mesmoDestino, oQueFalta, preencher, textoDoSegredo, valoresGuardados } from '../app/src/credencial.ts';
 import type { CampoDaCredencial } from '../app/src/credencial.ts';
 
 const c = (chave: string, extra: Partial<CampoDaCredencial> = {}): CampoDaCredencial =>
@@ -85,4 +85,32 @@ test('o formulário abre com o que não é segredo, e só do mesmo provedor', ()
   // Aberto preenchido, mandar a chave nova não faz faltar o que já estava lá.
   const pre = valoresGuardados(ZOHO, zoho, 'zoho_crm');
   assert.deepEqual(nomes(oQueFalta(ZOHO, 'zoho_crm', { ...pre, client_secret: 'a', refresh_token: 'b' }, zoho)), []);
+});
+
+test('com a chave nova, nada é herdado: o obrigatório não secreto em branco falta (D77b)', () => {
+  // O banco só mescla a configuração quando a chave fica (`v_secreto = '{}'`).
+  assert.deepEqual(nomes(oQueFalta(ZOHO, 'zoho_crm', { client_secret: 'a', refresh_token: 'b' }, zoho)),
+    ['client_id', 'data_center']);
+  const COMPATIVEL = [c('base_url', { destino: true }), c('api_key', { segredo: true })];
+  const gw = { provedor: 'compativel', temSegredo: true, config: { base_url: 'https://gw.exemplo.com' } };
+  assert.deepEqual(nomes(oQueFalta(COMPATIVEL, 'compativel', { api_key: 'nova' }, gw)), ['base_url']);
+  // Sem chave nova, o guardado vale.
+  assert.deepEqual(nomes(oQueFalta(COMPATIVEL, 'compativel', {}, gw)), []);
+});
+
+test('digitar o nome de uma credencial e seguir para outra não leva os valores da primeira (D77b)', () => {
+  const PIPEFY = [c('client_id'), c('client_secret', { segredo: true }), c('organizacao_id', { obrigatorio: false })];
+  const a = { provedor: 'pipefy', temSegredo: true, config: { client_id: 'CID-A', organizacao_id: '111' } };
+  const b = { provedor: 'pipefy', temSegredo: true, config: { client_id: 'CID-B', organizacao_id: '222' } };
+  const nada = new Set<string>();
+  // "Pipefy" casa com A; continuar digitando chega em "Pipefy matriz", que é B.
+  const emA = preencher(PIPEFY, a, 'pipefy', {}, nada);
+  assert.deepEqual(emA, { client_id: 'CID-A', organizacao_id: '111' });
+  assert.deepEqual(preencher(PIPEFY, b, 'pipefy', emA, nada), { client_id: 'CID-B', organizacao_id: '222' });
+  // Nome que não casa com nenhuma: só o que a pessoa digitou fica.
+  assert.deepEqual(preencher(PIPEFY, null, 'pipefy', { ...emA, client_secret: 's' }, new Set(['client_secret'])),
+    { client_secret: 's' });
+  // E o que a pessoa digitou vence o guardado.
+  assert.deepEqual(preencher(PIPEFY, b, 'pipefy', { client_id: 'MEU' }, new Set(['client_id'])),
+    { client_id: 'MEU', organizacao_id: '222' });
 });

@@ -208,9 +208,14 @@ async function lerUma(
   for (const [i, card] of novos.entries()) {
     const leitura = lerRegistro(i + 1, celulasDoCard(card, f.mapa));
     ignorados += leitura.ignorados.length;
-    for (const x of leitura.ignorados) {
-      if (ignoradosExemplos.length >= EXEMPLOS_DE_IGNORADO) break;
-      ignoradosExemplos.push({ card: card.id, coluna: x.coluna, valor: x.valor, motivo: x.motivo });
+    // Exemplo é do card que ENTROU e perdeu um valor no caminho. O recusado
+    // volta em toda passada e já aparece nos erros: como exemplo, ele ocupava
+    // os cinco lugares e empurrava para fora o valor perdido de verdade (D77b).
+    if (leitura.tipo !== 'recusa') {
+      for (const x of leitura.ignorados) {
+        if (ignoradosExemplos.length >= EXEMPLOS_DE_IGNORADO) break;
+        ignoradosExemplos.push({ card: card.id, coluna: x.coluna, valor: x.valor, motivo: x.motivo });
+      }
     }
     if (leitura.tipo === 'recusa') {
       recusados += 1;

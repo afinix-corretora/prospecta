@@ -227,27 +227,41 @@ export function corpoDoPedido(modelo: string, p: PedidoSetup): Record<string, un
 // Quem a pessoa nomeou, e em que sentido. O assunto não basta: "minha meta é
 // 50 reuniões" não é a API da Meta, "o e-mail oficial da empresa" não é o
 // WhatsApp oficial, e "WhatsApp oficial" não autoriza "não oficial" (D77b).
-const FALA_DE_NAO_OFICIAL = /nao[ -]?oficial|\bchip\b|\bqr\b|qr ?code|uazapi|evolution|celular comum/;
-const FALA_DE_OFICIAL = new RegExp([
-  '(?:whats\\w*|zap|wpp)[^.;!?]{0,15}(?<!nao[ -]?)oficial',
-  '(?<!nao[ -]?)oficial[^.;!?]{0,15}(?:whats|zap|wpp)',
-  // "WhatsApp Business" sozinho é também o aplicativo do celular: ambíguo, fica de fora.
-  'cloud api', 'api oficial', 'api da meta', 'meta cloud', '\\bwaba\\b', 'business api', 'gupshup',
-].join('|'));
+const FALA_DE_NAO_OFICIAL = /nao\s*-?\s*oficial|\bchip\b|\bqr\b|qr ?code|uazapi|evolution|celular comum/;
+const FALA_DE_OFICIAL = /(?<!e-?mails? )\boficial|\bapi\b|cloud api|\bwaba\b|gupshup|meta cloud/;
+// A negação vale na oração em que está: "sem chip", "não é oficial", "nada de
+// API" — e não atravessa a vírgula ("não sei, talvez o oficial").
+const NEGA = /\b(?:nao|sem|nada de|nunca|nem)\b/;
+function semNegar(fala: string, termo: RegExp): boolean {
+  for (const m of fala.matchAll(new RegExp(termo.source, 'g'))) {
+    const antes = fala.slice(0, m.index);
+    const oracao = antes.slice(Math.max(...[',', ';', '.', '!', '?'].map((p) => antes.lastIndexOf(p))) + 1);
+    if (!NEGA.test(oracao)) return true;
+  }
+  return false;
+}
 const FALA_DE_CANAL: Record<string, RegExp> = {
   whatsapp: /whats|wats|uats|zap|\bwpp\b|uazapi|evolution|gupshup/,
   email: /e-?mails?\b|\bmails?\b|correio eletronico|resend|locaweb|smtp/,
   sms: /\bsmss?\b|torpedos?\b|mensage(?:m|ns) de texto|comtele/,
 };
-// "Todos" só quando fala de canal: "tudo bem" e "todos os dias" não escolhem
-// WhatsApp, e-mail e SMS.
-const FALA_DE_TODOS = /\btodos os (?:tres |3 )?canais\b|\bos (?:tres|3) canais\b|\btodos os tres\b|\btodas as opcoes\b|\btodos eles\b/;
+// "Todos", "tudo" e "os três" escolhem os canais; "tudo bem", "todos os dias" e
+// "todos os meus clientes", não.
+const NAO_E_TODOS = /tudo (?:bem|certo|ok|joia|tranquilo|bom)|tod[oa]s? (?:os |as )?(?:dias?|meus|minhas|clientes|contatos|leads|semanas?|meses|vezes|horas)|tod[oa]s (?:os|as) \d+ \w+/g;
+const FALA_DE_TODOS = /\btod[oa]s\b|\btudo\b|\b(?:os|nos|pelos) (?:tres|3)\b/;
 
 function disse(fala: string, chave: string, valor: string): boolean {
   if (chave.startsWith('familia:')) {
-    return valor === 'nao' ? FALA_DE_NAO_OFICIAL.test(fala) : valor === 'oficial' ? FALA_DE_OFICIAL.test(fala) : false;
+    const nao = semNegar(fala, FALA_DE_NAO_OFICIAL);
+    const oficial = semNegar(fala, FALA_DE_OFICIAL);
+    // Os dois sentidos na mesma fala ("oficial não, prefiro chip"): a pergunta
+    // volta, em vez de o modelo escolher um.
+    if (nao && oficial) return false;
+    return valor === 'nao' ? nao : valor === 'oficial' ? oficial : false;
   }
-  if (chave === 'canais') return FALA_DE_TODOS.test(fala) || (FALA_DE_CANAL[valor]?.test(fala) ?? false);
+  if (chave === 'canais') {
+    return FALA_DE_TODOS.test(fala.replace(NAO_E_TODOS, ' ')) || (FALA_DE_CANAL[valor]?.test(fala) ?? false);
+  }
   return true;
 }
 
@@ -291,9 +305,13 @@ export function lerSaida(
       if (Object.keys(n).length) respostas[chave] = n;
       continue;
     }
-    const vs = (Array.isArray(valores) ? valores : []).filter((v): v is string => typeof v === 'string' && permitidos.has(v)
-      && (fala === null || disse(fala, chave, v)));
+    const validos = (Array.isArray(valores) ? valores : []).filter((v): v is string => typeof v === 'string' && permitidos.has(v));
+    const vs = validos.filter((v) => fala === null || disse(fala, chave, v));
     if (!vs.length) continue;
+    // D77b: numa resposta de várias escolhas, o freio que tira um valor tira a
+    // resposta inteira. Gravar o resto respondia a pergunta pela metade ("os
+    // outros dois" não é reconhecido), e a resposta dada não se troca depois.
+    if (e.forma === 'multipla' && vs.length < new Set(validos).size) continue;
     respostas[chave] = e.forma === 'multipla' ? [...new Set(vs)] : vs[0]!;
   }
   return { mensagem, respostas, campos };

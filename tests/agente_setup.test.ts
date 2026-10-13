@@ -78,23 +78,47 @@ test('canal e família do WhatsApp só entram se a pessoa os disse (D77)', () =>
     { chave: 'familia:whatsapp', valores: ['nao'], numeros: [] },
   ]);
   assert.deepEqual(lerSaida(tudo, mapa, [], 'quero telegram').respostas, {});
-  assert.deepEqual(lerSaida(tudo, mapa, [], 'uns 50 por dia no zap, lista que comprei').respostas, { canais: ['whatsapp'] });
-  assert.deepEqual(lerSaida(tudo, mapa, [], 'WhatsApp não oficial, num chip, e e-mail').respostas,
+  // A pessoa falou só do zap: o agente sugeriu três canais, e a pergunta volta
+  // inteira em vez de responder pela metade (D77b). A família "não oficial"
+  // não foi dita — "lista que comprei" não é o sentido.
+  assert.deepEqual(lerSaida(tudo, mapa, [], 'uns 50 por dia no zap, lista que comprei').respostas, {});
+  const doisCanais = saida([{ chave: 'canais', valores: ['whatsapp', 'email'], numeros: [] },
+                            { chave: 'familia:whatsapp', valores: ['nao'], numeros: [] }]);
+  assert.deepEqual(lerSaida(doisCanais, mapa, [], 'WhatsApp não oficial, num chip, e e-mail').respostas,
     { canais: ['whatsapp', 'email'], 'familia:whatsapp': 'nao' });
   assert.deepEqual(lerSaida(tudo, mapa, [], 'todos os canais').respostas, { canais: ['whatsapp', 'email', 'sms'] });
+  for (const f of ['todos', 'quero todos', 'os três', 'tudo', 'pelos 3 canais', 'todos, começando pelo WhatsApp']) {
+    assert.deepEqual(lerSaida(tudo, mapa, [], f).respostas.canais, ['whatsapp', 'email', 'sms'], f);
+  }
   // D77b: o assunto não basta — o sentido e o contexto contam.
   assert.deepEqual(lerSaida(tudo, mapa, [], 'oi, tudo bem? quero telegram').respostas, {});
   assert.deepEqual(lerSaida(tudo, mapa, [], 'telegram, 100 todos os dias').respostas, {});
-  assert.deepEqual(lerSaida(tudo, mapa, [], 'no zap, minha meta é 50 reuniões por mês, lista que comprei').respostas,
+  assert.deepEqual(lerSaida(tudo, mapa, [], 'pelo telegram para todos os meus clientes').respostas, {});
+  const soZap = saida([{ chave: 'canais', valores: ['whatsapp'], numeros: [] },
+                       { chave: 'familia:whatsapp', valores: ['nao'], numeros: [] }]);
+  assert.deepEqual(lerSaida(soZap, mapa, [], 'no zap, minha meta é 50 reuniões por mês, lista que comprei').respostas,
     { canais: ['whatsapp'] });
-  assert.deepEqual(lerSaida(tudo, mapa, [], 'zap, lista que comprei, o e-mail oficial da empresa é x@y.com').respostas,
-    { canais: ['whatsapp', 'email'] }, 'e-mail oficial não é WhatsApp não oficial');
-  assert.deepEqual(lerSaida(tudo, mapa, [], 'quero o WhatsApp oficial').respostas, { canais: ['whatsapp'] },
+  assert.deepEqual(lerSaida(soZap, mapa, [], 'zap, lista que comprei, o e-mail oficial da empresa é x@y.com').respostas,
+    { canais: ['whatsapp'] }, 'e-mail oficial não é WhatsApp não oficial');
+  assert.deepEqual(lerSaida(soZap, mapa, [], 'quero o WhatsApp oficial').respostas, { canais: ['whatsapp'] },
     '"oficial" não autoriza "não oficial"');
   const oficial = saida([{ chave: 'familia:whatsapp', valores: ['oficial'], numeros: [] }]);
-  assert.deepEqual(lerSaida(oficial, mapa, [], 'quero o WhatsApp oficial').respostas, { 'familia:whatsapp': 'oficial' });
-  assert.deepEqual(lerSaida(oficial, mapa, [], 'WhatsApp não oficial').respostas, {});
-  assert.deepEqual(lerSaida(oficial, mapa, [], 'pela API da Meta').respostas, { 'familia:whatsapp': 'oficial' });
+  for (const f of ['quero o WhatsApp oficial', 'oficial', 'o oficial', 'pode ser o oficial', 'a API', 'pela API da Meta',
+                   'não sei, talvez o oficial']) {
+    assert.deepEqual(lerSaida(oficial, mapa, [], f).respostas, { 'familia:whatsapp': 'oficial' }, f);
+  }
+  for (const f of ['WhatsApp não oficial', 'whatsapp que não é oficial', 'zap sem ser oficial',
+                   'nada de API oficial, quero chip', 'whatsapp oficial não, prefiro chip', 'WhatsApp não  oficial']) {
+    assert.deepEqual(lerSaida(oficial, mapa, [], f).respostas, {}, f);
+  }
+  const naoOficial = saida([{ chave: 'familia:whatsapp', valores: ['nao'], numeros: [] }]);
+  for (const f of ['lista fria, WhatsApp oficial, sem chip', 'oficial, não posso arriscar meu chip', 'não quero QR code',
+                   'nada de uazapi']) {
+    assert.deepEqual(lerSaida(naoOficial, mapa, [], f).respostas, {}, f);
+  }
+  for (const f of ['não oficial', 'pelo chip', 'pelo QR', 'WhatsApp não oficial, num chip']) {
+    assert.deepEqual(lerSaida(naoOficial, mapa, [], f).respostas, { 'familia:whatsapp': 'nao' }, f);
+  }
   const textoEmail = saida([{ chave: 'canais', valores: ['sms', 'email'], numeros: [] }]);
   assert.deepEqual(lerSaida(textoEmail, mapa, [], 'quero mandar mensagens de texto e e-mails').respostas,
     { canais: ['sms', 'email'] }, 'plural também é o canal');

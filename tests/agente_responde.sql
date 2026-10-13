@@ -258,6 +258,22 @@ SELECT ar.confere('a janela é conferida de novo na saída: cancelada e devolvid
      FROM messages m JOIN rascunhos r ON r.id = m.rascunho_id
     WHERE r.message_event_id = (SELECT evento FROM ar.ev WHERE n = 5)));
 
+-- D77b: com a campanha DESLIGADA também. O despachante tira do lote o que
+-- seria segurado, mas a mensagem do agente entra — a janela e o freio do
+-- agente valem com a campanha parada, senão o texto ficava "na fila" para
+-- sempre numa campanha que acabou.
+INSERT INTO ar.ev VALUES (12, ar.pessoa(12));
+SELECT ar.responde((SELECT evento FROM ar.ev WHERE n = 12), 'Qual a idade?');
+UPDATE campaigns SET ativa = false WHERE id = :camp;
+UPDATE rascunhos SET resposta_em = now() - interval '25 hours'
+ WHERE message_event_id = (SELECT evento FROM ar.ev WHERE n = 12);
+CREATE TABLE ar.lote12 AS SELECT * FROM reivindicar_pendentes(50);
+UPDATE campaigns SET ativa = true WHERE id = :camp;
+SELECT ar.confere('campanha desligada: a janela vencida ainda devolve o texto do agente a uma pessoa',
+  (SELECT m.status = 'cancelado' AND r.envio = 'devolvido' AND r.envio_motivo LIKE '%24h%'
+     FROM messages m JOIN rascunhos r ON r.id = m.rascunho_id
+    WHERE r.message_event_id = (SELECT evento FROM ar.ev WHERE n = 12)));
+
 -- ===========================================================================
 -- 5. Supressão depois de enfileirar
 -- ===========================================================================

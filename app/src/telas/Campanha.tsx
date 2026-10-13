@@ -380,7 +380,8 @@ function Cadencia({ campanha, versoes, podeOperar, aoMudar, aoFalhar }: {
 
   return (
     <>
-      <Secao titulo="Cadência" nota={atual ? `${atual.passos} passos` : 'ainda não ligada'} />
+      <Secao titulo="Cadência" nota={atual ? `${atual.passos} passos`
+        : campanha.flow_version_id ? 'ligada — os detalhes não carregaram' : 'ainda não ligada'} />
       <div className="painel">
         {atual ? (
           <p style={{ color: 'var(--ink-2)', fontSize: 13, marginTop: 0 }}>
@@ -406,7 +407,7 @@ function Cadencia({ campanha, versoes, podeOperar, aoMudar, aoFalhar }: {
         {podeOperar && (
           <>
             <div className="campo">
-              <label htmlFor="cad-v">{atual ? 'Trocar por' : 'Escolher a cadência'}</label>
+              <label htmlFor="cad-v">{campanha.flow_version_id ? 'Trocar por' : 'Escolher a cadência'}</label>
               <select id="cad-v" value={escolha} onChange={(e) => setEscolha(e.target.value)}>
                 <option value="">escolha…</option>
                 {versoes.filter((v) => v.id !== campanha.flow_version_id).map((v) => (

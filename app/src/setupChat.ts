@@ -301,18 +301,17 @@ function formatoDeChaveSemUuid(m: string): boolean {
  * protegido não passa por aqui): o `campo` do passo, a recusa de `chave`, ou o
  * `agente`. Pura, para o teste ver a mesma decisão que a tela toma (D77).
  *
- * - Num campo que NÃO é segredo, o valor digitado sozinho é o valor, mesmo com
- *   cara de chave aleatória: o client_id do Pipefy e a consumer key do
- *   Salesforce são aleatórios como uma, e barrá-los deixava a conversa sem
- *   saída. Ele não vai ao agente — vai para o campo, que o catálogo diz não ser
- *   segredo (D28). Mas o que tem FORMATO de chave (prefixo de provedor, JWT,
- *   UUID) é barrado em qualquer campo: o passo que vem antes da chave é um
- *   desses, e colá-la ali a gravava em `config` e na memória do navegador
- *   (D77b). O UUID só passa no client_id, que pode ser um.
- * - O NOME DO MODELO entra direto, medido pedaço a pedaço
+ * - No client_id, o valor digitado sozinho é o valor, mesmo com cara de chave
+ *   aleatória: o do Pipefy, a consumer key do Salesforce e o do Zoho são
+ *   aleatórios como uma, e barrá-los deixava a conversa sem saída. Só o que tem
+ *   FORMATO de chave (prefixo de provedor, JWT) é barrado ali. Nos outros
+ *   campos não secretos, o filtro inteiro vale: o passo que vem antes da chave
+ *   é um deles, e colá-la ali a gravava em `config` e na memória do navegador
+ *   (D77b).
+ * - O NOME DO MODELO (uma palavra) entra direto, medido pedaço a pedaço
  *   (`chaveNoLugarDoModelo`): o passo vem logo depois do da chave. Antes, todo
  *   texto do passo ia ao agente, que não pode preencher modelo — e quem não tem
- *   a lista (Perplexity) não conectava nunca.
+ *   a lista (Perplexity) não conectava nunca. Frase vai ao agente.
  * - Pergunta, e frase em volta de telefone ou e-mail, vão ao agente.
  */
 export function comoEntra(e: EstadoSetup, passo: PassoSetup, texto: string, agenteLigado: boolean): 'campo' | 'chave' | 'agente' {
@@ -321,15 +320,18 @@ export function comoEntra(e: EstadoSetup, passo: PassoSetup, texto: string, agen
   const pergunta = m.endsWith('?');
   const umaPalavra = !/\s/.test(m);
   const aceita = !!campo && aceitarValor(e, campo.coleta, campo.campo.chave, m).ok;
-  if (campo && campo.campo.tipo === 'modelo') {
+  if (campo && campo.campo.tipo === 'modelo' && umaPalavra) {
     if (chaveNoLugarDoModelo(m)) return 'chave';
-    return aceita && umaPalavra && !pergunta ? 'campo' : 'agente';
+    return aceita && !pergunta ? 'campo' : 'agente';
   }
-  // O UUID é o único formato de chave que um client_id também pode ter.
-  const soUuid = !formatoDeChaveSemUuid(m);
-  const formatoDeChave = temFormatoDeChave(m) && !(campo?.campo.chave === 'client_id' && soUuid);
-  if (campo && !formatoDeChave && umaPalavra && !pergunta && aceita) return 'campo';
+  // Valor aleatório legítimo é o do client_id (Pipefy, Salesforce, Zoho) — e
+  // o UUID é o único formato de chave que ele também pode ter. Nos outros
+  // campos não secretos (endereço, domínio, nome de app, número), o valor
+  // aleatório é a chave colada no lugar errado: o filtro inteiro vale (D77b).
+  if (campo && campo.campo.chave === 'client_id' && umaPalavra && !pergunta && aceita
+      && !formatoDeChaveSemUuid(m)) return 'campo';
   if (pareceSegredo(m)) return 'chave';
+  if (campo && campo.campo.tipo === 'modelo') return 'agente';
   if (!campo || pergunta) return 'agente';
   const frase = (campo.campo.tipo === 'email' || campo.campo.tipo === 'telefone') && !umaPalavra && agenteLigado;
   return aceita || !frase ? 'campo' : 'agente';

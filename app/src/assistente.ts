@@ -723,15 +723,24 @@ export function montarPlano(f: Foto, bruto: Respostas): Plano {
       // agente sugerisse): o freio desfeito na mesma conversa. Acima do teto
       // a quota só sobe pela tela do canal, por quem decide; aqui o que falta
       // vira "faltam N contas". Baixar continua: é pedir menos.
-      const cada = Math.max(1, Math.ceil(alvo / existentes.length));
       const tetoDe = (x: { provedor: string }) => tetoPorConta(canal,
         canal === 'whatsapp' && !f.provedores.find((p) => p.slug === x.provedor)?.oficial ? 'nao' : 'oficial', pool);
-      // D77b: e baixar só quando a pessoa pediu MENOS do que as contas já
-      // somam. Pedir 200 com contas de 40 e 150 baixava a de 150 para 100.
-      const total = existentes.reduce((s, x) => s + x.quota_diaria, 0);
-      const paraDe = (x: { quota_diaria: number; provedor: string }) =>
-        cada > x.quota_diaria ? Math.max(x.quota_diaria, Math.min(cada, tetoDe(x)))
-          : alvo < total ? cada : x.quota_diaria;
+      // D77b: o pedido é repartido como água em copos — cada conta leva a mesma
+      // parte, e a que não comporta (o teto do ponto de partida, ou a quota que
+      // alguém já pôs acima dele) passa o que sobra para as outras. Assim nada
+      // baixa além do necessário: [10, 500] pedindo 300 vira [40, 260], não
+      // [40, 150] com "faltam 3 contas".
+      const limite = (x: { quota_diaria: number; provedor: string }) => Math.max(x.quota_diaria, tetoDe(x));
+      const paras = new Map<string, number>();
+      let resto = alvo;
+      const ordem = [...existentes].sort((a, b) => limite(a) - limite(b));
+      ordem.forEach((x, k) => {
+        const parte = Math.ceil(Math.max(resto, 0) / (ordem.length - k));
+        const para = Math.max(1, Math.min(limite(x), parte));
+        paras.set(x.id, para);
+        resto -= para;
+      });
+      const paraDe = (x: { id: string }) => paras.get(x.id)!;
       for (const x of existentes) {
         const para = paraDe(x);
         if (x.quota_diaria === para) continue;
@@ -947,14 +956,22 @@ export function situacao(f: Foto): Item[] {
   // só para quem administra: o RLS de `sender_accounts` não mostra conta
   // nenhuma ao operador, e "sem conta" para ele seria falso.
   const entregam = new Set(f.provedores.filter((p) => p.tem_adapter && p.ativo).map((p) => p.slug));
-  const noPool = (c: Foto['campanhas'][number], canal: CanalEnvio) => f.remetentes.some((r) =>
-    r.canal === canal && (r.estado === 'ativo' || r.estado === 'circuito_aberto')
-    && r.tipo_permitido === c.tipo && entregam.has(r.provedor)
-    && (canal !== 'email' || !c.remetente_email_id || r.id === c.remetente_email_id));
+  // Como `pool_da_campanha`: 'desligada' é a conta do pool (ou a escolhida)
+  // que existe e está desligada; 'sem_conta' é não haver nenhuma.
+  const pool = (c: Foto['campanhas'][number], canal: CanalEnvio): 'ok' | 'desligada' | 'sem_conta' => {
+    const contas = f.remetentes.filter((r) => r.canal === canal && r.tipo_permitido === c.tipo
+      && entregam.has(r.provedor) && (canal !== 'email' || !c.remetente_email_id || r.id === c.remetente_email_id));
+    if (contas.some((r) => r.estado === 'ativo' || r.estado === 'circuito_aberto')) return 'ok';
+    return contas.length ? 'desligada' : 'sem_conta';
+  };
   const semPool = !f.administra ? [] : camps.flatMap((c) => (c.canais_habilitados ?? [])
     .filter((canal): canal is CanalEnvio => (CANAIS_DE_ENVIO as readonly string[]).includes(canal))
-    .filter((canal) => !!c.tipo && !noPool(c, canal))
-    .map((canal) => `"${c.nome}" (${c.tipo}) não tem conta ${NOME[canal]} ativa no pool ${c.tipo}`));
+    .filter(() => !!c.tipo)
+    .map((canal) => ({ canal, estado: pool(c, canal) }))
+    .filter((x) => x.estado !== 'ok')
+    .map(({ canal, estado }) => estado === 'desligada'
+      ? `"${c.nome}" (${c.tipo}): ${canal === 'email' && c.remetente_email_id ? 'a conta de E-mail escolhida para ela' : `a conta ${NOME[canal]} do pool ${c.tipo}`} está desligada — religue na tela do canal`
+      : `"${c.nome}" (${c.tipo}) não tem conta ${NOME[canal]} ativa no pool ${c.tipo} — conecte uma na tela do canal`));
   return [
     { id: 'canais', titulo: 'Canais', feito: contas.length > 0,
       detalhe: contas.length
@@ -969,7 +986,7 @@ export function situacao(f: Foto): Item[] {
       detalhe: crm.length ? crm.map((c) => c.nome).join(', ') : 'opcional: sem ele, os fatos ficam só aqui' },
     { id: 'campanha', titulo: 'Campanha', feito: camps.length > 0 && semPool.length === 0,
       detalhe: semPool.length
-        ? `${semPool.join(' · ')}: nada sai por ${semPool.length > 1 ? 'esses canais' : 'esse canal'} até conectar uma conta desse pool na tela do canal`
+        ? `${semPool.join(' · ')}. Até lá, nada sai por ${semPool.length > 1 ? 'esses canais' : 'esse canal'}`
         : camps.length ? `${camps.length} ligada${camps.length > 1 ? 's' : ''}` : 'nenhuma ligada' },
     { id: 'contatos', titulo: 'Contatos', feito: f.contatos > 0,
       detalhe: f.contatos ? `${f.contatos} na base` : 'nenhum ainda' },

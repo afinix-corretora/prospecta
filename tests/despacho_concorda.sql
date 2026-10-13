@@ -233,6 +233,22 @@ SELECT dc.confere('e as da campanha desligada seguem pendentes, sem serem tocada
     WHERE e.campaign_id = 'ac000000-0000-0000-0000-0000000000c2'
       AND m.status = 'pendente' AND m.reivindicada_em IS NULL) = 12);
 
+-- 1b. Parada definitiva com a campanha desligada: quem pediu para sair tem a
+-- mensagem cancelada já, como sempre (D39) — o filtro do lote tira só o que
+-- seria SEGURADO.
+INSERT INTO suppression (tenant_id, contact_id, motivo)
+SELECT '00000000-0000-0000-0000-0000000000aa', c.id, 'opt_out' FROM contacts c WHERE c.nome = 'Desligada 1';
+CREATE TEMP TABLE lote5b AS SELECT * FROM reivindicar_pendentes(50);
+SELECT dc.confere('campanha desligada: a mensagem de quem foi suprimido é cancelada, não fica pendente',
+  (SELECT m.status::text FROM messages m JOIN enrollments e ON e.id = m.enrollment_id
+     JOIN contacts c ON c.id = e.contact_id WHERE c.nome = 'Desligada 1') = 'cancelado',
+  (SELECT m.status::text FROM messages m JOIN enrollments e ON e.id = m.enrollment_id
+     JOIN contacts c ON c.id = e.contact_id WHERE c.nome = 'Desligada 1'));
+SELECT dc.confere('e as outras onze da campanha desligada seguem pendentes e intocadas',
+  (SELECT count(*) FROM messages m JOIN enrollments e ON e.id = m.enrollment_id
+    WHERE e.campaign_id = 'ac000000-0000-0000-0000-0000000000c2'
+      AND m.status = 'pendente' AND m.reivindicada_em IS NULL) = 11);
+
 -- 2. Sem conta no pool: doze mensagens de uma campanha fria cujo único chip
 -- caiu. Elas esperam (D37, D69) — mas atrás das que nunca foram olhadas.
 INSERT INTO sender_accounts (id, canal, identificador, apelido, provedor, tipo_permitido, quota_diaria, config)
@@ -280,6 +296,31 @@ SELECT dc.confere('e as retidas seguem pendentes, no chip delas (a fria não vai
   (SELECT count(*) FROM messages m JOIN enrollments e ON e.id = m.enrollment_id
     WHERE e.campaign_id = 'ac000000-0000-0000-0000-0000000000c3' AND m.status = 'pendente'
       AND m.sender_account_id = 'ac000000-0000-0000-0000-0000000000f1') = 12);
+
+-- 3. E a retida não morre de fome: o chip volta, e o agendador enche o lote de
+-- mensagens novas a cada batida. A retida espera na vez de quando foi olhada —
+-- antes de quem nasceu depois. Pôr as nunca olhadas na frente de todas
+-- deixava a retida sem sair enquanto houvesse volume novo.
+UPDATE sender_accounts SET estado = 'ativo' WHERE id = 'ac000000-0000-0000-0000-0000000000f1';
+DO $$
+DECLARE v uuid; i int;
+BEGIN
+  FOR i IN 1..15 LOOP
+    SELECT contact_id INTO v FROM ingerir_contato('00000000-0000-0000-0000-0000000000aa','planilha',
+      format('[{"canal":"whatsapp","valor":"159977%s","valor_norm":"55159977%s"}]', lpad(i::text, 4, '0'), lpad(i::text, 4, '0'))::jsonb,
+      'Volume ' || i);
+    PERFORM inscrever(v, 'ac000000-0000-0000-0000-000000000001', 'ac000000-0000-0000-0000-000000000003',
+                      now() - interval '1 minute');
+  END LOOP;
+END;
+$$;
+SELECT count(*) FROM processar_vencidos(50, 'real');
+CREATE TEMP TABLE lote8 AS SELECT * FROM reivindicar_pendentes(10);
+SELECT dc.confere('com o chip de volta e quinze novas na fila, as retidas saem antes das novas',
+  (SELECT count(*) FROM lote8 l JOIN messages m ON m.id = l.message_id JOIN enrollments e ON e.id = m.enrollment_id
+    WHERE e.campaign_id = 'ac000000-0000-0000-0000-0000000000c3') = 10,
+  (SELECT count(*)::text FROM lote8 l JOIN messages m ON m.id = l.message_id JOIN enrollments e ON e.id = m.enrollment_id
+    WHERE e.campaign_id = 'ac000000-0000-0000-0000-0000000000c3') || ' das retidas no lote de 10');
 
 -- ---------------------------------------------------------------------------
 

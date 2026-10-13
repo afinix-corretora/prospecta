@@ -459,6 +459,15 @@ SELECT au.confere('fonte: a passada sem ignorados não apaga os exemplos da ante
   (SELECT ultimo_resultado::text FROM crm_fontes WHERE id = 'a7000000-0000-0000-0000-00000000fc01'));
 SELECT registrar_execucao_fonte('a7000000-0000-0000-0000-00000000fc01',
   '{"lidos":4,"ignorados":4,"ignorados_exemplos":[{"card":"c3"},{"card":"c4"},{"card":"c5"},{"card":"c6"}]}');
+SELECT registrar_execucao_fonte('a7000000-0000-0000-0000-00000000fc01',
+  '{"lidos":1,"ignorados":1,"ignorados_exemplos":[{"card":"c3"}]}');
+SELECT au.confere('fonte: o mesmo exemplo de novo não ocupa dois lugares',
+  (SELECT jsonb_array_length(ultimo_resultado -> 'ignorados_exemplos') = 5
+          AND (SELECT count(*) FROM jsonb_array_elements(ultimo_resultado -> 'ignorados_exemplos') x
+                WHERE x ->> 'card' = 'c3') = 1
+          AND ultimo_resultado -> 'ignorados_exemplos' -> 4 ->> 'card' = 'c1'
+     FROM crm_fontes WHERE id = 'a7000000-0000-0000-0000-00000000fc01'),
+  (SELECT ultimo_resultado -> 'ignorados_exemplos' FROM crm_fontes WHERE id = 'a7000000-0000-0000-0000-00000000fc01')::text);
 SELECT au.confere('fonte: e guarda os cinco mais recentes, os novos na frente',
   (SELECT jsonb_array_length(ultimo_resultado -> 'ignorados_exemplos') = 5
           AND ultimo_resultado -> 'ignorados_exemplos' -> 0 ->> 'card' = 'c3'

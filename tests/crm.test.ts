@@ -319,6 +319,9 @@ test('fonte: lê, pula o conhecido, ingere o novo e grava o resumo', async () =>
 test('fonte: valor que parecia identidade e não era sai no resumo, com o card e a coluna (D33, D77)', async () => {
   const crm = new CrmFalso();
   crm.listarCards = async () => [
+    // Recusado (só o fixo): volta em toda passada e já está nos erros — como
+    // exemplo, ocupava os cinco lugares e expulsava o de baixo (D77b).
+    card('9', [{ id: 'tel', rotulo: 'Telefone', valor: '(11) 3333-5555' }]),
     // Entra pelo e-mail, e o fixo se perde — é este que ninguém via.
     card('7', [{ id: 'tel', rotulo: 'Telefone', valor: '(11) 3333-4444' },
                { id: 'mail', rotulo: 'E-mail', valor: 'gil@exemplo.com' }]),
@@ -326,7 +329,8 @@ test('fonte: valor que parecia identidade e não era sai no resumo, com o card e
   const b = bancoFalso({}, [FONTE]);
   const [r] = await lerFontes(b.banco, { criar: () => crm });
   assert.equal(b.ingeridos.length, 1, 'o card entra pelo e-mail');
-  assert.equal(r!.ignorados, 1);
+  assert.equal(r!.recusados, 1);
+  assert.equal(r!.ignorados, 2, 'a contagem conta os dois');
   assert.deepEqual(r!.ignorados_exemplos, [
     { card: '7', coluna: 'Telefone', valor: '(11) 3333-4444', motivo: 'telefone fixo não recebe WhatsApp nem SMS' },
   ]);

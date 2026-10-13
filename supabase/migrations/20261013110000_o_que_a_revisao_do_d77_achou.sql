@@ -360,13 +360,25 @@ BEGIN
          -- D77b: a parada temporária fica fora do lote, como no agendador
          -- (D77, D40). Antes ela entrava, era segurada e voltava à cabeça da
          -- fila: cem mensagens de uma campanha desligada ocupavam o LIMIT de
-         -- todas as batidas, e nada de nenhum cliente saía.
+         -- todas as batidas, e nada de nenhum cliente saía. Fica fora só o que
+         -- de fato seria SEGURADO: a mensagem do agente (a janela de 24h e o
+         -- agente desligado valem com a campanha parada, D69 e D76), a de quem
+         -- foi suprimido (D39) e a de inscrição encerrada de vez continuam
+         -- entrando, para as paradas definitivas abaixo as resolverem.
          AND NOT EXISTS (
-               SELECT 1 FROM enrollments e0 JOIN campaigns c0 ON c0.id = e0.campaign_id
-                WHERE e0.id = msg.enrollment_id AND (e0.status = 'pausado' OR NOT c0.ativa))
-       -- D77b: a que nunca foi olhada antes da que já esperou uma vez — a
-       -- retida por falta de conta não volta à cabeça da fila.
-       ORDER BY msg.reivindicada_em NULLS FIRST, msg.criado_em
+               SELECT 1 FROM enrollments e0
+                 JOIN campaigns c0 ON c0.id = e0.campaign_id
+                 JOIN contact_identities ci0 ON ci0.id = msg.contact_identity_id
+                WHERE e0.id = msg.enrollment_id
+                  AND (e0.status = 'pausado' OR NOT c0.ativa)
+                  AND msg.rascunho_id IS NULL
+                  AND NOT (e0.status = 'encerrado' AND e0.motivo_encerramento IS DISTINCT FROM 'fim_dos_passos')
+                  AND NOT esta_suprimido(msg.tenant_id, e0.contact_id, msg.canal, ci0.valor_norm))
+       -- D77b: na ordem de quando cada uma ficou pronta para sair — a nova,
+       -- quando nasceu; a retida, quando foi olhada pela última vez. A retida
+       -- não volta à cabeça da fila (que travava as novas) nem vai para trás de
+       -- todas (que a deixava sem sair enquanto o agendador enchesse o lote).
+       ORDER BY coalesce(msg.reivindicada_em + p_lease, msg.criado_em)
        LIMIT p_limite FOR UPDATE SKIP LOCKED
     ), marcada AS (
       UPDATE messages msg SET reivindicada_em = now() FROM alvo WHERE msg.id = alvo.id
@@ -454,7 +466,9 @@ BEGIN
     -- mensagem em vez de cancelar — cancelada não é recriável, porque a chave
     -- única `(enrollment_id, step_id)` impede repetir o passo.
     IF m.estado_enrollment = 'pausado' OR NOT m.campanha_ativa THEN
-      UPDATE messages SET reivindicada_em = NULL WHERE id = m.id;
+      -- D77b: a do agente chega até aqui com a campanha parada; espera na
+      -- vez dela, como a retida por falta de conta.
+      UPDATE messages SET reivindicada_em = now() - p_lease WHERE id = m.id;
       CONTINUE;
     END IF;
 
@@ -477,8 +491,7 @@ BEGIN
     -- D69: a mensagem do agente não troca de conta. Outro número escrevendo
     -- no meio da conversa é outra conversa; ela espera, e a janela decide.
     IF m.rascunho_id IS NOT NULL THEN
-      -- D77b: elegível já na próxima batida, mas atrás das que nunca foram
-      -- olhadas (a ordem é por `reivindicada_em`, nulos primeiro).
+      -- D77b: elegível já na próxima batida, na vez de quando foi olhada.
       UPDATE messages SET reivindicada_em = now() - p_lease WHERE id = m.id;
       CONTINUE;
     END IF;
@@ -495,7 +508,7 @@ BEGIN
     END LOOP;
 
     IF v_novo IS NULL THEN
-      -- D77b: idem — sem conta no pool, espera atrás das novas.
+      -- D77b: idem — sem conta no pool, espera na vez dela.
       UPDATE messages SET reivindicada_em = now() - p_lease WHERE id = m.id;
       CONTINUE;
     END IF;
@@ -702,22 +715,27 @@ CREATE OR REPLACE FUNCTION public.registrar_execucao_fonte(p_fonte_id uuid, p_re
  LANGUAGE sql
  SET search_path TO 'public', 'privado'
 AS $function$
-  -- D77b: o card ignorado ganha vínculo e não volta na passada seguinte, então
-  -- os exemplos de lá sumiam em quinze minutos. Os últimos cinco ficam, os
-  -- novos na frente, com a data de cada passada que os achou.
+  -- D77b: o card que entra ganha vínculo e não volta na passada seguinte,
+  -- então os exemplos de lá sumiam em quinze minutos. Os últimos cinco
+  -- DIFERENTES ficam — o mesmo card, coluna e valor uma vez só, com a data mais
+  -- recente —, os novos na frente.
   UPDATE crm_fontes
      SET ultima_execucao = now(),
          ultimo_resultado = p_resultado || jsonb_build_object('ignorados_exemplos', coalesce((
            SELECT jsonb_agg(x ORDER BY o) FROM (
              SELECT x, o FROM (
-               SELECT x || jsonb_build_object('em', coalesce(x ->> 'em', now()::text)) AS x, o
-                 FROM jsonb_array_elements(coalesce(p_resultado -> 'ignorados_exemplos', '[]'::jsonb))
-                      WITH ORDINALITY a(x, o)
-               UNION ALL
-               SELECT x, 100 + o
-                 FROM jsonb_array_elements(coalesce(ultimo_resultado -> 'ignorados_exemplos', '[]'::jsonb))
-                      WITH ORDINALITY b(x, o)
-             ) t ORDER BY o LIMIT 5
+               SELECT DISTINCT ON (x ->> 'card', x ->> 'coluna', x ->> 'valor') x, o
+                 FROM (
+                   SELECT x || jsonb_build_object('em', coalesce(x ->> 'em', now()::text)) AS x, o
+                     FROM jsonb_array_elements(coalesce(p_resultado -> 'ignorados_exemplos', '[]'::jsonb))
+                          WITH ORDINALITY a(x, o)
+                   UNION ALL
+                   SELECT x, 100 + o
+                     FROM jsonb_array_elements(coalesce(ultimo_resultado -> 'ignorados_exemplos', '[]'::jsonb))
+                          WITH ORDINALITY b(x, o)
+                 ) t
+                ORDER BY x ->> 'card', x ->> 'coluna', x ->> 'valor', o
+             ) d ORDER BY o LIMIT 5
            ) u), '[]'::jsonb))
    WHERE id = p_fonte_id;
 $function$;
