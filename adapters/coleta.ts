@@ -744,17 +744,28 @@ export function chaveDaPagina(u: URL): string {
 // O alvo é cada pedaço do caminho (sem a extensão) e o texto do link, sem
 // acento e com espaço virando hífen: "Quem Somos" sobre `?page_id=12` (o padrão
 // do WordPress) é a página sobre, e `/sobre-a-escola` e `/contatos.php` também.
-const SOBRE = /(^|-)(quem-?somos|a-?empresa|nossa-?empresa|institucional|nossa-?historia|historia|about(-us)?|sobre-nos|sobre-a-empresa)(-|\d|$)/;
-// "sobre" e "empresa" soltos são ambíguos ("dicas-sobre-planos"): valem só no começo do pedaço.
-const SOBRE_NO_COMECO = /^(sobre|empresa)(-|\d|$)/;
+//
+// Em qualquer ponto do pedaço, só a forma que não quer dizer outra coisa
+// ("conheca-quem-somos"). "sobre", "empresa", "a-empresa", "historia" e
+// "institucional" soltos são ambíguos ("dicas-sobre-planos",
+// "como-escolher-a-empresa-do-seu-plano"): valem só no começo do pedaço.
+const SOBRE = /(^|-)(quem-?somos|nossa-?empresa|nossa-?historia|sobre-nos|sobre-a-empresa|conheca-a-empresa)(-|\d|$)/;
+const SOBRE_NO_COMECO = /^(sobre|empresa|a-?empresa|institucional|historia|about(-us)?)(-|\d|$)/;
 const OFERTA = /(^|-)(noss[ao]s?-?)?(produtos?|servicos?|planos?|solucoes|solucao|seguros?|ofertas?|catalogo|precos?|beneficios)(-|\d|$)/;
 const CONTATO = /(^|-)(contatos?|fale-?conosco|atendimento|onde-?estamos|unidades|contact(-us)?)(-|\d|$)/;
 // Post de blog fala "sobre" tudo; não é a página sobre a empresa.
 const CONTEUDO = /\/(blog|noticias?|artigos?|posts?|tags?|categorias?|category|author|autor|eventos?)(\/|$)/;
 
+// Nome de página e item de menu têm poucas palavras; título de post tem
+// muitas. No WordPress o post mora na raiz (`/%postname%/`), fora do alcance de
+// `CONTEUDO`, e a página inicial lista os recentes: sem este teto, "quanto
+// custa um plano de saúde para a empresa" tomava a vaga da página de planos.
+export const PALAVRAS_DE_PAGINA = 5;
+
 function notaDaPagina(caminho: string, rotulo: string): number {
   if (CONTEUDO.test(caminho)) return 0;
-  const pedacos = [...caminho.split('/').filter(Boolean).map((x) => x.replace(/\.(php|html?|aspx?|jsp)$/, '')), rotulo];
+  const pedacos = [...caminho.split('/').filter(Boolean).map((x) => x.replace(/\.(php|html?|aspx?|jsp)$/, '')), rotulo]
+    .filter((x) => x.split('-').filter(Boolean).length <= PALAVRAS_DE_PAGINA);
   if (pedacos.some((x) => SOBRE.test(x) || SOBRE_NO_COMECO.test(x))) return 3;
   if (pedacos.some((x) => OFERTA.test(x))) return 2;
   if (pedacos.some((x) => CONTATO.test(x))) return 1;
@@ -1078,11 +1089,21 @@ export function separarConferir(resposta: string): { texto: string; conferir: st
   resto = resto.replace(/^[\s*_]*[:：—–.-]?[\s*_]*/, '').trim();
   const conferir = [[antes, resto].filter(Boolean).join(' '), ...linhas.slice(i + 1)].join('\n').trim();
   const texto = linhas.slice(0, i).join('\n').trim();
-  // Vazio é só a negação inteira, de uma frase — "Sem divergência de preço. A taxa diverge." não é.
   const normal = semMarcas(conferir).replace(/^[\s\-*•]+/, '').replace(/^\((.*)\)$/, '$1').replace(/[\s.!]+$/, '');
-  const vazio = !conferir || /^(nenhuma?( divergencias?)?( (foi )?(encontradas?|identificadas?))?|nada( a conferir)?|sem divergencias?( (encontradas?|identificadas?))?|nao (ha|houve|foram (encontradas|identificadas)) divergencias?( (encontradas?|identificadas?))?)$/.test(normal);
+  const vazio = !conferir || NADA_A_CONFERIR.test(normal);
   return { texto, conferir: vazio ? '' : conferir };
 }
+
+// Vazio é a negação de UMA frase, com complemento que não diz nada ("entre os
+// materiais", "a relatar", "— os materiais concordam"). "Sem divergência de
+// preço. A taxa diverge." não é vazio, e "não há divergência de preço entre o
+// Site A e o Arquivo B" também não: o complemento ali é conteúdo.
+const NEGACAO = '(nenhuma?( divergencias?)?|nada( a conferir)?|sem divergencias?|nao (ha|houve)( divergencias?)?'
+  + '|nao (foi|foram) (encontradas?|identificadas?) divergencias?|nao (identifiquei|encontrei|ha nenhuma) (nenhuma )?divergencias?)';
+const SEM_CONTEUDO = '( (foi |foram )?(encontradas?|identificadas?)| relevantes?| a (relatar|conferir|apontar)'
+  + '| (entre|nos|nas|em) (os |as )?(materiais|fontes|arquivos|documentos|paginas|sites?)( (lidos|lidas|enviados|fornecidos|analisados))?'
+  + '|[\\s,;—–-]+(todas )?(os|as) (materiais|fontes|informacoes|dados) (concordam|sao consistentes|batem|conferem))*';
+const NADA_A_CONFERIR = new RegExp(`^${NEGACAO}${SEM_CONTEUDO}$`);
 
 /**
  * A linha que diz que NÃO há carência numa forma que o freio lê como licença.
@@ -1097,10 +1118,12 @@ export function tirarCarenciaSemEscopo(texto: string): { texto: string; tiradas:
   const fica: string[] = [];
   const tiradas: string[] = [];
   for (const l of texto.split('\n')) {
-    const n = semMarcas(l);
-    const ausencia = /\bcarencias?\b/.test(n)
-      && /\b(sem|zero|isen\w*|nenhuma|livre de|dispensa\w*|nao tem|nao possui|nao exige|nao precisa)\b/.test(n)
-      && !/\bnao (ha|existe)\b/.test(n);
+    // Frase a frase, com o corte do freio: é a FRASE com "não há" que sai da
+    // fonte dele, e não a linha — "Plano Odonto: sem carência. Não há limite
+    // de consultas." deixava a primeira frase lá dentro.
+    const ausencia = l.split(/(?<=[.!?])\s+/).map(semMarcas).some((f) => /\bcarencias?\b/.test(f)
+      && /\b(sem|zero|isen\w*|nenhuma|livre de|dispensa\w*|nao tem|nao possui|nao exige|nao precisa)\b/.test(f)
+      && !/\bnao (ha|existe)\b/.test(f));
     (ausencia ? tiradas : fica).push(l);
   }
   return { texto: fica.join('\n').trim(), tiradas: tiradas.map((l) => l.trim()) };

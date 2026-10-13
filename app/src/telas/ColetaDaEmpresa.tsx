@@ -16,10 +16,10 @@ import { Aviso, Campo } from '../componentes/base';
 import { ACEITA, ACEITA_IMAGEM, CABECA, FORMATOS, MAX_ARQUIVOS, TETO_TOTAL, emMb } from '@adapters/coleta.ts';
 import { leAnexos } from '@adapters/ia-leitura.ts';
 import {
-  COLETA_VAZIA, FONTES_DA_COLETA, alternar, aplicarRascunho, contaPadraoDaLeitura,
+  COLETA_VAZIA, FONTES_DA_COLETA, alternar, aplicarRascunho, contaPadraoDaLeitura, divergenciasDepoisDeUsar,
   oQueFaltaNaColeta, pedidoDaColeta, podeAnexar,
 } from '../coleta';
-import type { Anexo, EstadoDaColeta } from '../coleta';
+import type { Anexo, DivergenciaDaLeitura, EstadoDaColeta } from '../coleta';
 
 function base64DoArquivo(f: File): Promise<string> {
   return new Promise((ok, falha) => {
@@ -60,11 +60,13 @@ export function ColetaDaEmpresa({ contexto, aoUsar, contas, provedores, contaDoA
   // O texto de antes e o que o rascunho deixou: "Desfazer" só enquanto o
   // campo continua como o rascunho deixou — depois disso, desfazer apagaria o
   // que a pessoa escreveu em cima.
-  const [desfazer, setDesfazer] = useState<{ antes: string; depois: string } | null>(null);
+  // Com as divergências de antes: desfazer devolve o texto E o que havia a conferir nele.
+  const [desfazer, setDesfazer] = useState<{ antes: string; depois: string; divergencias: DivergenciaDaLeitura[] } | null>(null);
   // O que os materiais divergem continua à vista DEPOIS de usar — é aí que a
-  // pessoa escreve a versão certa —, até ela dispensar.
-  // Com a legenda: o aviso cita "Site A" e "Arquivo B", e a lista que dizia quem é quem some com o rascunho.
-  const [divergencia, setDivergencia] = useState<{ texto: string; legenda: string } | null>(null);
+  // pessoa escreve a versão certa —, até ela dispensar, e também quando uma
+  // leitura nova falha. Com a legenda: o aviso cita "Site A" e "Arquivo B", e
+  // a lista que dizia quem é quem some com o rascunho.
+  const [divergencias, setDivergencias] = useState<DivergenciaDaLeitura[]>([]);
   // Um clique, uma leitura: a trava é ref, não estado (D73) — cada leitura
   // gasta a conta de IA do cliente.
   const emCurso = useRef(false);
@@ -127,14 +129,9 @@ export function ColetaDaEmpresa({ contexto, aoUsar, contas, provedores, contaDoA
     if (!res?.texto) return;
     const r = aplicarRascunho(contexto, res.texto, modo);
     if (!r.ok) { setErro(r.motivo); return; }
-    setDesfazer({ antes: contexto, depois: r.texto });
+    setDesfazer({ antes: contexto, depois: r.texto, divergencias });
     const legenda = res.fontes.filter((f) => f.apelido).map((f) => `${f.apelido} = ${f.rotulo}`).join('; ');
-    // No lugar: vale só a divergência desta leitura. Acrescentado: as duas, porque os dois textos estão no campo.
-    setDivergencia((d) => {
-      const novas = res.conferir ? { texto: res.conferir, legenda } : null;
-      if (modo === 'usar' || !d) return novas;
-      return novas ? { texto: `${d.texto}\n${novas.texto}`, legenda: `${d.legenda}; ${novas.legenda}` } : d;
-    });
+    setDivergencias(divergenciasDepoisDeUsar(divergencias, res.conferir ? { texto: res.conferir, legenda } : null, contexto, modo));
     aoUsar(r.texto);
     setRes(null); setErro('');
   }
@@ -284,15 +281,23 @@ export function ColetaDaEmpresa({ contexto, aoUsar, contas, provedores, contaDoA
         </div>
       )}
 
-      {divergencia && !res && (
+      {/* Some só enquanto um rascunho novo está na tela, com a divergência dele; leitura que falhou não esconde. */}
+      {divergencias.length > 0 && res?.situacao !== 'pronto' && (
         <Aviso tipo="neutro"><b>Para conferir antes de salvar — os materiais divergem, e nada disto está no texto:</b>
-          <span className="conferir">{divergencia.texto}</span>
-          {divergencia.legenda && <span className="nota-tela" style={{ display: 'block', margin: '0 0 6px' }}>{divergencia.legenda}</span>}
-          <button className="link" type="button" onClick={() => setDivergencia(null)}>Dispensar</button></Aviso>
+          {divergencias.map((d, i) => (
+            <span key={i} style={{ display: 'block' }}>
+              {divergencias.length > 1 && <b style={{ display: 'block' }}>Leitura {i + 1}</b>}
+              <span className="conferir">{d.texto}</span>
+              {d.legenda && <span className="nota-tela" style={{ display: 'block', margin: '0 0 6px' }}>{d.legenda}</span>}
+            </span>
+          ))}
+          <button className="link" type="button" onClick={() => setDivergencias([])}>Dispensar</button></Aviso>
       )}
       {desfazer && !res && contexto === desfazer.depois && (
         <Aviso tipo="ok">O rascunho foi para o texto acima — ele só fica no agente quando você salvar.{' '}
-          <button className="link" type="button" onClick={() => { aoUsar(desfazer.antes); setDesfazer(null); setDivergencia(null); }}>Desfazer</button></Aviso>
+          <button className="link" type="button" onClick={() => {
+            aoUsar(desfazer.antes); setDivergencias(desfazer.divergencias); setDesfazer(null);
+          }}>Desfazer</button></Aviso>
       )}
     </div>
   );

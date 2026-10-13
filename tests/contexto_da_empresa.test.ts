@@ -197,7 +197,10 @@ test('o MODELO que não lê imagem: o anexo sai, dizendo por quê, e o resto é 
   assert.equal(so.chamadas.leituras.length, 1);
 
   // Erro de TAMANHO com anexo: o resto é lido de novo, e o anexo diz que passou de um limite — não que o modelo não lê.
-  for (const erro of ['HTTP 400: A maximum of 100 PDF pages may be provided.', 'HTTP 400: prompt is too long: 312000 tokens > 200000 maximum']) {
+  for (const erro of ['HTTP 400: A maximum of 100 PDF pages may be provided.', 'HTTP 400: prompt is too long: 312000 tokens > 200000 maximum',
+    // A entrada longa da Anthropic fala em max_tokens, e é tamanho de entrada; o arquivo grande demais da OpenAI, "string too long".
+    'HTTP 400: input length and `max_tokens` exceed context limit: 190112 + 16000 > 200000, decrease input length or `max_tokens` and try again',
+    "HTTP 400: Invalid 'messages[1].content[3].file.file_data': string too long. Expected a string with maximum length 10485760, but got a string with length 13981044 instead."]) {
     const grande = montar({ respostas: [{ ok: false, definitivo: true, erro }], paginas: { 'https://empresa.com.br/': `<p>${TEXTO_LONGO}</p>` } });
     const g = await pedir(grande, { credencial_id: ID, site: 'empresa.com.br', materiais: [{ nome: 'catalogo.pdf', base64: PDF }] });
     assert.ok(g.corpo.ok && g.corpo.situacao === 'pronto', erro);
@@ -216,12 +219,13 @@ test('o MODELO que não lê imagem: o anexo sai, dizendo por quê, e o resto é 
     assert.match(g.corpo.fontes.find((f) => f.rotulo === 'catalogo.pdf')!.detalhe, /não conseguiu abrir o arquivo/, erro);
   }
 
-  // Saldo, cota, limite por minuto e max_tokens não melhoram tirando arquivo: nada de segunda leitura, e o motivo é o do provedor.
+  // Saldo, cota, limite por minuto e teto de saída não melhoram tirando arquivo: nada de segunda leitura, e o motivo é o do provedor.
   for (const [erro, definitivo] of [
     ['HTTP 429: You exceeded your current quota, please check your plan and billing details.', false],
     ['HTTP 429: This request would exceed the rate limit for your organization', false],
     ['HTTP 429: Rate limit exceeded: free-models-per-day', false],
-    ['HTTP 400: max_tokens: 16000 > 8192, which is the maximum allowed number of output tokens for claude-x', true],
+    ['HTTP 400: max_tokens: 16000 > 2048, which is the maximum allowed number of output tokens for claude-x', true],
+    ['HTTP 400: max_tokens is too large: 16000. This model supports at most 2048 completion tokens, whereas you provided 16000.', true],
   ] as const) {
     const m = montar({ respostas: [{ ok: false, definitivo, erro }], paginas: { 'https://empresa.com.br/': `<p>${TEXTO_LONGO}</p>` } });
     const r = await pedir(m, { credencial_id: ID, site: 'empresa.com.br', materiais: [{ nome: 'catalogo.pdf', base64: PDF }] });
@@ -247,6 +251,23 @@ test('saldo curto no OpenRouter: o 402 diz quanto cabe, e a leitura é refeita u
     erro: 'HTTP 402: ... but can only afford 900.' }] });
   await pedir(pouco, { credencial_id: ID, materiais: [{ nome: 'a.txt', base64: b64(TEXTO_LONGO) }] });
   assert.equal(pouco.chamadas.leituras.length, 1);
+});
+
+test('o teto que cabe é o que o provedor disse sobre o ENVIADO — sem a folga de quem raciocina, e também o teto de saída', async () => {
+  const ler = async (conta: Partial<ContaDaColeta>, erro: string) => {
+    const m = montar({ conta, respostas: [{ ok: false, definitivo: true, erro }] });
+    const r = await pedir(m, { credencial_id: ID, materiais: [{ nome: 'a.txt', base64: b64(TEXTO_LONGO) }] });
+    assert.ok(r.corpo.ok && r.corpo.situacao === 'pronto', `${conta.modelo}: ${JSON.stringify(r.corpo)}`);
+    return m.chamadas.leituras.map((l) => l.maxTokens);
+  };
+  // ia.ts soma 3000 de folga ao modelo que raciocina, na família chat: o 402 fala do total enviado (19000).
+  assert.deepEqual(await ler({ provedor: 'openrouter', modelo: 'anthropic/claude-3.7-sonnet:thinking' },
+    'HTTP 402: You requested up to 19000 tokens, but can only afford 12000.'), [16_000, 9000]);
+  // O Claude pela API dele recusa acima do teto de saída do modelo, e diz qual é.
+  assert.deepEqual(await ler({ provedor: 'anthropic', modelo: 'claude-3-5-sonnet-20241022' },
+    'HTTP 400: max_tokens: 16000 > 8192, which is the maximum allowed number of output tokens for claude-3-5-sonnet-20241022'), [16_000, 8192]);
+  assert.deepEqual(await ler({ provedor: 'compativel', modelo: 'claude-3-haiku' },
+    'HTTP 400: max_tokens is too large: 16000. This model supports at most 4096 completion tokens, whereas you provided 16000.'), [16_000, 4096]);
 });
 
 test('o envio dos arquivos que já gastou o tempo é dito antes de ler o site de alguém — e com o nome certo', async () => {

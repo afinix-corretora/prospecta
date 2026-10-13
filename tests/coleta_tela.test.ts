@@ -7,7 +7,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
-  alternar, anexosQueVao, aplicarRascunho, COLETA_VAZIA, contaPadraoDaLeitura, oQueFaltaNaColeta,
+  alternar, anexosQueVao, aplicarRascunho, COLETA_VAZIA, contaPadraoDaLeitura, divergenciasDepoisDeUsar, oQueFaltaNaColeta,
   pedidoDaColeta, podeAnexar,
 } from '../app/src/coleta.ts';
 import type { Anexo, EstadoDaColeta } from '../app/src/coleta.ts';
@@ -132,6 +132,19 @@ test('o rascunho volta pela mão da pessoa: no lugar, depois, e nunca acima do t
   assert.ok(!cheio.ok && /ficaria com 20\.003 caracteres.*use no lugar/.test(cheio.motivo), !cheio.ok ? cheio.motivo : '');
   assert.ok(aplicarRascunho('a'.repeat(teto - 5), 'b'.repeat(teto), 'usar').ok);
   assert.ok(!aplicarRascunho('', 'b'.repeat(teto + 1), 'usar').ok);
+});
+
+test('a divergência depois de usar: a desta leitura no lugar; as duas, cada uma com a sua legenda, quando acrescenta', () => {
+  const d1 = { texto: 'Essencial: R$ 289,90 (Arquivo A) x R$ 249,90 (Site A)', legenda: 'Site A = https://a.com.br/; Arquivo A = catalogo.pdf' };
+  const d2 = { texto: 'Taxa: isenta (Arquivo A) x R$ 50 (Arquivo B)', legenda: 'Arquivo A = tabela.pdf; Arquivo B = folder.pdf' };
+  assert.deepEqual(divergenciasDepoisDeUsar([d1], d2, 'texto de antes', 'usar'), [d2]);
+  assert.deepEqual(divergenciasDepoisDeUsar([d1], null, 'texto de antes', 'usar'), [], 'no lugar, sem divergência nova, não fica nada');
+  // Os apelidos recomeçam a cada leitura: "Arquivo A" é catalogo.pdf numa e tabela.pdf na outra — uma legenda por leitura.
+  assert.deepEqual(divergenciasDepoisDeUsar([d1], d2, 'texto de antes', 'acrescentar'), [d1, d2]);
+  assert.deepEqual(divergenciasDepoisDeUsar([d1], null, 'texto de antes', 'acrescentar'), [d1]);
+  // Acrescentar a um campo vazio é usar (aplicarRascunho faz o mesmo): o texto de antes não está mais lá.
+  assert.deepEqual(divergenciasDepoisDeUsar([d1], d2, '  ', 'acrescentar'), [d2]);
+  assert.deepEqual(divergenciasDepoisDeUsar([], { texto: '  ', legenda: 'x' }, 'a', 'acrescentar'), []);
 });
 
 test('com que conta ler, de saída', () => {

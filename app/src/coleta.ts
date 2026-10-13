@@ -154,6 +154,23 @@ export function aplicarRascunho(
   return { ok: true, texto };
 }
 
+/** O que os materiais divergem numa leitura usada, com quem é quem ("Site A = https://…"). */
+export interface DivergenciaDaLeitura { readonly texto: string; readonly legenda: string }
+
+/**
+ * As divergências que continuam à vista depois de usar: só a desta leitura,
+ * quando o rascunho foi no lugar; as de antes e a desta, quando foi
+ * acrescentado — os dois textos estão no campo. Uma entrada por leitura,
+ * porque os apelidos recomeçam a cada uma: juntas numa legenda só, "Arquivo A"
+ * seria dois arquivos.
+ */
+export function divergenciasDepoisDeUsar(
+  antes: readonly DivergenciaDaLeitura[], nova: DivergenciaDaLeitura | null, atual: string, modo: 'usar' | 'acrescentar',
+): DivergenciaDaLeitura[] {
+  const daqui = nova && nova.texto.trim() ? [nova] : [];
+  return modo === 'usar' || !atual.trim() ? daqui : [...antes, ...daqui];
+}
+
 export interface ContaParaLer { readonly id: string; readonly provedor: string; readonly ativo: boolean }
 
 /**

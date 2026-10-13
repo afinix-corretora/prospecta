@@ -274,6 +274,36 @@ test('html: o slug da página conta pedaço a pedaço, com plural, extensão e "
   }
 });
 
+test('html: post de blog na raiz não toma a vaga da página de planos — título tem palavras demais para ser página', () => {
+  const base = new URL('https://www.corretora.com.br/');
+  // O permalink padrão do WordPress é /%postname%/, fora de /blog/, e a página inicial lista os recentes.
+  const menu = [
+    { href: '/', texto: 'Início' }, { href: '/quem-somos/', texto: 'Quem Somos' },
+    { href: '/planos-de-saude/', texto: 'Planos de Saúde' }, { href: '/seguros/', texto: 'Seguros' }, { href: '/contato/', texto: 'Contato' },
+  ];
+  const posts = [
+    { href: '/plano-de-saude-empresarial-o-que-a-empresa-precisa-saber/', texto: 'Plano de saúde empresarial: o que a empresa precisa saber' },
+    { href: '/quanto-custa-um-plano-de-saude-para-a-empresa/', texto: 'Leia mais' },
+    { href: '/a-historia-dos-planos-de-saude-no-brasil/', texto: 'A história dos planos de saúde no Brasil' },
+    { href: '/como-escolher-a-empresa-do-seu-plano/', texto: 'Leia mais' },
+    { href: '/seguro-de-vida-vale-a-pena/', texto: 'Seguro de vida: vale a pena?' },
+  ];
+  assert.deepEqual(paginasParaLer([...menu, ...posts], base).map((u) => u.pathname), ['/quem-somos/', '/planos-de-saude/', '/seguros/']);
+  // Com um menu curto, o título que fala de planos não passa a página de contato — nem antes dela na página.
+  assert.deepEqual(paginasParaLer([
+    { href: '/a-historia-dos-planos-de-saude-no-brasil/', texto: 'Leia mais' },
+    { href: '/plano-de-saude-empresarial-o-que-a-empresa-precisa-saber/', texto: 'Leia mais' },
+    { href: '/planos/', texto: 'Planos' }, { href: '/quem-somos/', texto: 'Quem Somos' }, { href: '/contato/', texto: 'Contato' },
+  ], base).map((u) => u.pathname), ['/quem-somos/', '/planos/', '/contato/']);
+  // Os ambíguos valem só no começo: "a empresa" e "história" no meio de um nome curto também não são a página sobre.
+  for (const href of ['/dicas-para-a-empresa/', '/a-historia-do-sus/', '/video-institucional/']) {
+    assert.deepEqual(paginasParaLer([{ href, texto: 'Leia mais' }], base), [], href);
+  }
+  for (const href of ['/a-empresa/', '/historia/', '/institucional/', '/conheca-a-empresa/', '/conheca-quem-somos/']) {
+    assert.equal(paginasParaLer([{ href, texto: 'Leia mais' }], base).length, 1, href);
+  }
+});
+
 test('html: link com porta, usuário e senha ou rede social não vira página extra', () => {
   const base = new URL('https://empresa.com.br/');
   const r = paginasParaLer([
@@ -672,12 +702,19 @@ test('divergência sai do texto: o que vem depois de PARA CONFERIR não entra no
   assert.deepEqual(separarConferir('Texto.\nPARA CONFERIR (coparticipação: Site A x Arquivo B)'),
     { texto: 'Texto.', conferir: '(coparticipação: Site A x Arquivo B)' }, 'parêntese com conteúdo não é cabeçalho');
   assert.deepEqual(separarConferir('Texto.\n**PARA CONFERIR:** o prazo de carência diverge'), { texto: 'Texto.', conferir: 'o prazo de carência diverge' });
-  for (const nada of ['nenhuma.', 'Nenhuma divergência encontrada.', '\n- Nenhuma divergência.', '\nNão há divergências.', 'Sem divergências encontradas.', '(nenhuma)']) {
+  for (const nada of ['nenhuma.', 'Nenhuma divergência encontrada.', '\n- Nenhuma divergência.', '\nNão há divergências.', 'Sem divergências encontradas.', '(nenhuma)',
+    'Nenhuma divergência encontrada entre os materiais.', 'Não há divergências entre as fontes.',
+    'Nenhuma divergência encontrada nos materiais analisados.', 'Não foram encontradas divergências entre os materiais.',
+    'Nenhuma divergência relevante.', 'Sem divergências entre os materiais.', 'Não há divergências a relatar.',
+    'Nenhuma divergência foi identificada entre as fontes.', 'Nada a conferir.', 'Não identifiquei divergências.',
+    'Nenhuma — os materiais concordam.', 'Não há.', 'Nenhuma divergência encontrada; todas as informações são consistentes.']) {
     assert.deepEqual(separarConferir(`Texto.\nPARA CONFERIR: ${nada}`), { texto: 'Texto.', conferir: '' }, nada);
   }
   // Divergência que COMEÇA por "sem" ou "não há" continua sendo divergência.
   for (const algo of ['Sem divergência de preço. Taxa de adesão: Site A isenta, Arquivo B cobra.',
-    'Não há consenso sobre reembolso: Site A oferece, Arquivo B não.', '\nNenhuma sobre preço.\n- Taxa de adesão: Site A isenta, Arquivo B cobra.']) {
+    'Não há consenso sobre reembolso: Site A oferece, Arquivo B não.', '\nNenhuma sobre preço.\n- Taxa de adesão: Site A isenta, Arquivo B cobra.',
+    'Nenhuma divergência de preço; a carência do Odonto diverge (Site A x Arquivo B).',
+    'Nenhuma divergência entre os materiais. A taxa de adesão diverge.']) {
     assert.notEqual(separarConferir(`Texto.\nPARA CONFERIR: ${algo}`).conferir, '', algo);
   }
   assert.deepEqual(separarConferir('Só texto.'), { texto: 'Só texto.', conferir: '' });
@@ -722,8 +759,22 @@ test('o formato que o prompt pede é o que o freio lê — dos dois lados', () =
     assert.deepEqual(tiradas, [proibida], proibida);
     assert.equal(freio(texto, 'O Empresarial não tem carência, pode internar desde o primeiro dia.'), 'bloqueado', `com a conferência: ${proibida}`);
   }
-  // E o que fala de carência sem negar fica.
+  // Frase a frase, como o freio corta: o "não há" de OUTRA frase da linha não
+  // tira da fonte do freio a frase com "sem carência".
+  for (const duas of ['- Plano Odonto: sem carência (Site A). Não há limite de consultas.',
+    '- Não há fidelidade no Plano Odonto. Sem carência para limpeza (Site A).',
+    '- Não há carência para consultas no Plano Odonto. Urgência sem carência (Site A).',
+    '- Plano Odonto: carência zero (Arquivo B)! Não existe taxa de adesão.']) {
+    const solta = [...base, duas].join('\n');
+    assert.equal(freio(solta, 'O Empresarial não tem carência, pode internar desde o primeiro dia.'), 'pronto', `sem a conferência: ${duas}`);
+    const { texto, tiradas } = tirarCarenciaSemEscopo(solta);
+    assert.deepEqual(tiradas, [duas], duas);
+    assert.equal(freio(texto, 'O Empresarial não tem carência, pode internar desde o primeiro dia.'), 'bloqueado', `com a conferência: ${duas}`);
+  }
+  // E o que fala de carência sem negar fica — inclusive com "não há" na mesma frase.
   assert.deepEqual(tirarCarenciaSemEscopo(comOdonto), { texto: comOdonto, tiradas: [] });
+  const ficam = '- Não há carência para consultas no Plano Odonto. Sem taxa de adesão (Site A).';
+  assert.deepEqual(tirarCarenciaSemEscopo(ficam), { texto: ficam, tiradas: [] });
 });
 
 function modeloFalso(respostas: (() => Response)[] = []) {

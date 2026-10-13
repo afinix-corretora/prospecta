@@ -3644,7 +3644,8 @@ de uma frase que fala de preço e lê carência por tipo de afirmação, sem esc
   numa linha de preço liberava o 2 como valor;
 - ausência de carência é escrita sempre "não há carência para … no Plano X", a única forma que a
   `PROIBITIVA` tira da fonte; "sem carência" do Odonto liberava a carência do Saúde. O que o modelo
-  escrever mesmo assim sai do texto e vai para conferir (`tirarCarenciaSemEscopo`);
+  escrever mesmo assim sai do texto e vai para conferir (`tirarCarenciaSemEscopo`), frase a frase como
+  o freio corta;
 - divergência entre materiais não entra no texto em versão nenhuma: vai depois de **PARA CONFERIR**,
   que a tela separa (`separarConferir`) e mostra num aviso que não some até a pessoa dispensar —
   usar o rascunho com a divergência escondida era escolher uma das versões sem ver.
@@ -3652,8 +3653,9 @@ de uma frase que fala de preço e lê carência por tipo de afirmação, sem esc
 **O modelo.** Claude e a família chat completions, por `adapters/ia-leitura.ts`, que embrulha o
 `criarIa` de sempre trocando só o conteúdo da mensagem (`ia.ts` e `prompt-do-agente.ts` não mudam). O
 Claude conta raciocínio e texto no mesmo `max_tokens`, então lê com 16000 — pelo provedor `anthropic`
-ou por modelo `claude` no OpenRouter. O 402 do OpenRouter ("só pode pagar M") relê uma vez com o M,
-se ele couber; o modelo que recusa o anexo pelo tipo, pelo arquivo ilegível ou pelo tamanho relê sem
+ou por modelo `claude` no OpenRouter. Quando o provedor diz quanto cabe — o 402 do OpenRouter ("só
+pode pagar M"), o teto de saída de um Claude antigo —, a leitura é refeita uma vez com esse teto, sem a
+folga que `ia.ts` soma a quem raciocina, se ele ainda for um rascunho; o modelo que recusa o anexo pelo tipo, pelo arquivo ilegível ou pelo tamanho relê sem
 os anexos e diz quais ficaram de fora — saldo e limite por minuto não tiram arquivo nenhum. O prazo
 conta desde a chegada do pedido: o Supabase corta em 150 s, e o envio de 15 MB também é desse tempo.
 
@@ -3662,10 +3664,15 @@ quem não entrou), lê o corpo contado enquanto chega, com teto, lê a conta de 
 pediu (o RLS decide) e o segredo pela chave do serviço — o desenho de `agente-testar`. Erro interno
 volta com uma frase que não carrega nada; a mensagem fica no log.
 
-**Revisão.** Quatro rodadas adversariais antes de publicar: 37, 20 e 14 achados confirmados nas três
-primeiras, cada correção com teste que acende sem ela (35 sabotagens conferidas), e a quarta só sobre o
-diff da terceira. Os testes são `tests/coleta.test.ts` (44), `tests/contexto_da_empresa.test.ts` (16) e
-`tests/coleta_tela.test.ts` (9, inclusive a ponte da tela até `colherDoPedido`).
+**Revisão.** Quatro rodadas adversariais antes de publicar, com 37, 20, 14 e 7 achados confirmados. A
+quarta revisou só o que a terceira tinha corrigido, e achou o que é o assunto do D37: a correção também
+é uma mudança. Três exemplos. O "não há" de outra frase da mesma linha isentava o "sem carência" (o
+freio corta por frase, e a conferência passou a cortar igual). Post de blog na raiz tomava a vaga da
+página de planos (título tem palavras demais para ser página). "Nenhuma divergência entre os
+materiais" virava aviso de divergência. Cada correção tem teste que acende sem ela: 45 sabotagens nos
+testes e 2 no navegador, para o que só a tela mostra. Os testes são `tests/coleta.test.ts` (45),
+`tests/contexto_da_empresa.test.ts` (17) e `tests/coleta_tela.test.ts` (10, inclusive a ponte da tela
+até `colherDoPedido`).
 
 **O que isto NÃO faz, dito para não parecer que faz.**
 

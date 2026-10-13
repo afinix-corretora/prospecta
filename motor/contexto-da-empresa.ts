@@ -14,7 +14,7 @@
 // tempo para ele responder dentro dos 150 s da edge function.
 
 import type { Buscador } from '../adapters/tipos.ts';
-import { juntarCredenciais, PROVEDORES_IA_COM_ADAPTER } from '../adapters/ia.ts';
+import { FOLGA_DE_TOKENS, juntarCredenciais, PROVEDORES_IA_COM_ADAPTER, raciocinaAntesDeEscrever } from '../adapters/ia.ts';
 import type { Leitor, Parte } from '../adapters/ia-leitura.ts';
 import { criarLeitor, leAnexos, PRAZO_DO_MODELO_MS } from '../adapters/ia-leitura.ts';
 import {
@@ -107,14 +107,28 @@ export const PRAZO_MINIMO_DO_MODELO_MS = 20_000;
  * PDF, e o diagnóstico seria o errado.
  */
 const NAO_LE_ANEXO = /no endpoints? found that supports? (image|file|pdf)|(does not|doesn't|do not) support (image|file|pdf|document)|(image|file|pdf|document)s? (input|inputs|content|url)s? (is|are) not supported|not supported for this model|image_url is only supported|modalit|unsupported (content|file|image|mime)|invalid (content|image|file) type/i;
-/** O erro de TAMANHO com anexo: o resto é lido de novo sem os anexos, que levam o motivo. */
-const PASSOU_DO_LIMITE = /prompt is too long|too large|maximum context length|context[_ ]length[_ ]exceeded|pages? may be provided|image exceeds|dimensions exceed|request_too_large|request exceeds/i;
-/** O que parece tamanho e não é: saldo, cota e limite por minuto não melhoram tirando arquivo. */
-const NAO_E_TAMANHO = /HTTP (402|429)|quota|rate.?limit|max_tokens|credits?\b/i;
+/**
+ * O erro de TAMANHO com anexo: o resto é lido de novo sem os anexos, que levam
+ * o motivo. Largo de propósito — "input length and `max_tokens` exceed context
+ * limit", "string too long" —, e quem estreita é `NAO_E_TAMANHO`.
+ */
+const PASSOU_DO_LIMITE = /too long|too large|maximum|exceed|pages? may be provided|request_too_large/i;
+/**
+ * O que parece tamanho e não é: saldo, cota, limite por minuto e o teto de
+ * SAÍDA não melhoram tirando arquivo. O teto de saída se reconhece pela forma
+ * ("max_tokens: 16000 > 8192", "completion tokens"), e não pela palavra: a
+ * entrada longa demais da Anthropic também fala em `max_tokens`.
+ */
+const NAO_E_TAMANHO = /HTTP (402|429)|quota|rate.?limit|credits?\b|max_tokens:?\s*\d+\s*>\s*\d+|output tokens|completion tokens/i;
 /** O arquivo que o provedor não conseguiu abrir: PDF truncado, imagem corrompida. */
 const ILEGIVEL = /could not process image|pdf specified was not valid|invalid (file|image) data|does not represent a valid image|unable to determine image format|could not (be )?(read|parse|open)|corrupt/i;
-/** O 402 do OpenRouter diz quanto cabe: "can only afford 5333". */
-const CABE_SO = /can only afford (\d+)/i;
+/**
+ * Quanto cabe, quando o provedor diz: o saldo do OpenRouter ("can only afford
+ * 5333"), o teto de saída do Claude ("> 8192, which is the maximum allowed
+ * number of output tokens") e o da família chat ("at most 4096 completion
+ * tokens"). O que cabe ainda é um rascunho, se não for menos que o de sempre.
+ */
+const CABE_SO = /can only afford (\d+)|> (\d+), which is the maximum allowed number of output tokens|at most (\d+) completion tokens/i;
 
 function recusa(status: 400 | 401 | 404 | 409 | 413, erro: string): RespostaDaColeta {
   return { status, corpo: { ok: false, erro } };
@@ -280,9 +294,12 @@ export async function colherDoPedido(
   const noLimite = noTeto(juntadas, fontes);
   let r = await ler(noLimite);
   if (!r) return erro(SEM_TEMPO);
-  // Saldo curto no OpenRouter: o 402 diz quanto cabe, e o que cabe ainda é um rascunho.
-  const cabe = !r.ok ? Number(CABE_SO.exec(r.erro)?.[1] ?? 0) : 0;
-  if (!r.ok && /HTTP 402/.test(r.erro) && cabe >= TOKENS_DA_LEITURA && cabe < maxTokens) {
+  // O provedor disse quanto cabe no teto ENVIADO; a família chat soma a folga
+  // de quem raciocina por cima do nosso (`ia.ts`), e ela entraria de novo.
+  const disse = !r.ok ? CABE_SO.exec(r.erro) : null;
+  const folga = conta.provedor !== 'anthropic' && raciocinaAntesDeEscrever(modelo) ? FOLGA_DE_TOKENS : 0;
+  const cabe = disse ? Number(disse.slice(1).find(Boolean) ?? 0) - folga : 0;
+  if (!r.ok && disse && cabe >= TOKENS_DA_LEITURA && cabe < maxTokens) {
     maxTokens = cabe;
     r = await ler(noLimite);
     if (!r) return erro(SEM_TEMPO);
