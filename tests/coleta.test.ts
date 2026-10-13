@@ -314,9 +314,10 @@ test('html: post de blog na raiz não toma a vaga da página de planos — títu
     <li><a href="/quanto-custa-um-plano-de-saude-para-a-empresa/">Quanto custa um plano de saúde para a empresa</a></li></ul>`;
   for (const widget of [
     `<aside class="widget-area"><section class="widget widget_recent_entries"><nav aria-label="Menu">${doBlog}</nav></section></aside>`,
-    // Título curto: só o rótulo do <nav> separa o widget do menu.
-    `<footer><nav aria-label="Posts recentes"><ul><li><a href="/seguro-de-vida-vale-a-pena/">Seguro de vida: vale a pena?</a></li>
-      <li><a href="/historia-da-unimed/">História da Unimed</a></li></ul></nav></footer>`,
+    // Sem rótulo e com título curto: só o <aside> em volta diz que é widget.
+    `<aside><section class="widget"><nav><ul><li><a href="/seguro-de-vida-vale-a-pena/">Seguro de vida: vale a pena?</a></li></ul></nav></section></aside>`,
+    // Título curto e slug longo: só o rótulo do <nav> separa o widget do menu.
+    `<footer><nav aria-label="Posts recentes"><ul><li><a href="/seguro-de-vida-vale-a-pena/">Seguro de vida: vale a pena?</a></li></ul></nav></footer>`,
     `<footer><nav>${doBlog}</nav></footer>`,
   ]) {
     assert.deepEqual(paginasParaLer(htmlParaTexto(menuPrincipal + widget).links, base).map((u) => u.pathname),
