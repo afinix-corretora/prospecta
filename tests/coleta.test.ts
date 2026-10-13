@@ -314,8 +314,9 @@ test('html: post de blog na raiz não toma a vaga da página de planos — títu
     <li><a href="/quanto-custa-um-plano-de-saude-para-a-empresa/">Quanto custa um plano de saúde para a empresa</a></li></ul>`;
   for (const widget of [
     `<aside class="widget-area"><section class="widget widget_recent_entries"><nav aria-label="Menu">${doBlog}</nav></section></aside>`,
-    // Sem rótulo e com título curto: só o <aside> em volta diz que é widget.
-    `<aside><section class="widget"><nav><ul><li><a href="/seguro-de-vida-vale-a-pena/">Seguro de vida: vale a pena?</a></li></ul></nav></section></aside>`,
+    // O título do widget é o rótulo, e quem o escreveu não precisa dizer "posts".
+    `<aside><section class="widget widget_recent_entries"><nav aria-label="Leia também"><ul>
+      <li><a href="/seguro-de-vida-vale-a-pena/">Seguro de vida: vale a pena?</a></li></ul></nav></section></aside>`,
     // Título curto e slug longo: só o rótulo do <nav> separa o widget do menu.
     `<footer><nav aria-label="Posts recentes"><ul><li><a href="/seguro-de-vida-vale-a-pena/">Seguro de vida: vale a pena?</a></li></ul></nav></footer>`,
     `<footer><nav>${doBlog}</nav></footer>`,
@@ -323,6 +324,27 @@ test('html: post de blog na raiz não toma a vaga da página de planos — títu
     assert.deepEqual(paginasParaLer(htmlParaTexto(menuPrincipal + widget).links, base).map((u) => u.pathname),
       ['/quem-somos/', '/planos/', '/contato/'], widget);
   }
+  // O menu de páginas também mora em <aside> (o widget "Menu de navegação" e o bloco Navegação), depois dos
+  // posts do <main> — e continua menu, com o slug que tiver.
+  for (const rodape of [
+    `<aside class="widget-area"><section class="widget widget_nav_menu"><nav aria-label="Planos"><ul>`,
+    `<aside class="widget-area"><nav class="wp-block-navigation" aria-label="Navegação"><ul>`,
+  ]) {
+    const pagina = htmlParaTexto(`<header><nav aria-label="Menu principal"><a href="/">Início</a><a href="/quem-somos/">Quem Somos</a>
+      <a href="/blog/">Blog</a><a href="/contato/">Contato</a></nav></header>
+      <main><a href="/plano-de-saude-empresarial-o-que-a-empresa-precisa-saber/">Plano de saúde empresarial: o que a empresa precisa saber</a>
+      <a href="/quanto-custa-um-plano-de-saude-para-a-empresa/">Quanto custa um plano de saúde para a empresa</a></main>
+      ${rodape}<li><a href="/plano-de-saude-individual-e-familiar/">Individual e Familiar</a></li>
+      <li><a href="/plano-de-saude-para-pequenas-empresas/">Pequenas Empresas</a></li></ul></nav></aside>`);
+    assert.deepEqual(paginasParaLer(pagina.links, base).map((u) => u.pathname),
+      ['/quem-somos/', '/plano-de-saude-individual-e-familiar/', '/plano-de-saude-para-pequenas-empresas/'], rodape);
+  }
+  // Nome de produto de 7 e 8 palavras, sob um "Planos" que não leva a lugar nenhum, ainda é item de menu.
+  const submenu = htmlParaTexto(`<nav aria-label="Menu principal"><a href="/quem-somos/">Quem Somos</a><a href="#">Planos</a>
+    <a href="/plano-de-saude-para-pequenas-e-medias-empresas/">Plano de Saúde para Pequenas e Médias Empresas</a>
+    <a href="/seguro-de-vida-em-grupo-para-empresas/">Seguro de Vida em Grupo para Empresas</a><a href="/contato/">Contato</a></nav>`);
+  assert.deepEqual(paginasParaLer(submenu.links, base).map((u) => u.pathname),
+    ['/quem-somos/', '/plano-de-saude-para-pequenas-e-medias-empresas/', '/seguro-de-vida-em-grupo-para-empresas/']);
   // E o menu continua menu depois do <aside> e do <nav> de widget fecharem.
   const depois = htmlParaTexto(`<aside><nav aria-label="Arquivos">${doBlog}</nav></aside><nav><a href="/x">X</a></nav>`).links;
   assert.deepEqual(depois.map((l) => Boolean(l.menu)), [false, false, false, true]);

@@ -3664,7 +3664,7 @@ quem não entrou), lê o corpo contado enquanto chega, com teto, lê a conta de 
 pediu (o RLS decide) e o segredo pela chave do serviço — o desenho de `agente-testar`. Erro interno
 volta com uma frase que não carrega nada; a mensagem fica no log.
 
-**Revisão.** Seis rodadas adversariais antes de publicar, com 37, 20, 14, 7, 2 e 1 achados confirmados.
+**Revisão.** Sete rodadas adversariais antes de publicar, com 37, 20, 14, 7, 2, 1 e 2 achados confirmados.
 Da quarta em diante, cada rodada revisou só o que a anterior tinha corrigido, e achou o que é o assunto
 do D37: a correção também é uma mudança. Exemplos:
 
@@ -3673,14 +3673,23 @@ do D37: a correção também é uma mudança. Exemplos:
 - Post de blog na raiz tomava a vaga da página de planos. O teto de palavras que resolveu isso jogava
   fora `plano-de-saude-individual-e-familiar`. O sinal certo é onde o link está: no `<nav>` é página,
   com o slug que tiver; fora dele, o slug longo só ocupa vaga que sobrou. E nem todo `<nav>` é menu:
-  desde a 5.5 o WordPress embrulha num `<nav>` o widget de "Posts recentes". Não contam o `<nav>` de
-  dentro de `<aside>`, o que se rotula de posts, arquivos ou categorias, nem o item com título de mais
-  de 6 palavras.
+  desde a 5.5 o WordPress embrulha num `<nav>` o widget de "Posts recentes", sempre com o título no
+  `aria-label`. Não conta o `<nav>` que se rotula de posts, arquivos, categorias ou "leia também", nem
+  o item com mais de 8 palavras (nome de produto chega a 8; título de post costuma passar). O `<aside>`
+  chegou a ser trava e saiu na rodada seguinte: o widget de menu de páginas e o bloco Navegação moram
+  nele também.
+
+A escolha das páginas extras é uma heurística sobre marcação que ninguém controla. Cada rodada trocou
+um caso por outro, e daqui ela fica como está, com os limites ditos: no mega menu com descrição dentro
+do link, a página de oferta fica abaixo de Contato (ainda é lida se sobrar vaga); post de slug curto
+que começa por "história" ou "a empresa" fora do menu ainda pontua como página sobre; e site sem
+`<nav>` depende só do slug. O que não foi lido aparece na lista de fontes, e a pessoa anexa a página
+salva.
 - "Nenhuma divergência entre os materiais" virava aviso de divergência.
 - Alargar o erro de tamanho fez o "Key limit exceeded" do OpenRouter, que é teto de gasto da chave,
   virar "anexe menos arquivos".
 
-Cada correção tem teste que acende sem ela: 54 sabotagens nos testes e 2 no navegador, para o que só a
+Cada correção tem teste que acende sem ela: 58 sabotagens nos testes e 2 no navegador, para o que só a
 tela mostra. Os testes são `tests/coleta.test.ts` (45), `tests/contexto_da_empresa.test.ts` (17) e
 `tests/coleta_tela.test.ts` (10, inclusive a ponte da tela até `colherDoPedido`).
 

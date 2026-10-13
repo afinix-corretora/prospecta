@@ -295,15 +295,17 @@ export interface PaginaLida {
   readonly texto: string;
   /**
    * `menu`: o link está num `<nav>` de navegação — é página do site, e não um
-   * post listado na página. Não conta o `<nav>` de dentro de `<aside>` nem o
-   * que se rotula de posts, comentários, arquivos ou categorias: o WordPress
-   * embrulha nele os widgets de "Posts recentes" desde a 5.5.
+   * post listado na página. Não conta o `<nav>` que se rotula de posts,
+   * comentários, arquivos ou categorias: desde a 5.5 o WordPress embrulha num
+   * `<nav>` os widgets de "Posts recentes", sempre com o título no
+   * `aria-label`. O `<aside>` em volta não diz nada: o widget de menu de
+   * páginas e o bloco Navegação moram no mesmo `<aside>`.
    */
   readonly links: readonly { readonly href: string; readonly texto: string; readonly menu?: boolean }[];
 }
 
 /** O `<nav>` de widget: lista posts, comentários, arquivos ou categorias, e não as páginas do site. */
-const NAO_E_MENU = /post|coment|comment|arquivo|archive|categor|recent|tag|blog|noticia|news/;
+const NAO_E_MENU = /post|coment|comment|arquivo|archive|categor|recent|tag|blog|noticia|news|leia|novidade|artigo|dica|ultim/;
 
 /** O que se pula inteiro, conteúdo e tudo. O `<title>` é lido à parte. */
 const PULADAS = new Set(['script', 'style', 'noscript', 'svg', 'template', 'iframe', 'object', 'canvas', 'title']);
@@ -378,11 +380,10 @@ export function htmlParaTexto(html: string): PaginaLida {
   let descricao = '';
   let tituloOg = '';
   let link: { href: string; desde: number; menu: boolean } | null = null;
-  // Os <nav> abertos, cada um dizendo se é menu; os de menu contados à parte, e os <aside> em volta.
+  // Os <nav> abertos, cada um dizendo se é menu, e os de menu contados à parte.
   // O que não fecha deixa o resto como estava: é o comportamento de antes, não um erro.
   const navs: boolean[] = [];
   let menu = 0;
-  let aside = 0;
   const semFechamento = new Set<string>();
   const separar = (x: string) => { if (saida[saida.length - 1] !== x) saida.push(x); };
   const fecharLink = () => {
@@ -462,12 +463,11 @@ export function htmlParaTexto(html: string): PaginaLida {
       }
       continue;
     }
-    if (nome === 'aside' && !tag.endsWith('/>')) aside = fecha ? Math.max(0, aside - 1) : aside + 1;
     if (nome === 'nav' && !tag.endsWith('/>')) {
       if (fecha) { if (navs.pop()) menu--; }
       else {
         const rotulo = semMarcas(atributos(tag)['aria-label'] ?? '');
-        const ehMenu = aside === 0 && !NAO_E_MENU.test(rotulo);
+        const ehMenu = !NAO_E_MENU.test(rotulo);
         navs.push(ehMenu);
         if (ehMenu) menu++;
       }
@@ -788,8 +788,12 @@ const CONTEUDO = /\/(blog|noticias?|artigos?|posts?|tags?|categorias?|category|a
 // do menu não é descartado: fica abaixo de contato e só ocupa vaga que sobrou,
 // porque "plano-de-saude-individual-e-familiar" também é página.
 export const PALAVRAS_DE_PAGINA = 5;
-/** Item de menu é curto ("Plano de Saúde para Pequenas Empresas"); título de post listado num <nav> passa disso. */
-export const PALAVRAS_DE_ITEM_DE_MENU = 6;
+/**
+ * Item de menu é nome de página: "Plano de Saúde para Pequenas e Médias
+ * Empresas" tem 8 palavras. Título de post costuma passar disso, e o teto é a
+ * segunda trava, para o `<nav>` de posts que o rótulo não denuncia.
+ */
+export const PALAVRAS_DE_ITEM_DE_MENU = 8;
 
 function notaDosPedacos(pedacos: readonly string[]): number {
   if (pedacos.some((x) => SOBRE.test(x) || SOBRE_NO_COMECO.test(x))) return 3;
