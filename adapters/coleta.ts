@@ -293,9 +293,17 @@ export interface PaginaLida {
   readonly titulo: string;
   readonly descricao: string;
   readonly texto: string;
-  /** `menu`: o link está dentro de um `<nav>` — é página do site, e não um post listado na página. */
+  /**
+   * `menu`: o link está num `<nav>` de navegação — é página do site, e não um
+   * post listado na página. Não conta o `<nav>` de dentro de `<aside>` nem o
+   * que se rotula de posts, comentários, arquivos ou categorias: o WordPress
+   * embrulha nele os widgets de "Posts recentes" desde a 5.5.
+   */
   readonly links: readonly { readonly href: string; readonly texto: string; readonly menu?: boolean }[];
 }
+
+/** O `<nav>` de widget: lista posts, comentários, arquivos ou categorias, e não as páginas do site. */
+const NAO_E_MENU = /post|coment|comment|arquivo|archive|categor|recent|tag|blog|noticia|news/;
 
 /** O que se pula inteiro, conteúdo e tudo. O `<title>` é lido à parte. */
 const PULADAS = new Set(['script', 'style', 'noscript', 'svg', 'template', 'iframe', 'object', 'canvas', 'title']);
@@ -370,8 +378,11 @@ export function htmlParaTexto(html: string): PaginaLida {
   let descricao = '';
   let tituloOg = '';
   let link: { href: string; desde: number; menu: boolean } | null = null;
-  // Dentro de quantos <nav>. O que não fecha deixa o resto como menu: é o comportamento de antes, não um erro.
+  // Os <nav> abertos, cada um dizendo se é menu; os de menu contados à parte, e os <aside> em volta.
+  // O que não fecha deixa o resto como estava: é o comportamento de antes, não um erro.
+  const navs: boolean[] = [];
   let menu = 0;
+  let aside = 0;
   const semFechamento = new Set<string>();
   const separar = (x: string) => { if (saida[saida.length - 1] !== x) saida.push(x); };
   const fecharLink = () => {
@@ -451,7 +462,16 @@ export function htmlParaTexto(html: string): PaginaLida {
       }
       continue;
     }
-    if (nome === 'nav' && !tag.endsWith('/>')) menu = fecha ? Math.max(0, menu - 1) : menu + 1;
+    if (nome === 'aside' && !tag.endsWith('/>')) aside = fecha ? Math.max(0, aside - 1) : aside + 1;
+    if (nome === 'nav' && !tag.endsWith('/>')) {
+      if (fecha) { if (navs.pop()) menu--; }
+      else {
+        const rotulo = semMarcas(atributos(tag)['aria-label'] ?? '');
+        const ehMenu = aside === 0 && !NAO_E_MENU.test(rotulo);
+        navs.push(ehMenu);
+        if (ehMenu) menu++;
+      }
+    }
     // <wbr> é "pode quebrar aqui": nunca é espaço.
     if (nome === 'wbr') continue;
     if (nome === 'li' && !fecha) saida.push('\n- ');
@@ -768,6 +788,8 @@ const CONTEUDO = /\/(blog|noticias?|artigos?|posts?|tags?|categorias?|category|a
 // do menu não é descartado: fica abaixo de contato e só ocupa vaga que sobrou,
 // porque "plano-de-saude-individual-e-familiar" também é página.
 export const PALAVRAS_DE_PAGINA = 5;
+/** Item de menu é curto ("Plano de Saúde para Pequenas Empresas"); título de post listado num <nav> passa disso. */
+export const PALAVRAS_DE_ITEM_DE_MENU = 6;
 
 function notaDosPedacos(pedacos: readonly string[]): number {
   if (pedacos.some((x) => SOBRE.test(x) || SOBRE_NO_COMECO.test(x))) return 3;
@@ -810,7 +832,9 @@ export function paginasParaLer(links: PaginaLida['links'], base: URL, max = PAGI
     const chave = chaveDaPagina(u);
     if (vistos.has(chave)) return;
     const caminho = semMarcas(decodeURIComponentSeguro(u.pathname)).replace(/[\s_]+/g, '-');
-    const nota = notaDaPagina(caminho, semMarcas(l.texto).trim().replace(/[\s_]+/g, '-'), Boolean(l.menu));
+    const rotulo = semMarcas(l.texto).trim().replace(/[\s_]+/g, '-');
+    const doMenu = Boolean(l.menu) && rotulo.split('-').filter(Boolean).length <= PALAVRAS_DE_ITEM_DE_MENU;
+    const nota = notaDaPagina(caminho, rotulo, doMenu);
     if (!nota) return;
     vistos.add(chave);
     candidatas.push({ url: u, nota, ordem });

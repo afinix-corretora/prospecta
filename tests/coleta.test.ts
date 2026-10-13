@@ -304,6 +304,27 @@ test('html: post de blog na raiz não toma a vaga da página de planos — títu
     <li><a href="/contato/">Contato</a></li></ul></nav></header>
     <main><article><header><h2><a href="/plano-de-saude-empresarial-o-que-a-empresa-precisa-saber/">Plano de saúde empresarial: o que a empresa precisa saber</a></h2></header></article></main>`);
   assert.deepEqual(home.links.map((l) => Boolean(l.menu)), [true, true, true, true, false]);
+  // O widget "Posts recentes" do WordPress (5.5+) também é um <nav>: dentro de <aside>, rotulado de posts ou com
+  // título longo demais para item de menu, ele não é menu — e o post não toma a vaga de planos nem de contato.
+  const menuPrincipal = `<header><nav aria-label="Menu principal"><ul><li><a href="/quem-somos/">Quem Somos</a></li>
+    <li><a href="/planos/">Planos</a></li><li><a href="/contato/">Contato</a></li></ul></nav></header>`;
+  const doBlog = `<ul>
+    <li><a href="/a-empresa-pode-cancelar-o-plano-de-saude-do-funcionario/">A empresa pode cancelar o plano de saúde do funcionário?</a></li>
+    <li><a href="/historia-dos-planos-de-saude-no-brasil-o-que-mudou/">História dos planos de saúde no Brasil: o que mudou</a></li>
+    <li><a href="/quanto-custa-um-plano-de-saude-para-a-empresa/">Quanto custa um plano de saúde para a empresa</a></li></ul>`;
+  for (const widget of [
+    `<aside class="widget-area"><section class="widget widget_recent_entries"><nav aria-label="Menu">${doBlog}</nav></section></aside>`,
+    // Título curto: só o rótulo do <nav> separa o widget do menu.
+    `<footer><nav aria-label="Posts recentes"><ul><li><a href="/seguro-de-vida-vale-a-pena/">Seguro de vida: vale a pena?</a></li>
+      <li><a href="/historia-da-unimed/">História da Unimed</a></li></ul></nav></footer>`,
+    `<footer><nav>${doBlog}</nav></footer>`,
+  ]) {
+    assert.deepEqual(paginasParaLer(htmlParaTexto(menuPrincipal + widget).links, base).map((u) => u.pathname),
+      ['/quem-somos/', '/planos/', '/contato/'], widget);
+  }
+  // E o menu continua menu depois do <aside> e do <nav> de widget fecharem.
+  const depois = htmlParaTexto(`<aside><nav aria-label="Arquivos">${doBlog}</nav></aside><nav><a href="/x">X</a></nav>`).links;
+  assert.deepEqual(depois.map((l) => Boolean(l.menu)), [false, false, false, true]);
   assert.deepEqual(paginasParaLer(home.links, base).map((u) => u.pathname),
     ['/quem-somos/', '/plano-de-saude-individual-e-familiar/', '/plano-de-saude-para-pequenas-empresas/']);
   assert.deepEqual(paginasParaLer([

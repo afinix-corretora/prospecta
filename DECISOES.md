@@ -3664,7 +3664,7 @@ quem não entrou), lê o corpo contado enquanto chega, com teto, lê a conta de 
 pediu (o RLS decide) e o segredo pela chave do serviço — o desenho de `agente-testar`. Erro interno
 volta com uma frase que não carrega nada; a mensagem fica no log.
 
-**Revisão.** Cinco rodadas adversariais antes de publicar, com 37, 20, 14, 7 e 2 achados confirmados.
+**Revisão.** Seis rodadas adversariais antes de publicar, com 37, 20, 14, 7, 2 e 1 achados confirmados.
 Da quarta em diante, cada rodada revisou só o que a anterior tinha corrigido, e achou o que é o assunto
 do D37: a correção também é uma mudança. Exemplos:
 
@@ -3672,12 +3672,15 @@ do D37: a correção também é uma mudança. Exemplos:
   conferência passou a cortar igual.
 - Post de blog na raiz tomava a vaga da página de planos. O teto de palavras que resolveu isso jogava
   fora `plano-de-saude-individual-e-familiar`. O sinal certo é onde o link está: no `<nav>` é página,
-  com o slug que tiver; fora dele, o slug longo só ocupa vaga que sobrou.
+  com o slug que tiver; fora dele, o slug longo só ocupa vaga que sobrou. E nem todo `<nav>` é menu:
+  desde a 5.5 o WordPress embrulha num `<nav>` o widget de "Posts recentes". Não contam o `<nav>` de
+  dentro de `<aside>`, o que se rotula de posts, arquivos ou categorias, nem o item com título de mais
+  de 6 palavras.
 - "Nenhuma divergência entre os materiais" virava aviso de divergência.
 - Alargar o erro de tamanho fez o "Key limit exceeded" do OpenRouter, que é teto de gasto da chave,
   virar "anexe menos arquivos".
 
-Cada correção tem teste que acende sem ela: 50 sabotagens nos testes e 2 no navegador, para o que só a
+Cada correção tem teste que acende sem ela: 54 sabotagens nos testes e 2 no navegador, para o que só a
 tela mostra. Os testes são `tests/coleta.test.ts` (45), `tests/contexto_da_empresa.test.ts` (17) e
 `tests/coleta_tela.test.ts` (10, inclusive a ponte da tela até `colherDoPedido`).
 
