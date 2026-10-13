@@ -224,6 +224,7 @@ test('o MODELO que não lê imagem: o anexo sai, dizendo por quê, e o resto é 
     ['HTTP 429: You exceeded your current quota, please check your plan and billing details.', false],
     ['HTTP 429: This request would exceed the rate limit for your organization', false],
     ['HTTP 429: Rate limit exceeded: free-models-per-day', false],
+    ['HTTP 403: Key limit exceeded (total limit). Manage it using https://openrouter.ai/settings/keys', true],
     ['HTTP 400: max_tokens: 16000 > 2048, which is the maximum allowed number of output tokens for claude-x', true],
     ['HTTP 400: max_tokens is too large: 16000. This model supports at most 2048 completion tokens, whereas you provided 16000.', true],
   ] as const) {

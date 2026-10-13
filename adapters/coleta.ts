@@ -293,7 +293,8 @@ export interface PaginaLida {
   readonly titulo: string;
   readonly descricao: string;
   readonly texto: string;
-  readonly links: readonly { readonly href: string; readonly texto: string }[];
+  /** `menu`: o link está dentro de um `<nav>` — é página do site, e não um post listado na página. */
+  readonly links: readonly { readonly href: string; readonly texto: string; readonly menu?: boolean }[];
 }
 
 /** O que se pula inteiro, conteúdo e tudo. O `<title>` é lido à parte. */
@@ -364,17 +365,19 @@ function resolverFronteiras(s: string): string {
  */
 export function htmlParaTexto(html: string): PaginaLida {
   const saida: string[] = [];
-  const links: { href: string; texto: string }[] = [];
+  const links: { href: string; texto: string; menu?: boolean }[] = [];
   let titulo = '';
   let descricao = '';
   let tituloOg = '';
-  let link: { href: string; desde: number } | null = null;
+  let link: { href: string; desde: number; menu: boolean } | null = null;
+  // Dentro de quantos <nav>. O que não fecha deixa o resto como menu: é o comportamento de antes, não um erro.
+  let menu = 0;
   const semFechamento = new Set<string>();
   const separar = (x: string) => { if (saida[saida.length - 1] !== x) saida.push(x); };
   const fecharLink = () => {
     if (link && links.length < MAX_LINKS) {
       const escrito = resolverFronteiras(decodificarEntidades(saida.slice(link.desde).join(''))).replace(/\n/g, ' ');
-      links.push({ href: decodificarEntidades(link.href).trim(), texto: limparLinha(escrito) });
+      links.push({ href: decodificarEntidades(link.href).trim(), texto: limparLinha(escrito), ...(link.menu ? { menu: true } : {}) });
     }
     link = null;
   };
@@ -444,10 +447,11 @@ export function htmlParaTexto(html: string): PaginaLida {
       separar(FRONTEIRA);
       if (!fecha) {
         const href = atributos(tag).href;
-        if (href) link = { href, desde: saida.length };
+        if (href) link = { href, desde: saida.length, menu: menu > 0 };
       }
       continue;
     }
+    if (nome === 'nav' && !tag.endsWith('/>')) menu = fecha ? Math.max(0, menu - 1) : menu + 1;
     // <wbr> é "pode quebrar aqui": nunca é espaço.
     if (nome === 'wbr') continue;
     if (nome === 'li' && !fecha) saida.push('\n- ');
@@ -756,20 +760,28 @@ const CONTATO = /(^|-)(contatos?|fale-?conosco|atendimento|onde-?estamos|unidade
 // Post de blog fala "sobre" tudo; não é a página sobre a empresa.
 const CONTEUDO = /\/(blog|noticias?|artigos?|posts?|tags?|categorias?|category|author|autor|eventos?)(\/|$)/;
 
-// Nome de página e item de menu têm poucas palavras; título de post tem
-// muitas. No WordPress o post mora na raiz (`/%postname%/`), fora do alcance de
-// `CONTEUDO`, e a página inicial lista os recentes: sem este teto, "quanto
-// custa um plano de saúde para a empresa" tomava a vaga da página de planos.
+// O link do menu (`<nav>`) é página do site, com o slug que tiver. Fora do
+// menu, nome de página tem poucas palavras e título de post tem muitas: no
+// WordPress o post mora na raiz (`/%postname%/`), fora do alcance de
+// `CONTEUDO`, e a página inicial lista os recentes — "quanto custa um plano de
+// saúde para a empresa" tomava a vaga da página de planos. O pedaço longo fora
+// do menu não é descartado: fica abaixo de contato e só ocupa vaga que sobrou,
+// porque "plano-de-saude-individual-e-familiar" também é página.
 export const PALAVRAS_DE_PAGINA = 5;
 
-function notaDaPagina(caminho: string, rotulo: string): number {
-  if (CONTEUDO.test(caminho)) return 0;
-  const pedacos = [...caminho.split('/').filter(Boolean).map((x) => x.replace(/\.(php|html?|aspx?|jsp)$/, '')), rotulo]
-    .filter((x) => x.split('-').filter(Boolean).length <= PALAVRAS_DE_PAGINA);
+function notaDosPedacos(pedacos: readonly string[]): number {
   if (pedacos.some((x) => SOBRE.test(x) || SOBRE_NO_COMECO.test(x))) return 3;
   if (pedacos.some((x) => OFERTA.test(x))) return 2;
   if (pedacos.some((x) => CONTATO.test(x))) return 1;
   return 0;
+}
+
+function notaDaPagina(caminho: string, rotulo: string, doMenu: boolean): number {
+  if (CONTEUDO.test(caminho)) return 0;
+  const pedacos = [...caminho.split('/').filter(Boolean).map((x) => x.replace(/\.(php|html?|aspx?|jsp)$/, '')), rotulo];
+  if (doMenu) return notaDosPedacos(pedacos);
+  const curtos = pedacos.filter((x) => x.split('-').filter(Boolean).length <= PALAVRAS_DE_PAGINA);
+  return notaDosPedacos(curtos) || (notaDosPedacos(pedacos) ? 0.5 : 0);
 }
 
 function decodeURIComponentSeguro(s: string): string {
@@ -798,7 +810,7 @@ export function paginasParaLer(links: PaginaLida['links'], base: URL, max = PAGI
     const chave = chaveDaPagina(u);
     if (vistos.has(chave)) return;
     const caminho = semMarcas(decodeURIComponentSeguro(u.pathname)).replace(/[\s_]+/g, '-');
-    const nota = notaDaPagina(caminho, semMarcas(l.texto).trim().replace(/[\s_]+/g, '-'));
+    const nota = notaDaPagina(caminho, semMarcas(l.texto).trim().replace(/[\s_]+/g, '-'), Boolean(l.menu));
     if (!nota) return;
     vistos.add(chave);
     candidatas.push({ url: u, nota, ordem });

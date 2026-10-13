@@ -114,12 +114,13 @@ const NAO_LE_ANEXO = /no endpoints? found that supports? (image|file|pdf)|(does 
  */
 const PASSOU_DO_LIMITE = /too long|too large|maximum|exceed|pages? may be provided|request_too_large/i;
 /**
- * O que parece tamanho e não é: saldo, cota, limite por minuto e o teto de
- * SAÍDA não melhoram tirando arquivo. O teto de saída se reconhece pela forma
+ * O que parece tamanho e não é: chave recusada, saldo, cota, teto de gasto da
+ * chave ("Key limit exceeded", o 403 do OpenRouter), limite por minuto e o
+ * teto de SAÍDA não melhoram tirando arquivo. O teto de saída se reconhece pela forma
  * ("max_tokens: 16000 > 8192", "completion tokens"), e não pela palavra: a
  * entrada longa demais da Anthropic também fala em `max_tokens`.
  */
-const NAO_E_TAMANHO = /HTTP (402|429)|quota|rate.?limit|credits?\b|max_tokens:?\s*\d+\s*>\s*\d+|output tokens|completion tokens/i;
+const NAO_E_TAMANHO = /HTTP (401|402|403|429)|quota|rate.?limit|credits?\b|(key|spending|usage) limit|billing|max_tokens:?\s*\d+\s*>\s*\d+|output tokens|completion tokens/i;
 /** O arquivo que o provedor não conseguiu abrir: PDF truncado, imagem corrompida. */
 const ILEGIVEL = /could not process image|pdf specified was not valid|invalid (file|image) data|does not represent a valid image|unable to determine image format|could not (be )?(read|parse|open)|corrupt/i;
 /**

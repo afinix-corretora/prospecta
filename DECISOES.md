@@ -3664,15 +3664,22 @@ quem não entrou), lê o corpo contado enquanto chega, com teto, lê a conta de 
 pediu (o RLS decide) e o segredo pela chave do serviço — o desenho de `agente-testar`. Erro interno
 volta com uma frase que não carrega nada; a mensagem fica no log.
 
-**Revisão.** Quatro rodadas adversariais antes de publicar, com 37, 20, 14 e 7 achados confirmados. A
-quarta revisou só o que a terceira tinha corrigido, e achou o que é o assunto do D37: a correção também
-é uma mudança. Três exemplos. O "não há" de outra frase da mesma linha isentava o "sem carência" (o
-freio corta por frase, e a conferência passou a cortar igual). Post de blog na raiz tomava a vaga da
-página de planos (título tem palavras demais para ser página). "Nenhuma divergência entre os
-materiais" virava aviso de divergência. Cada correção tem teste que acende sem ela: 45 sabotagens nos
-testes e 2 no navegador, para o que só a tela mostra. Os testes são `tests/coleta.test.ts` (45),
-`tests/contexto_da_empresa.test.ts` (17) e `tests/coleta_tela.test.ts` (10, inclusive a ponte da tela
-até `colherDoPedido`).
+**Revisão.** Cinco rodadas adversariais antes de publicar, com 37, 20, 14, 7 e 2 achados confirmados.
+Da quarta em diante, cada rodada revisou só o que a anterior tinha corrigido, e achou o que é o assunto
+do D37: a correção também é uma mudança. Exemplos:
+
+- O "não há" de outra frase da mesma linha isentava o "sem carência". O freio corta por frase, e a
+  conferência passou a cortar igual.
+- Post de blog na raiz tomava a vaga da página de planos. O teto de palavras que resolveu isso jogava
+  fora `plano-de-saude-individual-e-familiar`. O sinal certo é onde o link está: no `<nav>` é página,
+  com o slug que tiver; fora dele, o slug longo só ocupa vaga que sobrou.
+- "Nenhuma divergência entre os materiais" virava aviso de divergência.
+- Alargar o erro de tamanho fez o "Key limit exceeded" do OpenRouter, que é teto de gasto da chave,
+  virar "anexe menos arquivos".
+
+Cada correção tem teste que acende sem ela: 50 sabotagens nos testes e 2 no navegador, para o que só a
+tela mostra. Os testes são `tests/coleta.test.ts` (45), `tests/contexto_da_empresa.test.ts` (17) e
+`tests/coleta_tela.test.ts` (10, inclusive a ponte da tela até `colherDoPedido`).
 
 **O que isto NÃO faz, dito para não parecer que faz.**
 

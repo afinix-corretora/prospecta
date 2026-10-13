@@ -295,6 +295,21 @@ test('html: post de blog na raiz não toma a vaga da página de planos — títu
     { href: '/plano-de-saude-empresarial-o-que-a-empresa-precisa-saber/', texto: 'Leia mais' },
     { href: '/planos/', texto: 'Planos' }, { href: '/quem-somos/', texto: 'Quem Somos' }, { href: '/contato/', texto: 'Contato' },
   ], base).map((u) => u.pathname), ['/quem-somos/', '/planos/', '/contato/']);
+  // A página de plano com slug longo é página: no menu (<nav>) conta inteira, e fora dele só fica abaixo de
+  // contato — ocupa a vaga que sobrou, em vez de sumir.
+  const home = htmlParaTexto(`<header><nav><ul>
+    <li><a href="/quem-somos/">Quem Somos</a></li>
+    <li><a href="/plano-de-saude-individual-e-familiar/">Individual e Familiar</a></li>
+    <li><a href="/plano-de-saude-para-pequenas-empresas/">Plano de Saúde para Pequenas Empresas</a></li>
+    <li><a href="/contato/">Contato</a></li></ul></nav></header>
+    <main><article><header><h2><a href="/plano-de-saude-empresarial-o-que-a-empresa-precisa-saber/">Plano de saúde empresarial: o que a empresa precisa saber</a></h2></header></article></main>`);
+  assert.deepEqual(home.links.map((l) => Boolean(l.menu)), [true, true, true, true, false]);
+  assert.deepEqual(paginasParaLer(home.links, base).map((u) => u.pathname),
+    ['/quem-somos/', '/plano-de-saude-individual-e-familiar/', '/plano-de-saude-para-pequenas-empresas/']);
+  assert.deepEqual(paginasParaLer([
+    { href: '/quem-somos/', texto: 'Quem Somos' }, { href: '/seguro-de-vida-em-grupo-para-empresas/', texto: 'Saiba mais' },
+    { href: '/fale-conosco/', texto: 'Fale conosco' },
+  ], base).map((u) => u.pathname), ['/quem-somos/', '/fale-conosco/', '/seguro-de-vida-em-grupo-para-empresas/']);
   // Os ambíguos valem só no começo: "a empresa" e "história" no meio de um nome curto também não são a página sobre.
   for (const href of ['/dicas-para-a-empresa/', '/a-historia-do-sus/', '/video-institucional/']) {
     assert.deepEqual(paginasParaLer([{ href, texto: 'Leia mais' }], base), [], href);
