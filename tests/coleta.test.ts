@@ -9,7 +9,7 @@ import {
   ACEITA, bytesDoBase64, cabemJuntos, chaveDaPagina, conferirArquivo, conferirEndereco, cortar, decodificarTexto,
   emMb, enderecoInterno, htmlParaTexto, lerInstagram, lerMaterial, lerSite, MAX_ARQUIVOS, paginasParaLer,
   perfilDoInstagram, POUCO_TEXTO, semInformacao, SEM_INFORMACAO, separarConferir, SISTEMA_DA_COLETA,
-  tamanhoDoBase64, TETO_DA_PAGINA, TETO_TEXTO_DO_ARQUIVO, TETO_TOTAL,
+  tamanhoDoBase64, TETO_DA_PAGINA, TETO_TEXTO_DO_ARQUIVO, TETO_TOTAL, tirarCarenciaSemEscopo,
 } from '../adapters/coleta.ts';
 import type { RedeDoSite } from '../adapters/coleta.ts';
 import { blocosDoClaude, criarLeitor, LEEM_ANEXOS, partesDoChat } from '../adapters/ia-leitura.ts';
@@ -165,15 +165,31 @@ test('html: a fronteira de uma tag de texto separa letra de letra e dígito de d
   assert.equal(t('<nav><a href="/">Início</a><a href="/sobre">Sobre</a></nav>'), 'Início Sobre');
   assert.equal(t('<p><a href="tel:1">(11) 4000-1234</a><a href="tel:2">(11) 4000-5678</a></p>'), '(11) 4000-1234 (11) 4000-5678');
   assert.equal(t('<p><b>Planos</b>: a partir de R$<b>99</b>,<sup>90</sup>.</p>'), 'Planos: a partir de R$ 99,90.');
+  // O que a página junta continua junto: <wbr>, e-mail, endereço, telefone com hífen.
+  assert.equal(t('<p>R$ 15<wbr>0,00</p>'), 'R$ 150,00');
+  assert.equal(t('<p>contato@<wbr>corretora.com.br</p>'), 'contato@corretora.com.br');
+  assert.equal(t('<p>contato<span>@</span>corretora.com.br</p>'), 'contato@corretora.com.br');
+  assert.equal(t('<p>www.<b>corretora</b>.com.br</p>'), 'www.corretora.com.br');
+  assert.equal(t('<p><b>0800</b>-<b>777</b>-<b>1234</b></p>'), '0800-777-1234');
+  assert.equal(t('<p>Pós</b>-venda</p>'), 'Pós-venda');
+  assert.equal(t('<p>Fim.<b>Novo</b> parágrafo</p>'), 'Fim. Novo parágrafo');
   const contexto = `A Corretora Exemplo vende planos.\n- ${t('<p><strong>R$ 99</strong><span>2 vidas</span></p>')}`;
   const base = { proibido: [], tamanho_maximo: null, canal: 'whatsapp', contexto, objetivo: 'resgate' };
   assert.equal(aplicarFreios('O plano custa R$ 992 por mês.', base).situacao, 'bloqueado', 'número que a página não escreve');
 });
 
-test('html: o bloco que não fecha não leva o resto da página junto', () => {
+test('html: o svg que não fecha não leva o resto da página; o script que não fecha, sim — como no navegador', () => {
   assert.equal(htmlParaTexto('<body><svg class="i"/><h1>Plano Ouro</h1><p>R$ 189,90 por mês</p></body>').texto, 'Plano Ouro\nR$ 189,90 por mês');
-  assert.match(htmlParaTexto('<p>Antes</p><iframe src="x"><p>Depois do iframe aberto</p>').texto, /Depois do iframe aberto/);
+  assert.match(htmlParaTexto('<p>Antes</p><svg class="i"><path d="M0"><p>Depois do svg aberto</p>').texto, /Depois do svg aberto/);
   assert.equal(htmlParaTexto('<title>Só título').titulo, '');
+  // A página cortada no teto termina dentro do JSON de hidratação: ele não é texto do site.
+  const cortada = '<h1>Corretora Exemplo</h1><p>Plano Bronze a partir de R$ 189,90 por mês.</p>'
+    + '<script type="application/json" id="wix-warmup-data">{"planos":[{"nome":"Ouro (fora do ar)","preco":"R$ 99,90","carencia":"sem carência"';
+  const t = htmlParaTexto(cortada).texto;
+  assert.equal(t, 'Corretora Exemplo\nPlano Bronze a partir de R$ 189,90 por mês.');
+  for (const tag of ['style', 'noscript', 'iframe', 'template']) {
+    assert.doesNotMatch(htmlParaTexto(`<p>Antes</p><${tag}>escondido`).texto, /escondido/, tag);
+  }
 });
 
 test('html: a página que repete a mesma linha seguida não a repete no texto', () => {
@@ -250,7 +266,10 @@ test('html: o slug da página conta pedaço a pedaço, com plural, extensão e "
   const base = new URL('https://www.empresa.com.br/');
   for (const [href, texto] of [['/contatos', 'Contatos'], ['/nossa-empresa', 'Nossa Empresa'], ['/sobre-a-escola/', 'A Escola'],
     ['/sobre-o-escritorio/', 'O Escritório'], ['/contatos/', 'Fale com a gente'], ['/quemsomos.php', ''],
-    ['/sobre.php', 'Conheça a Clínica'], ['/nossosservicos.html', ''], ['/?page_id=13', 'Contatos'], ['/planos-de-saude', '']]) {
+    ['/sobre.php', 'Conheça a Clínica'], ['/nossosservicos.html', ''], ['/?page_id=13', 'Contatos'], ['/planos-de-saude', ''],
+    ['/?page_id=13', 'Entre em contato'], ['/?page_id=7', 'Conheça nossos planos'], ['/?page_id=9', 'Nossas soluções'],
+    ['/?page_id=5', 'Conheça a empresa'], ['/?page_id=4', 'Saiba mais sobre nós'], ['/conheca-nossos-planos/', 'Ver todos'],
+    ['/fale-com-a-gente/', 'Entre em contato'], ['/nossas-solucoes/', 'Nossas Soluções'], ['/planos2025', 'Clique aqui']]) {
     assert.equal(paginasParaLer([{ href: href!, texto: texto! }], base).length, 1, href);
   }
 });
@@ -613,6 +632,10 @@ test('instagram: link de publicação no campo do perfil não vira "@p"', () => 
     assert.match(perfilDoInstagram(s2).motivo ?? '', /link de uma publicação/, s2);
   }
   assert.deepEqual(perfilDoInstagram('https://www.instagram.com/corretora/reels/'), { handle: 'corretora', motivo: null });
+  // O "Compartilhar perfil" do próprio app: é o perfil.
+  assert.deepEqual(perfilDoInstagram('https://www.instagram.com/corretoraexemplo/profilecard/?igsh=MWZtOXpzcjZkMWVoMg=='),
+    { handle: 'corretoraexemplo', motivo: null });
+  assert.deepEqual(perfilDoInstagram('https://www.instagram.com/corretora/ nosso perfil'), { handle: 'corretora', motivo: null });
   assert.deepEqual(perfilDoInstagram('@corretora'), { handle: 'corretora', motivo: null });
   assert.deepEqual(perfilDoInstagram(''), { handle: '', motivo: null });
   const comTexto = lerInstagram('https://www.instagram.com/reel/X/', 'bio');
@@ -638,11 +661,24 @@ test('divergência sai do texto: o que vem depois de PARA CONFERIR não entra no
     assert.equal(r.texto, corpo, marca);
     assert.equal(r.conferir, div, marca);
   }
-  assert.deepEqual(separarConferir(`${corpo} PARA CONFERIR: ${div.slice(2)}`), { texto: corpo, conferir: div.slice(2) },
-    'o marcador no fim de uma linha');
+  // O marcador no fim de uma linha leva a linha INTEIRA: o que vinha antes é a versão disputada.
+  const meio = separarConferir('A Corretora vende planos.\n- Plano Essencial: R$ 289,90 por mês (Site A) PARA CONFERIR: o Arquivo B diz R$ 249,90.\n- Plano Bronze: R$ 99,90 por mês (Site A).');
+  assert.equal(meio.texto, 'A Corretora vende planos.');
+  assert.doesNotMatch(meio.texto, /289|249/);
+  assert.match(meio.conferir, /^- Plano Essencial: R\$ 289,90 por mês \(Site A\) o Arquivo B diz R\$ 249,90\./);
+  for (const marca of ['Divergências para conferir:', 'Itens a conferir:']) {
+    assert.deepEqual(separarConferir(`${corpo}\n\n${marca}\n${div}`), { texto: corpo, conferir: div }, marca);
+  }
+  assert.deepEqual(separarConferir('Texto.\nPARA CONFERIR (coparticipação: Site A x Arquivo B)'),
+    { texto: 'Texto.', conferir: '(coparticipação: Site A x Arquivo B)' }, 'parêntese com conteúdo não é cabeçalho');
   assert.deepEqual(separarConferir('Texto.\n**PARA CONFERIR:** o prazo de carência diverge'), { texto: 'Texto.', conferir: 'o prazo de carência diverge' });
   for (const nada of ['nenhuma.', 'Nenhuma divergência encontrada.', '\n- Nenhuma divergência.', '\nNão há divergências.', 'Sem divergências encontradas.', '(nenhuma)']) {
     assert.deepEqual(separarConferir(`Texto.\nPARA CONFERIR: ${nada}`), { texto: 'Texto.', conferir: '' }, nada);
+  }
+  // Divergência que COMEÇA por "sem" ou "não há" continua sendo divergência.
+  for (const algo of ['Sem divergência de preço. Taxa de adesão: Site A isenta, Arquivo B cobra.',
+    'Não há consenso sobre reembolso: Site A oferece, Arquivo B não.', '\nNenhuma sobre preço.\n- Taxa de adesão: Site A isenta, Arquivo B cobra.']) {
+    assert.notEqual(separarConferir(`Texto.\nPARA CONFERIR: ${algo}`).conferir, '', algo);
   }
   assert.deepEqual(separarConferir('Só texto.'), { texto: 'Só texto.', conferir: '' });
   // "para conferir" de frase não é marcador.
@@ -652,8 +688,8 @@ test('divergência sai do texto: o que vem depois de PARA CONFERIR não entra no
 
 test('o formato que o prompt pede é o que o freio lê — dos dois lados', () => {
   assert.match(SISTEMA_DA_COLETA, /Uma condição por linha/);
-  assert.match(SISTEMA_DA_COLETA, /"Sem carência" só quando o material diz isso do plano INTEIRO/);
-  assert.match(SISTEMA_DA_COLETA, /nunca "sem carência para consultas"/);
+  assert.match(SISTEMA_DA_COLETA, /se\s+escreve SEMPRE "não há carência para consultas no Plano X"/);
+  assert.match(SISTEMA_DA_COLETA, /nunca "sem carência", "carência zero"/);
   assert.match(SISTEMA_DA_COLETA, /Telefone, endereço, horário e site ficam numa linha própria/);
   const freio = (contexto: string, t: string) =>
     aplicarFreios(t, { proibido: [], tamanho_maximo: null, canal: 'whatsapp', contexto, objetivo: 'resgate' }).situacao;
@@ -661,23 +697,33 @@ test('o formato que o prompt pede é o que o freio lê — dos dois lados', () =
     'A Corretora Exemplo vende planos de saúde em Sorocaba.',
     '- Plano Empresarial: R$ 150,00 por vida (Site A).',
     '- Sem taxa de adesão no Plano Empresarial (Site A).',
+    '- Carência de 180 dias para internação no Plano Empresarial (Site A).',
     '- Atendimento: (11) 4004-1234, das 8h às 20h.',
   ];
   // Preço escrito passa; telefone e horário não viram preço.
   assert.equal(freio(base.join('\n'), 'O Empresarial custa R$ 150,00 por vida.'), 'pronto');
   assert.equal(freio(base.join('\n'), 'O plano custa R$ 20,00.'), 'bloqueado', 'o horário do atendimento não vira preço');
   assert.equal(freio(base.join('\n'), 'O plano custa R$ 1.234,00.'), 'bloqueado', 'o telefone não vira preço');
-  // Carência do plano inteiro, na forma "sem": o agente pode dizer.
-  const inteiro = [...base, '- Sem carência no Plano Empresarial (Site A).'].join('\n');
-  assert.equal(freio(inteiro, 'O Empresarial não tem carência.'), 'pronto');
-  // Carência de UMA parte, na forma "não há": sai da fonte, e o agente que
-  // promete carência zero para o resto é barrado — o lado do erro do D76.
-  const parte = [...base, '- Não há carência para consultas no Plano Empresarial (Site A).'].join('\n');
-  assert.equal(freio(parte, 'No Empresarial não tem carência para internação, parto e cirurgia.'), 'bloqueado');
-  assert.equal(freio(parte, 'Pode contratar tranquila: zero carência para tudo.'), 'bloqueado');
-  // E a forma que o prompt PROÍBE para a ausência parcial é a que liberaria isso.
-  const proibida = [...base, '- Sem carência para consultas no Plano Empresarial (Site A).'].join('\n');
-  assert.equal(freio(proibida, 'No Empresarial não tem carência para internação, parto e cirurgia.'), 'pronto');
+  // A ausência de carência na forma do prompt ("não há") sai da fonte: o agente
+  // que promete carência zero — do plano que for — é barrado, o lado do erro do D76.
+  const comOdonto = [...base, '- Não há carência no Plano Odonto Clínico (Site A).', '- Não há carência para consultas no Plano Empresarial (Site A).'].join('\n');
+  for (const promessa of ['O Empresarial não tem carência, pode internar desde o primeiro dia.', 'No plano de saúde não tem carência para parto.',
+    'Pode contratar tranquila: zero carência para tudo.', 'O Odonto não tem carência.']) {
+    assert.equal(freio(comOdonto, promessa), 'bloqueado', promessa);
+  }
+  // As formas que o prompt PROÍBE são as que liberariam isso — e, se o modelo as
+  // escrever mesmo assim, o código as tira do texto antes que virem contexto.
+  for (const proibida of ['- Plano Odonto Clínico: sem carência (Site A).', '- Consultas sem carência no Plano Empresarial (Site A).',
+    '- Carência zero para consultas (Site A).', '- Isenção de carência para consultas (Site A).',
+    '- Não tem carência para consultas no Plano Empresarial (Site A).', '- Nenhuma carência para consultas eletivas (Site A).']) {
+    const solta = [...base, proibida].join('\n');
+    assert.equal(freio(solta, 'O Empresarial não tem carência, pode internar desde o primeiro dia.'), 'pronto', `sem a conferência: ${proibida}`);
+    const { texto, tiradas } = tirarCarenciaSemEscopo(solta);
+    assert.deepEqual(tiradas, [proibida], proibida);
+    assert.equal(freio(texto, 'O Empresarial não tem carência, pode internar desde o primeiro dia.'), 'bloqueado', `com a conferência: ${proibida}`);
+  }
+  // E o que fala de carência sem negar fica.
+  assert.deepEqual(tirarCarenciaSemEscopo(comOdonto), { texto: comOdonto, tiradas: [] });
 });
 
 function modeloFalso(respostas: (() => Response)[] = []) {

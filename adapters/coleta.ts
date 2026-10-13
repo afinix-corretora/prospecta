@@ -317,9 +317,9 @@ const fechamentos = new Map<string, RegExp>();
 /** A marca de fronteira de tag de texto, resolvida no fim. Escrita pelo código, e não como escape (D77b). */
 const FRONTEIRA = String.fromCharCode(0);
 /** Depois destes, a fronteira junta: ",90", "/mês", "%". */
-const JUNTA_COM_O_QUE_VEM = new Set([',', '.', ';', ':', '!', '?', '/', '%', ')', ']']);
+const JUNTA_COM_O_QUE_VEM = new Set([',', '.', ';', ':', '!', '?', '/', '%', ')', ']', '-', '@']);
 /** Antes destes também: "(11)", "[1]". */
-const JUNTA_COM_O_QUE_VEIO = new Set(['(', '[', '/']);
+const JUNTA_COM_O_QUE_VEIO = new Set(['(', '[', '/', '-', '@']);
 /** Vírgula ou ponto seguido de dígito é o centavo ou o milhar: "99,<sup>90</sup>" é "99,90". */
 const DECIMAL = /[,.]/;
 
@@ -341,7 +341,9 @@ function resolverFronteiras(s: string): string {
     const antes = s[j - 1];
     const depois = s[k];
     if (!ehBranco(antes) && !ehBranco(depois) && !JUNTA_COM_O_QUE_VEM.has(depois!) && !JUNTA_COM_O_QUE_VEIO.has(antes!)
-      && !(DECIMAL.test(antes!) && /\d/.test(depois!))) {
+      && !(DECIMAL.test(antes!) && /\d/.test(depois!))
+      // "www.<b>corretora</b>.com.br" é um endereço, não fim de frase.
+      && !(antes === '.' && /[a-z]/.test(depois!))) {
       partes.push(' ');
     }
     i = k;
@@ -421,7 +423,11 @@ export function htmlParaTexto(html: string): PaginaLida {
         i = texto = f.index + f[0].length;
         continue;
       }
-      // Sem fechamento: a tag vale como tag comum, e o resto da página continua sendo lido.
+      // Sem fechamento, o navegador esconde o resto da página — e a página
+      // cortada no teto termina justamente dentro de um script (o JSON de
+      // hidratação dos construtores de site, com preço de plano que a página
+      // não mostra). Só o svg e o title sem fechar deixam o resto ser lido.
+      if (nome !== 'svg' && nome !== 'title') { texto = n; break; }
       semFechamento.add(nome);
     }
     if (nome === 'meta') {
@@ -442,6 +448,8 @@ export function htmlParaTexto(html: string): PaginaLida {
       }
       continue;
     }
+    // <wbr> é "pode quebrar aqui": nunca é espaço.
+    if (nome === 'wbr') continue;
     if (nome === 'li' && !fecha) saida.push('\n- ');
     else if (nome === 'br' || BLOCOS.has(nome)) separar('\n');
     else separar(EM_LINHA.has(nome) ? FRONTEIRA : ' ');
@@ -736,16 +744,18 @@ export function chaveDaPagina(u: URL): string {
 // O alvo é cada pedaço do caminho (sem a extensão) e o texto do link, sem
 // acento e com espaço virando hífen: "Quem Somos" sobre `?page_id=12` (o padrão
 // do WordPress) é a página sobre, e `/sobre-a-escola` e `/contatos.php` também.
-const SOBRE = /^(sobre|quem-?somos|a-?empresa|nossa-?empresa|institucional|nossa-?historia|historia|about(-us)?|empresa)(-|$)/;
-const OFERTA = /^(nossos?-?)?(produtos?|servicos?|planos?|solucoes|solucao|seguros?|ofertas?|catalogo|precos?|beneficios)(-|$)/;
-const CONTATO = /^(contatos?|fale-?conosco|atendimento|onde-?estamos|unidades|contact(-us)?)(-|$)/;
+const SOBRE = /(^|-)(quem-?somos|a-?empresa|nossa-?empresa|institucional|nossa-?historia|historia|about(-us)?|sobre-nos|sobre-a-empresa)(-|\d|$)/;
+// "sobre" e "empresa" soltos são ambíguos ("dicas-sobre-planos"): valem só no começo do pedaço.
+const SOBRE_NO_COMECO = /^(sobre|empresa)(-|\d|$)/;
+const OFERTA = /(^|-)(noss[ao]s?-?)?(produtos?|servicos?|planos?|solucoes|solucao|seguros?|ofertas?|catalogo|precos?|beneficios)(-|\d|$)/;
+const CONTATO = /(^|-)(contatos?|fale-?conosco|atendimento|onde-?estamos|unidades|contact(-us)?)(-|\d|$)/;
 // Post de blog fala "sobre" tudo; não é a página sobre a empresa.
 const CONTEUDO = /\/(blog|noticias?|artigos?|posts?|tags?|categorias?|category|author|autor|eventos?)(\/|$)/;
 
 function notaDaPagina(caminho: string, rotulo: string): number {
   if (CONTEUDO.test(caminho)) return 0;
   const pedacos = [...caminho.split('/').filter(Boolean).map((x) => x.replace(/\.(php|html?|aspx?|jsp)$/, '')), rotulo];
-  if (pedacos.some((x) => SOBRE.test(x))) return 3;
+  if (pedacos.some((x) => SOBRE.test(x) || SOBRE_NO_COMECO.test(x))) return 3;
   if (pedacos.some((x) => OFERTA.test(x))) return 2;
   if (pedacos.some((x) => CONTATO.test(x))) return 1;
   return 0;
@@ -901,8 +911,8 @@ export const TETO_DO_PERFIL = 5_000;
 /** O que vem depois de instagram.com/ e não é perfil: publicação, reel, story, destaque, compartilhamento… */
 const NAO_E_PERFIL = new Set(['p', 'reel', 'reels', 'tv', 'stories', 'explore', 'accounts', 'direct', '_u', 'about',
   'legal', 'developer', 'web', 'challenge', 's', 'share', 'highlights']);
-/** O que pode vir depois do @ num link de perfil. */
-const ABAS_DO_PERFIL = new Set(['reels', 'tagged', 'guides', 'channel', 'saved']);
+/** O que, depois do @ num link, já é uma publicação — e não uma aba do perfil ("reels", "profilecard"…). */
+const PUBLICACAO_DO_PERFIL = new Set(['p', 'reel', 'tv', 'stories', 'guide']);
 
 /**
  * O @ como a pessoa digitou, conferido: vazio, um perfil, ou o motivo de não
@@ -913,8 +923,8 @@ export function perfilDoInstagram(bruto: string): { handle: string; motivo: stri
   const h = normalizarHandle(bruto ?? '');
   if (!h) return { handle: '', motivo: null };
   // Num link, o perfil é UM pedaço do caminho (e, no máximo, uma aba dele): o resto é publicação.
-  const caminho = (bruto ?? '').match(/instagram[.]com\/([^?#]*)/i)?.[1]?.split('/').filter(Boolean) ?? [];
-  const publicacao = NAO_E_PERFIL.has(h) || caminho.length > 2 || (caminho.length === 2 && !ABAS_DO_PERFIL.has(caminho[1]!.toLowerCase()));
+  const caminho = (bruto ?? '').match(/instagram[.]com\/([^?#\s]*)/i)?.[1]?.split('/').filter(Boolean) ?? [];
+  const publicacao = NAO_E_PERFIL.has(h) || (caminho.length >= 2 && PUBLICACAO_DO_PERFIL.has(caminho[1]!.toLowerCase()));
   if (publicacao) return { handle: h, motivo: 'é o link de uma publicação, não do perfil: cole o @ ou o link do perfil' };
   if (!handleValido(h)) return { handle: h, motivo: 'não é um @ do Instagram' };
   return { handle: h, motivo: null };
@@ -1004,9 +1014,10 @@ export const SISTEMA_DA_COLETA = [
   '- Uma condição por linha, começando com hífen.',
   '- Ausência de taxa ou de custo se escreve com "sem": "sem taxa de adesão". Nunca "não há" ou "não tem"',
   '  numa linha de preço.',
-  '- Carência: escreva cada uma com a cobertura a que se refere, como o material diz ("carência de 24 horas',
-  '  para urgência"). "Sem carência" só quando o material diz isso do plano INTEIRO; se for só de uma parte',
-  '  (só consultas, só exames), escreva "não há carência para consultas" — nunca "sem carência para consultas".',
+  '- Carência: escreva cada uma com a cobertura e o plano a que se refere, como o material diz ("carência de',
+  '  24 horas para urgência no Plano Bronze"). Ausência de carência — de um plano inteiro ou de uma parte — se',
+  '  escreve SEMPRE "não há carência para consultas no Plano X"; nunca "sem carência", "carência zero",',
+  '  "isenção de carência" ou "não tem carência".',
   '- Telefone, endereço, horário e site ficam numa linha própria, sem palavra de preço, valor ou pagamento.',
   '- Se dois materiais dizem coisas diferentes sobre a mesma condição, não escreva nenhuma das versões no texto.',
   `  Depois de tudo, numa linha sozinha, escreva ${PARA_CONFERIR} e liste ali cada divergência, com as duas`,
@@ -1043,21 +1054,54 @@ export function semInformacao(texto: string): boolean {
 export function separarConferir(resposta: string): { texto: string; conferir: string } {
   const linhas = resposta.split('\n');
   // "Ligue para conferir a cobertura" é frase, não marcador: o marcador abre a
-  // linha seguido de dois-pontos, parêntese ou fim — ou vem em maiúsculas,
-  // como o prompt pede, em qualquer ponto dela.
-  const i = linhas.findIndex((l) => /^[\s*_#>\-\d.)]*para conferir[\s*_]*([(:：—–-]|$)/i.test(l) || l.includes('PARA CONFERIR'));
+  // linha ("Divergências para conferir:", "5. **PARA CONFERIR**") seguido de
+  // dois-pontos, parêntese, ponto ou fim — ou vem em maiúsculas, como o prompt
+  // pede, em qualquer ponto dela.
+  const abre = (l: string) => /^[\s*_#>\-\d.)]*((divergencias?|itens|pontos)\s+)?(a|para) conferir[\s*_]*([(:：—–.-]|$)/.test(semMarcas(l));
+  const i = linhas.findIndex((l) => abre(l) || l.includes('PARA CONFERIR'));
   if (i < 0) return { texto: resposta.trim(), conferir: '' };
   const linha = linhas[i]!;
-  const onde = linha.includes('PARA CONFERIR') ? linha.indexOf('PARA CONFERIR') : linha.search(/para conferir/i);
-  // O que vem antes do marcador na mesma linha: texto, ou só a numeração e a marcação ("5. **").
-  const cru = linha.slice(0, onde);
-  const antes = /^[\s*_#>\-:\d.)]*$/.test(cru) ? '' : cru.replace(/[\s*_#>\-:—–]+$/, '').trim();
-  const depois = linha.slice(onde + 'para conferir'.length)
-    .replace(/^[\s*_]*(\([^)\n]{0,40}\))?[\s*_]*[:：—–-]?[\s*_]*/, '').trim();
-  const conferir = [depois, ...linhas.slice(i + 1)].join('\n').trim();
-  const texto = [...linhas.slice(0, i), ...(antes ? [antes] : [])].join('\n').trim();
-  const normal = semMarcas(conferir).replace(/^[\s\-*•.]+/, '').replace(/^\((.*)\)\.?$/, '$1');
-  const vazio = !conferir || (!/\d/.test(normal) && !normal.includes('(')
-    && /^(nenhuma?|nada|sem|nao (ha|houve|foram|existem|encontrei|identifiquei))\b/.test(normal) && normal.length < 80);
+  let antes = '', resto: string;
+  if (abre(linha)) {
+    resto = linha.replace(/^[\s\S]*?conferir/i, '');
+  } else {
+    const onde = linha.indexOf('PARA CONFERIR');
+    // A linha que trazia texto antes do marcador sai INTEIRA do texto: o que
+    // vinha antes é a versão disputada ("R$ 289,90 (Site A) PARA CONFERIR: …").
+    antes = linha.slice(0, onde).replace(/[\s*_#>\-:—–]+$/, '').trim();
+    resto = linha.slice(onde + 'PARA CONFERIR'.length);
+  }
+  resto = resto.replace(/^[\s*_]*/, '');
+  // "(divergências)" é cabeçalho; "(coparticipação: Site A x Arquivo B)" é conteúdo.
+  const cab = resto.match(/^\(([^():\n]{0,30})\)/);
+  if (cab && /^(divergencias?|itens|pontos|pendencias?)$/.test(semMarcas(cab[1]!).trim())) resto = resto.slice(cab[0].length);
+  resto = resto.replace(/^[\s*_]*[:：—–.-]?[\s*_]*/, '').trim();
+  const conferir = [[antes, resto].filter(Boolean).join(' '), ...linhas.slice(i + 1)].join('\n').trim();
+  const texto = linhas.slice(0, i).join('\n').trim();
+  // Vazio é só a negação inteira, de uma frase — "Sem divergência de preço. A taxa diverge." não é.
+  const normal = semMarcas(conferir).replace(/^[\s\-*•]+/, '').replace(/^\((.*)\)$/, '$1').replace(/[\s.!]+$/, '');
+  const vazio = !conferir || /^(nenhuma?( divergencias?)?( (foi )?(encontradas?|identificadas?))?|nada( a conferir)?|sem divergencias?( (encontradas?|identificadas?))?|nao (ha|houve|foram (encontradas|identificadas)) divergencias?( (encontradas?|identificadas?))?)$/.test(normal);
   return { texto, conferir: vazio ? '' : conferir };
+}
+
+/**
+ * A linha que diz que NÃO há carência numa forma que o freio lê como licença.
+ * O freio olha a carência sem escopo: "sem carência" do Odonto, no mesmo
+ * contexto da carência de 180 dias do Saúde, deixa o agente dizer que o
+ * Saúde não tem carência — e o agente responde sozinho (D69). Só "não há" e
+ * "não existe" saem da fonte do freio; o resto vai para conferir, e quem
+ * decide é a pessoa (D76: texto barrado volta a uma pessoa; promessa que sai,
+ * não).
+ */
+export function tirarCarenciaSemEscopo(texto: string): { texto: string; tiradas: string[] } {
+  const fica: string[] = [];
+  const tiradas: string[] = [];
+  for (const l of texto.split('\n')) {
+    const n = semMarcas(l);
+    const ausencia = /\bcarencias?\b/.test(n)
+      && /\b(sem|zero|isen\w*|nenhuma|livre de|dispensa\w*|nao tem|nao possui|nao exige|nao precisa)\b/.test(n)
+      && !/\bnao (ha|existe)\b/.test(n);
+    (ausencia ? tiradas : fica).push(l);
+  }
+  return { texto: fica.join('\n').trim(), tiradas: tiradas.map((l) => l.trim()) };
 }

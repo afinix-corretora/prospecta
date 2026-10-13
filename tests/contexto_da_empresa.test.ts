@@ -207,11 +207,59 @@ test('o MODELO que não lê imagem: o anexo sai, dizendo por quê, e o resto é 
     assert.doesNotMatch(pdf.detalhe, /não aceitou/, erro);
   }
 
+  // O arquivo que o provedor não conseguiu abrir: sai com o motivo, e o resto é lido.
+  for (const erro of ['HTTP 400: The PDF specified was not valid.', 'HTTP 400: Could not process image',
+    "HTTP 400: Invalid file data: 'messages[1].content[3].file.file_data'. Expected a base64-encoded data URL"]) {
+    const ruim = montar({ respostas: [{ ok: false, definitivo: true, erro }], paginas: { 'https://empresa.com.br/': `<p>${TEXTO_LONGO}</p>` } });
+    const g = await pedir(ruim, { credencial_id: ID, site: 'empresa.com.br', materiais: [{ nome: 'catalogo.pdf', base64: PDF }] });
+    assert.ok(g.corpo.ok && g.corpo.situacao === 'pronto', erro);
+    assert.match(g.corpo.fontes.find((f) => f.rotulo === 'catalogo.pdf')!.detalhe, /não conseguiu abrir o arquivo/, erro);
+  }
+
+  // Saldo, cota, limite por minuto e max_tokens não melhoram tirando arquivo: nada de segunda leitura, e o motivo é o do provedor.
+  for (const [erro, definitivo] of [
+    ['HTTP 429: You exceeded your current quota, please check your plan and billing details.', false],
+    ['HTTP 429: This request would exceed the rate limit for your organization', false],
+    ['HTTP 429: Rate limit exceeded: free-models-per-day', false],
+    ['HTTP 400: max_tokens: 16000 > 8192, which is the maximum allowed number of output tokens for claude-x', true],
+  ] as const) {
+    const m = montar({ respostas: [{ ok: false, definitivo, erro }], paginas: { 'https://empresa.com.br/': `<p>${TEXTO_LONGO}</p>` } });
+    const r = await pedir(m, { credencial_id: ID, site: 'empresa.com.br', materiais: [{ nome: 'catalogo.pdf', base64: PDF }] });
+    assert.equal(m.chamadas.leituras.length, 1, erro);
+    assert.ok(r.corpo.ok && r.corpo.situacao === 'erro' && r.corpo.motivo === erro, erro);
+  }
+
   // Erro que não é de anexo (chave recusada) não faz segunda leitura.
   const chave = montar({ conta: { provedor: 'openrouter', modelo: 'm' },
     respostas: [{ ok: false, definitivo: true, erro: 'HTTP 401: chave recusada' }] });
   await pedir(chave, { credencial_id: ID, materiais: [{ nome: 'print.png', base64: PNG }, { nome: 'a.txt', base64: b64(TEXTO_LONGO) }] });
   assert.equal(chave.chamadas.leituras.length, 1);
+});
+
+test('saldo curto no OpenRouter: o 402 diz quanto cabe, e a leitura é refeita uma vez com esse teto', async () => {
+  const m = montar({ conta: { provedor: 'openrouter', modelo: 'anthropic/claude-opus-5-5' }, respostas: [{ ok: false, definitivo: false,
+    erro: 'HTTP 402: This request requires more credits, or fewer max_tokens. You requested up to 16000 tokens, but can only afford 5333.' }] });
+  const r = await pedir(m, { credencial_id: ID, materiais: [{ nome: 'a.txt', base64: b64(TEXTO_LONGO) }] });
+  assert.ok(r.corpo.ok && r.corpo.situacao === 'pronto');
+  assert.deepEqual(m.chamadas.leituras.map((l) => l.maxTokens), [16_000, 5333]);
+  // O que cabe abaixo do teto do rascunho não vale a segunda chamada.
+  const pouco = montar({ conta: { provedor: 'openrouter', modelo: 'anthropic/claude-opus-5-5' }, respostas: [{ ok: false, definitivo: false,
+    erro: 'HTTP 402: ... but can only afford 900.' }] });
+  await pedir(pouco, { credencial_id: ID, materiais: [{ nome: 'a.txt', base64: b64(TEXTO_LONGO) }] });
+  assert.equal(pouco.chamadas.leituras.length, 1);
+});
+
+test('o envio dos arquivos que já gastou o tempo é dito antes de ler o site de alguém — e com o nome certo', async () => {
+  const m = montar({ paginas: { 'https://empresa.com.br/': `<p>${TEXTO_LONGO}</p>` } });
+  const r = await colherDoPedido(m.porta, { credencial_id: ID, site: 'empresa.com.br' }, m.rede, { ...m.opcoes, inicio: -125_000 });
+  assert.equal(r.status, 413);
+  assert.ok(!r.corpo.ok && /envio dos arquivos levou tempo demais/.test(r.corpo.erro));
+  assert.deepEqual([m.chamadas.buscas.length, m.chamadas.segredos], [0, 0]);
+  // Passou da conferência do envio e o SITE gastou o resto: a culpa é dita do site.
+  const lento = montar({ paginas: { 'https://empresa.com.br/': `<p>${TEXTO_LONGO}</p>` }, msDoSite: 16_000 });
+  const s2 = await colherDoPedido(lento.porta, { credencial_id: ID, site: 'empresa.com.br' }, lento.rede, { ...lento.opcoes, inicio: -105_000 });
+  assert.ok(s2.corpo.ok && s2.corpo.situacao === 'erro' && /leitura do site levou tempo demais/.test(s2.corpo.motivo), JSON.stringify(s2.corpo));
+  assert.equal(lento.chamadas.leituras.length, 0);
 });
 
 test('o prazo conta desde a CHEGADA do pedido: o corpo que demorou a subir também gastou o tempo', async () => {
@@ -245,6 +293,12 @@ test('o que o modelo devolve: erro, nada a dizer, divergência e texto grande de
   assert.ok(diverge.corpo.ok && diverge.corpo.situacao === 'pronto');
   assert.equal(diverge.corpo.texto, 'A Corretora vende planos.');
   assert.match(diverge.corpo.conferir, /R\$ 289,90 \(site\) e R\$ 249,90/);
+  // A ausência de carência que o freio leria como licença sai do texto e vai para conferir.
+  const carencia = await pedir(montar({ respostas: [{ ok: true,
+    texto: 'A Corretora vende planos.\n- Plano Odonto: sem carência (Site A).\n- Plano Saúde: carência de 180 dias (Site A).' }] }), pedido);
+  assert.ok(carencia.corpo.ok && carencia.corpo.situacao === 'pronto');
+  assert.equal(carencia.corpo.texto, 'A Corretora vende planos.\n- Plano Saúde: carência de 180 dias (Site A).');
+  assert.match(carencia.corpo.conferir, /Ausência de carência — fora do texto[^\n]*\n- Plano Odonto: sem carência \(Site A\)\.$/);
   const soDiverge = await pedir(montar({ respostas: [{ ok: true, texto: 'PARA CONFERIR: tudo diverge' }] }), pedido);
   assert.ok(soDiverge.corpo.ok && soDiverge.corpo.situacao === 'erro');
   const grande = await pedir(montar({ respostas: [{ ok: true, texto: 'x'.repeat(20_001) }] }), pedido);

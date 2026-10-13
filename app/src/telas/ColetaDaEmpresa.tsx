@@ -63,7 +63,8 @@ export function ColetaDaEmpresa({ contexto, aoUsar, contas, provedores, contaDoA
   const [desfazer, setDesfazer] = useState<{ antes: string; depois: string } | null>(null);
   // O que os materiais divergem continua à vista DEPOIS de usar — é aí que a
   // pessoa escreve a versão certa —, até ela dispensar.
-  const [divergencia, setDivergencia] = useState('');
+  // Com a legenda: o aviso cita "Site A" e "Arquivo B", e a lista que dizia quem é quem some com o rascunho.
+  const [divergencia, setDivergencia] = useState<{ texto: string; legenda: string } | null>(null);
   // Um clique, uma leitura: a trava é ref, não estado (D73) — cada leitura
   // gasta a conta de IA do cliente.
   const emCurso = useRef(false);
@@ -116,7 +117,7 @@ export function ColetaDaEmpresa({ contexto, aoUsar, contas, provedores, contaDoA
   async function ler() {
     if (!conta || falta.length || anexando || emCurso.current) return;
     emCurso.current = true;
-    setLendo(true); setErro(''); setRes(null); setDivergencia('');
+    setLendo(true); setErro(''); setRes(null);
     try { setRes({ ...await lerEmpresa(pedidoDaColeta(e, conta.id, empresa)), lidoCom: conta.nome }); }
     catch (x) { setErro(mensagemDeErro(x)); }
     finally { setLendo(false); emCurso.current = false; }
@@ -127,7 +128,13 @@ export function ColetaDaEmpresa({ contexto, aoUsar, contas, provedores, contaDoA
     const r = aplicarRascunho(contexto, res.texto, modo);
     if (!r.ok) { setErro(r.motivo); return; }
     setDesfazer({ antes: contexto, depois: r.texto });
-    setDivergencia(res.conferir ?? '');
+    const legenda = res.fontes.filter((f) => f.apelido).map((f) => `${f.apelido} = ${f.rotulo}`).join('; ');
+    // No lugar: vale só a divergência desta leitura. Acrescentado: as duas, porque os dois textos estão no campo.
+    setDivergencia((d) => {
+      const novas = res.conferir ? { texto: res.conferir, legenda } : null;
+      if (modo === 'usar' || !d) return novas;
+      return novas ? { texto: `${d.texto}\n${novas.texto}`, legenda: `${d.legenda}; ${novas.legenda}` } : d;
+    });
     aoUsar(r.texto);
     setRes(null); setErro('');
   }
@@ -279,12 +286,13 @@ export function ColetaDaEmpresa({ contexto, aoUsar, contas, provedores, contaDoA
 
       {divergencia && !res && (
         <Aviso tipo="neutro"><b>Para conferir antes de salvar — os materiais divergem, e nada disto está no texto:</b>
-          <span className="conferir">{divergencia}</span>
-          <button className="link" type="button" onClick={() => setDivergencia('')}>Dispensar</button></Aviso>
+          <span className="conferir">{divergencia.texto}</span>
+          {divergencia.legenda && <span className="nota-tela" style={{ display: 'block', margin: '0 0 6px' }}>{divergencia.legenda}</span>}
+          <button className="link" type="button" onClick={() => setDivergencia(null)}>Dispensar</button></Aviso>
       )}
       {desfazer && !res && contexto === desfazer.depois && (
         <Aviso tipo="ok">O rascunho foi para o texto acima — ele só fica no agente quando você salvar.{' '}
-          <button className="link" type="button" onClick={() => { aoUsar(desfazer.antes); setDesfazer(null); setDivergencia(''); }}>Desfazer</button></Aviso>
+          <button className="link" type="button" onClick={() => { aoUsar(desfazer.antes); setDesfazer(null); setDivergencia(null); }}>Desfazer</button></Aviso>
       )}
     </div>
   );

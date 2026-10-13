@@ -19,7 +19,7 @@ import type { Leitor, Parte } from '../adapters/ia-leitura.ts';
 import { criarLeitor, leAnexos, PRAZO_DO_MODELO_MS } from '../adapters/ia-leitura.ts';
 import {
   cabecalhoDaLeitura, cabemJuntos, cortar, lerInstagram, lerMaterial, lerSite, letra, MAX_ARQUIVOS, semInformacao,
-  separarConferir, SISTEMA_DA_COLETA, tamanhoDoBase64,
+  separarConferir, SISTEMA_DA_COLETA, tamanhoDoBase64, tirarCarenciaSemEscopo,
 } from '../adapters/coleta.ts';
 import type { Fonte, MaterialDoPedido } from '../adapters/coleta.ts';
 import { TETOS_DO_AGENTE } from '../adapters/prompt-do-agente.ts';
@@ -78,9 +78,11 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
  * O teto de tokens da resposta. No chat completions é o rascunho, e o que
  * raciocina ganha a folga de `ia.ts`. No Claude, o teto vale para o
  * raciocínio E o texto, e os modelos atuais raciocinam sem que se peça: com
- * 3000, um material grande acabava em "texto cortado". O teto não muda o
- * custo — o que se paga é o que o modelo escreve — e o tamanho do rascunho é
- * barrado adiante, no teto do campo.
+ * 3000, um material grande acabava em "texto cortado". Na Anthropic o teto
+ * não muda o custo — paga-se o que o modelo escreve —, mas no OpenRouter ele
+ * muda o SALDO exigido: a conta com pouco crédito recebe 402 dizendo quanto
+ * cabe, e a leitura é refeita uma vez com esse teto (`CABE_SO`). O tamanho do
+ * rascunho é barrado adiante, no teto do campo.
  */
 export const TOKENS_DA_LEITURA = 3000;
 export const TOKENS_DA_LEITURA_CLAUDE = 16_000;
@@ -105,8 +107,14 @@ export const PRAZO_MINIMO_DO_MODELO_MS = 20_000;
  * PDF, e o diagnóstico seria o errado.
  */
 const NAO_LE_ANEXO = /no endpoints? found that supports? (image|file|pdf)|(does not|doesn't|do not) support (image|file|pdf|document)|(image|file|pdf|document)s? (input|inputs|content|url)s? (is|are) not supported|not supported for this model|image_url is only supported|modalit|unsupported (content|file|image|mime)|invalid (content|image|file) type/i;
-/** O erro de tamanho com anexo: o resto é lido de novo sem os anexos, que levam o motivo. */
-const PASSOU_DO_LIMITE = /too long|too large|maximum|exceed|pages? may be provided|request_too_large/i;
+/** O erro de TAMANHO com anexo: o resto é lido de novo sem os anexos, que levam o motivo. */
+const PASSOU_DO_LIMITE = /prompt is too long|too large|maximum context length|context[_ ]length[_ ]exceeded|pages? may be provided|image exceeds|dimensions exceed|request_too_large|request exceeds/i;
+/** O que parece tamanho e não é: saldo, cota e limite por minuto não melhoram tirando arquivo. */
+const NAO_E_TAMANHO = /HTTP (402|429)|quota|rate.?limit|max_tokens|credits?\b/i;
+/** O arquivo que o provedor não conseguiu abrir: PDF truncado, imagem corrompida. */
+const ILEGIVEL = /could not process image|pdf specified was not valid|invalid (file|image) data|does not represent a valid image|unable to determine image format|could not (be )?(read|parse|open)|corrupt/i;
+/** O 402 do OpenRouter diz quanto cabe: "can only afford 5333". */
+const CABE_SO = /can only afford (\d+)/i;
 
 function recusa(status: 400 | 401 | 404 | 409 | 413, erro: string): RespostaDaColeta {
   return { status, corpo: { ok: false, erro } };
@@ -197,6 +205,10 @@ export async function colherDoPedido(
   const tamanhos = lido.materiais.map((m) => tamanhoDoBase64(m.base64) ?? 0);
   const demais = cabemJuntos(tamanhos);
   if (demais) return recusa(413, demais);
+  // O envio dos arquivos já gastou o que sobraria ao modelo: dizer isso antes de ler o site de alguém.
+  if (PRAZO_TOTAL_MS - (agora() - inicio) < PRAZO_MINIMO_DO_MODELO_MS + 10_000) {
+    return recusa(413, 'o envio dos arquivos levou tempo demais e não sobraria tempo para ler: anexe menos arquivos, ou menores');
+  }
 
   const conta = await porta.credencialVisivel(id);
   if (!conta) return recusa(404, 'conta de IA não encontrada');
@@ -218,6 +230,7 @@ export async function colherDoPedido(
     conteudoEmTexto ||= material && parte.tipo === 'texto';
   };
 
+  const antesDoSite = agora();
   if (lido.site) {
     const s = await lerSite(lido.site, rede);
     // Uma página e a linha dela andam juntas; a página que não foi lida tem só a linha.
@@ -249,32 +262,46 @@ export async function colherDoPedido(
   }
 
   const cabecalho = cabecalhoDaLeitura(texto(pedido.empresa, 120));
+  // O Claude pelo OpenRouter ou por endpoint compatível raciocina igual.
+  let maxTokens = conta.provedor === 'anthropic' || /(^|\/)claude/i.test(modelo) ? TOKENS_DA_LEITURA_CLAUDE : TOKENS_DA_LEITURA;
   const ler = (escolhidas: readonly Juntada[]) => {
     const prazo = Math.min(PRAZO_DO_MODELO_MS, PRAZO_TOTAL_MS - (agora() - inicio));
     if (prazo < PRAZO_MINIMO_DO_MODELO_MS) return null;
     return criar(conta.provedor, prazo).ler({
-      credenciais, modelo, sistema: SISTEMA_DA_COLETA,
-      // O Claude pelo OpenRouter ou por endpoint compatível raciocina igual.
-      maxTokens: conta.provedor === 'anthropic' || /(^|\/)claude/i.test(modelo) ? TOKENS_DA_LEITURA_CLAUDE : TOKENS_DA_LEITURA,
+      credenciais, modelo, sistema: SISTEMA_DA_COLETA, maxTokens,
       partes: [cabecalho, ...escolhidas.map((j) => j.parte)],
     });
   };
-  const SEM_TEMPO = 'a leitura do site levou tempo demais e não sobrou tempo para o modelo: tente de novo, ou sem o site';
+  // Quem gastou o tempo: o site, se foi lido e demorou; senão, o envio dos arquivos.
+  const SEM_TEMPO = lido.site && agora() - antesDoSite > 5_000
+    ? 'a leitura do site levou tempo demais e não sobrou tempo para o modelo: tente de novo, ou sem o site'
+    : 'o envio dos arquivos levou tempo demais e não sobrou tempo para o modelo: anexe menos arquivos, ou menores';
 
   const noLimite = noTeto(juntadas, fontes);
   let r = await ler(noLimite);
   if (!r) return erro(SEM_TEMPO);
+  // Saldo curto no OpenRouter: o 402 diz quanto cabe, e o que cabe ainda é um rascunho.
+  const cabe = !r.ok ? Number(CABE_SO.exec(r.erro)?.[1] ?? 0) : 0;
+  if (!r.ok && /HTTP 402/.test(r.erro) && cabe >= TOKENS_DA_LEITURA && cabe < maxTokens) {
+    maxTokens = cabe;
+    r = await ler(noLimite);
+    if (!r) return erro(SEM_TEMPO);
+  }
   // O modelo que não lê imagem (no OpenRouter, quem lê é o modelo, não o
   // provedor) recusa o pedido INTEIRO, e o anexo grande demais também. O
   // anexo sai, dizendo por quê, e o resto é lido de novo — em vez de o site já
   // lido se perder junto.
   const deAnexo = noLimite.filter((j) => j.parte.tipo !== 'texto');
   const recusouAnexo = !r.ok && r.definitivo && deAnexo.length > 0 && NAO_LE_ANEXO.test(r.erro);
-  const passouDoLimite = !r.ok && deAnexo.length > 0 && !recusouAnexo && PASSOU_DO_LIMITE.test(r.erro);
-  if (!r.ok && (recusouAnexo || passouDoLimite)) {
+  const ilegivel = !r.ok && r.definitivo && deAnexo.length > 0 && !recusouAnexo && ILEGIVEL.test(r.erro);
+  const passouDoLimite = !r.ok && deAnexo.length > 0 && !recusouAnexo && !ilegivel
+    && PASSOU_DO_LIMITE.test(r.erro) && !NAO_E_TAMANHO.test(r.erro);
+  if (!r.ok && (recusouAnexo || ilegivel || passouDoLimite)) {
     const motivo = recusouAnexo
       ? `o modelo ${modelo} não aceitou este tipo de anexo (${r.erro}): leia com um modelo que leia imagem e PDF, ou anexe o texto em .txt`
-      : `o pedido passou de um limite do modelo (${r.erro}): leia menos arquivos de uma vez, ou PDFs menores`;
+      : ilegivel
+        ? `o provedor não conseguiu abrir o arquivo (${r.erro}): salve ou exporte de novo, e anexe outra vez`
+        : `o pedido passou de um limite do modelo (${r.erro}): leia menos arquivos de uma vez, ou PDFs menores`;
     for (const j of deAnexo) fontes[j.fonte] = { ...fontes[j.fonte]!, lida: false, detalhe: motivo };
     if (!conteudoEmTexto) return erro(motivo);
     r = await ler(noLimite.filter((j) => j.parte.tipo === 'texto'));
@@ -283,7 +310,12 @@ export async function colherDoPedido(
   if (!r.ok) return erro(r.erro);
   // Separar antes de perguntar: "[SEM INFORMAÇÃO]" seguido de "PARA CONFERIR:
   // nenhuma" ainda é "nada a dizer", e não um rascunho com a marca dentro.
-  const { texto: rascunho, conferir } = separarConferir(r.texto);
+  const separado = separarConferir(r.texto);
+  // A ausência de carência numa forma que o freio leria como carência zero para tudo vai para conferir.
+  const { texto: rascunho, tiradas } = tirarCarenciaSemEscopo(separado.texto);
+  const conferir = [separado.conferir, ...(tiradas.length ? [
+    'Ausência de carência — fora do texto: escrita assim, o freio deixaria o agente dizer que não há carência '
+      + 'para nada. Se vale, escreva "não há carência para … no Plano …":', ...tiradas] : [])].filter(Boolean).join('\n');
   if (semInformacao(rascunho)) {
     return { status: 200, corpo: { ok: true, situacao: 'sem_informacao', modelo, fontes,
       motivo: 'o modelo leu e não achou nada sobre a empresa nos materiais' } };
