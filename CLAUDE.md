@@ -611,6 +611,10 @@ e elas têm teste automatizado obrigatório.**
 - **Nunca** supor que um push não publica. O push deste branch publica o app na Vercel, e o do D77 pôs
   no ar um app que chamava funções que o banco ainda não tinha. A migration vem antes do push, e as
   edge functions de que o app depende também — o D31 com o push no lugar do worker (D77).
+- **Nunca** deixar aberta a porta que a função substituiu. Com `conectar_conta` no ar, o INSERT por
+  coluna de `sender_accounts` era a conta órfã do D77 a uma chamada de PostgREST: ativa, no pool, sem
+  segredo. E a asserção que fecha é `has_any_column_privilege`, porque `has_table_privilege` já era
+  falso com a porta aberta — conferir pela tabela não separa os dois mundos (D78a).
 
 ---
 
@@ -785,7 +789,8 @@ e elas têm teste automatizado obrigatório.**
 > nova e os mesmos campos `destino`; e o `slug` do funil, editável, derrubava a gravação da resposta
 > pelo gatilho. Agendador e despachante deixaram de travar por campanha desligada, com a fila do
 > despachante por vez; a busca de Contatos passou a existir (`buscar_contatos`); conectar conta é uma
-> transação (`conectar_conta`); e "há conta no pool desta campanha?" tem uma regra só, em dois
+> transação (`conectar_conta`), e desde o **D78a** a única porta da tela — `authenticated` não insere em
+> `sender_accounts` em coluna nenhuma; e "há conta no pool desta campanha?" tem uma regra só, em dois
 > lugares: `privado.pool_da_campanha`, que a prévia pergunta, e `poolDaCampanha`, que o Início, o
 > Painel e o fim do setup perguntam — a quarta ponte do suite (`tests/pool_para_sql.ts`) as compara.
 > A campanha de produção é morna e o chip é frio, e agora todas as telas dizem isso. O agente de setup não preenche
@@ -863,7 +868,7 @@ e elas têm teste automatizado obrigatório.**
 > **derivados do schema** cobram `tenant_id`, RLS e FK composta de toda tabela nova — lista escrita
 > à mão envelhece sem avisar, e essa já tinha perdido a `provider_servers` (D31).
 >
-> O schema está **aplicado no projeto `hucuwjvihqgftdjpnych`** (67 migrations no repositório, 76
+> O schema está **aplicado no projeto `hucuwjvihqgftdjpnych`** (68 migrations no repositório, 77
 > registros no projeto — a 55ª, que só apaga os dois classificadores sem chamador do D63, entrou em
 > 05/10 pelo SQL Editor, porque o DROP pelo MCP espera uma confirmação que não chega à sessão remota
 > (D63) — duas corretivas de texto, uma separação, duas do D46 (superfície e

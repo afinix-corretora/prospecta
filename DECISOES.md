@@ -3559,8 +3559,41 @@ falha.
 
 - A única campanha do projeto é morna e o único chip é frio: nada sai por ela, e agora todas as telas
   dizem isso. Conectar um chip morno ou trocar o tipo da campanha é decisão de operação.
-- Revogar o INSERT de `sender_accounts` de `authenticated` (o app novo já cadastra por
-  `conectar_conta`).
 - "Afinix" nos textos do catálogo virar `{{empresa}}`, quando houver o segundo cliente.
 - A blacklist padrão continua sem "não me procure mais", pelo falso positivo sem volta.
 - O backlog médio e baixo da auditoria, na lista do D77.
+
+### D78a — A conta nasce só pela função (13/10)
+
+Era o segundo item da lista acima, e a operação decidiu fazer. Desde o D77 o app cria conta por
+`conectar_conta`, que grava a linha e o segredo numa transação só; o INSERT por coluna de
+`sender_accounts` para `authenticated` (D62) ficou de pé só porque o app de antes, que cadastrava por
+ele, ainda estava no ar. Com o app novo publicado, ele era só a porta para a conta órfã que o D77
+fechou na tela: a linha nascia ativa, no pool, sem segredo nenhum, e o despacho a escolhia e falhava.
+Conferido antes de fechar: nenhuma tela nem edge function insere em `sender_accounts` com o JWT da
+pessoa — o app faz UPDATE por coluna e lê; o chip criado vai por `criar_remetente_provisionado`, do
+service_role.
+
+A migration `20261013120000` reescreve `privado.estreitar_escrita_do_cliente` a partir do corpo que
+estava no projeto — o md5 do `prosrc` no projeto e no banco de teste montado pelo repositório era o
+mesmo antes de começar (D59) — e muda só o bloco de `sender_accounts`: o `GRANT INSERT (...)` sai, e o
+`REVOKE INSERT, DELETE` que já estava lá leva junto o INSERT de cada coluna.
+
+**O teste que codificava o mundo de antes.** `tests/email_por_campanha.sql` conferia que o mesmo
+endereço volta a poder ser cadastrado depois de removido, e não duas vezes ao mesmo tempo, com o INSERT
+da tela. A propriedade é do índice parcial, e não da porta: o cenário passou a inserir como
+superusuário, dizendo por quê, e a porta é a de `conectar_conta`, coberta em `auditoria.sql` com o
+Vault de mentira (D58). Três asserções novas, e cada uma acende no banco de antes com "sem erro" — a
+conta órfã nascendo:
+
+- `email_por_campanha.sql`: o INSERT com exatamente as colunas que a tela tinha é recusado (42501);
+- `superficie_de_escrita.sql`: o mesmo, no bloco "e nada além disso";
+- e `has_any_column_privilege(..., 'INSERT')` falso para `authenticated` e `anon`. `has_table_privilege`
+  já era falso com o INSERT por coluna aberto, e por isso não separa os dois mundos (D36).
+
+**No projeto (13/10).** A migration entrou às 12:56 como `conta_nasce_so_pela_funcao`, o texto exato
+do arquivo, sem DROP (D63) — 77 registros para 68 arquivos. Depois: o md5 do corpo de `estreitar` no
+projeto é o do banco de teste pós-D78, e a grade de `sender_accounts` — INSERT, UPDATE e SELECT, coluna
+por coluna, para `authenticated` e `anon` — é idêntica. O down volta o corpo e a grade exatamente ao de
+antes, conferido contra o banco pré-D78. `get_advisors`: nada novo, só a família WARN conhecida.
+

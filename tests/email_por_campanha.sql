@@ -8,8 +8,9 @@
 --   2. a escolha que o motor não consegue cumprir é recusada na hora de
 --      escolher, com motivo, e não vira passo adiado para sempre;
 --   3. remover conta arquiva: a história e o webhook ficam, o pool esquece;
---   4. a grade: o cliente não apaga conta nem nasce conta com ponteiro de
---      Vault escolhido à mão.
+--   4. a grade: o cliente não apaga conta nem a cria por fora da função —
+--      nem com ponteiro de Vault escolhido à mão (D59), nem sem segredo
+--      nenhum, que era a conta órfã que o D77 fechou na tela (D78).
 --
 -- Cada asserção do roteador tem linha de base: a conta escolhida é a de
 -- MENOR health, para que "foi pela escolhida" nunca coincida com "foi pela
@@ -298,15 +299,21 @@ BEGIN;
     'UPDATE sender_accounts SET estado = ''ativo'' WHERE id = ''ec000000-0000-0000-0000-0000000000e1''');
   SELECT ec.aceita('remover de novo é inofensivo',
     'SELECT public.remover_remetente(''ec000000-0000-0000-0000-0000000000e1'')');
-  SELECT ec.aceita('o mesmo endereço volta a poder ser cadastrado depois de removido',
-    'INSERT INTO sender_accounts (tenant_id, canal, provedor, identificador, apelido, tipo_permitido, quota_diaria)
-     VALUES (''ec000000-0000-0000-0000-0000000000a0'', ''email'', ''resend'', ''resgate@corretora.com.br'',
-             ''Resend de novo'', ''morna'', 50)');
-  SELECT ec.recusa('mas não duas vezes ao mesmo tempo', '23505',
-    'INSERT INTO sender_accounts (tenant_id, canal, provedor, identificador, apelido, tipo_permitido, quota_diaria)
-     VALUES (''ec000000-0000-0000-0000-0000000000a0'', ''email'', ''resend'', ''resgate@corretora.com.br'',
-             ''Resend de novo 2'', ''morna'', 50)');
 COMMIT;
+
+-- O endereço é único só entre as contas que não foram removidas (índice
+-- parcial). O que se confere é o ÍNDICE, e não a porta: desde o D78 a tela não
+-- insere em sender_accounts — a conta nasce por `conectar_conta`, que precisa
+-- do Vault e é coberta em `auditoria.sql` —, então quem insere aqui é o
+-- superusuário.
+SELECT ec.aceita('o mesmo endereço volta a poder ser cadastrado depois de removido',
+  'INSERT INTO sender_accounts (tenant_id, canal, provedor, identificador, apelido, tipo_permitido, quota_diaria)
+   VALUES (''ec000000-0000-0000-0000-0000000000a0'', ''email'', ''resend'', ''resgate@corretora.com.br'',
+           ''Resend de novo'', ''morna'', 50)');
+SELECT ec.recusa('mas não duas vezes ao mesmo tempo', '23505',
+  'INSERT INTO sender_accounts (tenant_id, canal, provedor, identificador, apelido, tipo_permitido, quota_diaria)
+   VALUES (''ec000000-0000-0000-0000-0000000000a0'', ''email'', ''resend'', ''resgate@corretora.com.br'',
+           ''Resend de novo 2'', ''morna'', 50)');
 
 BEGIN;
   SET LOCAL role authenticated;
@@ -357,7 +364,7 @@ SELECT ec.confere('remover e listar não são chamáveis por anon',
   AND NOT has_function_privilege('anon', 'public.contas_de_email(uuid)', 'EXECUTE'));
 
 -- ===========================================================================
--- 7. A grade da conta: nascer só com o que a tela preenche, e não morrer
+-- 7. A grade da conta: nascer só pela função, e não morrer
 -- ===========================================================================
 
 BEGIN;
@@ -365,6 +372,13 @@ BEGIN;
   SET LOCAL request.jwt.claims = '{"sub":"ec000000-0000-0000-0000-0000000000a1"}';
   SELECT ec.recusa('apagar conta é recusado por privilégio (levava a história junto)', '42501',
     'DELETE FROM sender_accounts WHERE id = ''ec000000-0000-0000-0000-0000000000e3''');
+  -- As colunas que o INSERT por coluna deixava (D62), e só elas: a conta nascia
+  -- ativa, no pool, sem segredo, e o despacho a escolhia e falhava. Ela nasce
+  -- por `conectar_conta`, com o segredo na mesma transação (D77, D78).
+  SELECT ec.recusa('nascer pela tela sem passar pela função é recusado, mesmo só com as colunas da tela (D78)', '42501',
+    'INSERT INTO sender_accounts (tenant_id, canal, provedor, identificador, apelido, tipo_permitido, quota_diaria, config)
+     VALUES (''ec000000-0000-0000-0000-0000000000a0'', ''email'', ''resend'', ''orfa@corretora.com.br'',
+             ''Órfã'', ''morna'', 50, ''{}''::jsonb)');
   SELECT ec.recusa('nascer com ponteiro de Vault escolhido à mão é recusado (D59)', '42501',
     'INSERT INTO sender_accounts (tenant_id, canal, provedor, identificador, tipo_permitido, quota_diaria, credenciais_secret_id)
      VALUES (''ec000000-0000-0000-0000-0000000000a0'', ''email'', ''resend'', ''x@corretora.com.br'',

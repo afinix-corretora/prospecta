@@ -328,6 +328,14 @@ BEGIN;
   SELECT se.recusa('apontar admin_secret_id à mão é recusado', '42501',
     'UPDATE provider_servers SET admin_secret_id = gen_random_uuid()');
 
+  -- A conta de envio, que ficou por último (D78): o INSERT por coluna não
+  -- deixava escolher o ponteiro (D62), mas deixava a conta nascer SEM segredo —
+  -- ativa, no pool, e o despacho a escolhia e falhava. Ela nasce por
+  -- `conectar_conta`, com o segredo na mesma transação (D77).
+  SELECT se.recusa('criar conta de envio por fora da função é recusado (D78)', '42501',
+    'INSERT INTO sender_accounts (tenant_id, canal, provedor, identificador, tipo_permitido, quota_diaria) VALUES ('
+    || '''5e000000-0000-0000-0000-0000000000a0'', ''whatsapp'', ''uazapi'', ''5515990009999'', ''morna'', 50)');
+
   -- Catálogo é do produto. `tem_adapter` mentindo é o roteador prometendo um
   -- envio que o despachante não tem como fazer (D31) — por isso a recusa é de
   -- privilégio e não de política: "não tem política de DML" e "não tem
@@ -348,6 +356,16 @@ BEGIN;
     (SELECT count(*) FROM crm_provider_catalog) = 8,
     (SELECT count(*)::text FROM crm_provider_catalog));
 COMMIT;
+
+-- A recusa acima prova UM conjunto de colunas; esta, que não sobrou coluna
+-- nenhuma. `has_table_privilege` já era falso com o INSERT por coluna aberto,
+-- e por isso não separa os dois mundos.
+SELECT se.confere('authenticated não insere em coluna nenhuma de sender_accounts (D78)',
+  NOT has_any_column_privilege('authenticated', 'public.sender_accounts', 'INSERT')
+  AND NOT has_any_column_privilege('anon', 'public.sender_accounts', 'INSERT'),
+  (SELECT string_agg(attname, ', ') FROM pg_attribute
+    WHERE attrelid = 'public.sender_accounts'::regclass AND attnum > 0 AND NOT attisdropped
+      AND has_column_privilege('authenticated', 'public.sender_accounts', attname, 'INSERT')));
 
 -- E o que o motor escreve continua sendo escrito pelo motor: a grade estreita
 -- não quebrou o worker.
