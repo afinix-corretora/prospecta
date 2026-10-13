@@ -3689,7 +3689,7 @@ salva.
 - Alargar o erro de tamanho fez o "Key limit exceeded" do OpenRouter, que é teto de gasto da chave,
   virar "anexe menos arquivos".
 
-Cada correção tem teste que acende sem ela: 58 sabotagens nos testes e 2 no navegador, para o que só a
+Cada correção tem teste que acende sem ela: 59 sabotagens nos testes e 2 no navegador, para o que só a
 tela mostra. Os testes são `tests/coleta.test.ts` (45), `tests/contexto_da_empresa.test.ts` (17) e
 `tests/coleta_tela.test.ts` (10, inclusive a ponte da tela até `colherDoPedido`).
 

@@ -305,7 +305,8 @@ export interface PaginaLida {
 }
 
 /** O `<nav>` de widget: lista posts, comentários, arquivos ou categorias, e não as páginas do site. */
-const NAO_E_MENU = /post|coment|comment|arquivo|archive|categor|recent|tag|blog|noticia|news|leia|novidade|artigo|dica|ultim/;
+// No começo da palavra: "Seguradoras multimarcas" e "Indicações" são menu.
+const NAO_E_MENU = /\b(post|coment|comment|arquivo|archive|categor|recent|tag|blog|noticia|news|leia|novidade|artigo|dica|ultim)/;
 
 /** O que se pula inteiro, conteúdo e tudo. O `<title>` é lido à parte. */
 const PULADAS = new Set(['script', 'style', 'noscript', 'svg', 'template', 'iframe', 'object', 'canvas', 'title']);

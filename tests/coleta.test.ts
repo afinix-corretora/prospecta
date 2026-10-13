@@ -348,6 +348,9 @@ test('html: post de blog na raiz não toma a vaga da página de planos — títu
   // E o menu continua menu depois do <aside> e do <nav> de widget fecharem.
   const depois = htmlParaTexto(`<aside><nav aria-label="Arquivos">${doBlog}</nav></aside><nav><a href="/x">X</a></nav>`).links;
   assert.deepEqual(depois.map((l) => Boolean(l.menu)), [false, false, false, true]);
+  for (const rotulo of ['Seguradoras multimarcas', 'Indicações', 'Menu principal', 'Navegação do rodapé']) {
+    assert.equal(htmlParaTexto(`<nav aria-label="${rotulo}"><a href="/x">X</a></nav>`).links[0]!.menu, true, rotulo);
+  }
   assert.deepEqual(paginasParaLer(home.links, base).map((u) => u.pathname),
     ['/quem-somos/', '/plano-de-saude-individual-e-familiar/', '/plano-de-saude-para-pequenas-empresas/']);
   assert.deepEqual(paginasParaLer([
