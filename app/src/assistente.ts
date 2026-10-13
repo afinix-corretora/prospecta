@@ -97,7 +97,11 @@ export interface Foto {
   readonly agentesPorCanal?: readonly { canal: string; agent_id: string }[];
   /** O nome do cliente: é o que o agente criado pelo setup diz em nome de quem fala. */
   readonly empresa?: string;
-  readonly campanhas: readonly { id: string; nome: string; ativa: boolean }[];
+  /** `tipo` e `canais_habilitados` dizem de QUAL pool a campanha precisa
+   *  (D77): conta fria não manda pela campanha morna. */
+  readonly campanhas: readonly {
+    id: string; nome: string; ativa: boolean; tipo?: Pool; canais_habilitados?: readonly string[];
+  }[];
   readonly contatos: number;
   /** Servidores de provedor que hospeda instância (D25). Com um, o setup por
    *  chat CRIA o chip e mostra o QR; sem, conecta uma instância existente (D73). */
@@ -711,22 +715,34 @@ export function montarPlano(f: Foto, bruto: Respostas): Plano {
     if (escolha === USAR) {
       // Distribuir o total entre as contas que já existem. Só propõe mexer na
       // que muda — e cada mudança é um cartão próprio, que dá para pular.
+      //
+      // D77: SUBIR nunca passa do ponto de partida. A coleta corta o chip
+      // novo no teto, a conversa diz "até 40 por dia", e logo depois este
+      // cartão — que roda sozinho — o levava a 100 (ou aos 100000 que o
+      // agente sugerisse): o freio desfeito na mesma conversa. Acima do teto
+      // a quota só sobe pela tela do canal, por quem decide; aqui o que falta
+      // vira "faltam N contas". Baixar continua: é pedir menos.
       const cada = Math.max(1, Math.ceil(alvo / existentes.length));
+      const tetoDe = (x: { provedor: string }) => tetoPorConta(canal,
+        canal === 'whatsapp' && !f.provedores.find((p) => p.slug === x.provedor)?.oficial ? 'nao' : 'oficial', pool);
+      const paraDe = (x: { quota_diaria: number; provedor: string }) =>
+        cada > x.quota_diaria ? Math.max(x.quota_diaria, Math.min(cada, tetoDe(x))) : cada;
       for (const x of existentes) {
-        if (x.quota_diaria === cada) continue;
+        const para = paraDe(x);
+        if (x.quota_diaria === para) continue;
         acoes.push({
-          id: `quota:${x.id}`, tipo: 'ajustar_quota', remetente: x.id, de: x.quota_diaria, para: cada,
+          id: `quota:${x.id}`, tipo: 'ajustar_quota', remetente: x.id, de: x.quota_diaria, para,
           titulo: `Ajustar a quota de ${x.apelido || x.identificador}`,
-          efeitos: [`a conta passa de ${x.quota_diaria} para ${cada} mensagens por dia`,
+          efeitos: [`a conta passa de ${x.quota_diaria} para ${para} mensagens por dia`,
                     'o banco recusa enviar além disso, mesmo que a campanha peça'],
           exige: 'administra', dependeDe: [],
         });
       }
-      const fam: Familia = canal === 'whatsapp'
-        ? (f.provedores.find((p) => p.slug === existentes[0]!.provedor)?.oficial ? 'oficial' : 'nao') : 'oficial';
-      const teto = tetoPorConta(canal, fam, pool);
-      if (cada > teto) {
-        avisos.push(`${NOME[canal]}: ${cada} por conta é mais do que o ponto de partida de ${teto}. Contas novas que começam alto são as que caem — considere conectar mais contas na tela do canal.`);
+      const alcance = existentes.reduce((s, x) => s + paraDe(x), 0);
+      if (alcance < alvo) {
+        const teto = tetoDe(existentes[0]!);
+        const mais = Math.ceil((alvo - alcance) / teto);
+        avisos.push(`${NOME[canal]}: você pediu ${alvo} por dia, e ${existentes.length === 1 ? 'a conta chega' : `as ${existentes.length} contas chegam`} a ${alcance} — o ponto de partida é de até ${teto} por conta, e a quota não sobe sozinha além disso. Para chegar lá, faltam ${mais === 1 ? 'mais uma conta' : `mais ${mais} contas`}, conectadas na tela do canal.`);
       }
       continue;
     }
@@ -913,6 +929,17 @@ export function situacao(f: Foto): Item[] {
   const ia = f.credenciaisIA.filter((c) => c.ativo);
   const crm = f.conexoesCRM.filter((c) => c.ativo);
   const camps = f.campanhas.filter((c) => c.ativa);
+  // D77: campanha ligada com canal sem conta NO POOL DELA. O pool exige o mesmo
+  // tipo (`privado.remetentes_disponiveis`), e só conta ativa de provedor com
+  // adapter (D31): uma conta fria não manda pela campanha morna. Sem isto, o
+  // Início dizia que estava tudo pronto, a prévia inscrevia, e o agendador
+  // adiava cada passo de hora em hora, para sempre, sem erro.
+  const entregam = new Set(f.provedores.filter((p) => p.tem_adapter && p.ativo).map((p) => p.slug));
+  const semPool = camps.flatMap((c) => (c.canais_habilitados ?? [])
+    .filter((canal): canal is CanalEnvio => (CANAIS_DE_ENVIO as readonly string[]).includes(canal))
+    .filter((canal) => !!c.tipo && !f.remetentes.some((r) => r.canal === canal && r.estado === 'ativo'
+      && r.tipo_permitido === c.tipo && entregam.has(r.provedor)))
+    .map((canal) => `"${c.nome}" (${c.tipo}) não tem conta ${NOME[canal]} no pool ${c.tipo}`));
   return [
     { id: 'canais', titulo: 'Canais', feito: contas.length > 0,
       detalhe: contas.length
@@ -925,8 +952,10 @@ export function situacao(f: Foto): Item[] {
         : 'opcional: sem ela, o agente não responde quem escreve de volta — as contas se conectam em Configurações' },
     { id: 'crm', titulo: 'CRM', feito: crm.length > 0,
       detalhe: crm.length ? crm.map((c) => c.nome).join(', ') : 'opcional: sem ele, os fatos ficam só aqui' },
-    { id: 'campanha', titulo: 'Campanha', feito: camps.length > 0,
-      detalhe: camps.length ? `${camps.length} ligada${camps.length > 1 ? 's' : ''}` : 'nenhuma ligada' },
+    { id: 'campanha', titulo: 'Campanha', feito: camps.length > 0 && semPool.length === 0,
+      detalhe: semPool.length
+        ? `${semPool.join(' · ')}: nada sai por ${semPool.length > 1 ? 'esses canais' : 'esse canal'} até conectar uma conta desse pool na tela do canal`
+        : camps.length ? `${camps.length} ligada${camps.length > 1 ? 's' : ''}` : 'nenhuma ligada' },
     { id: 'contatos', titulo: 'Contatos', feito: f.contatos > 0,
       detalhe: f.contatos ? `${f.contatos} na base` : 'nenhum ainda' },
   ];

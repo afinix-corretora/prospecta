@@ -486,7 +486,7 @@ function Servidores(props: {
                  ajuda="Com https://. O banco recusa sem protocolo." />
           <Campo id="srv-admin" rotulo="Token de administração" tipo="senha" valor={f.adminToken}
                  aoMudar={(v) => setF({ ...f, adminToken: v })} obrigatorio={false}
-                 vault="Vai direto para o Vault. Em branco na edição, o token guardado fica como está." />
+                 vault="Vai direto para o Vault. Em branco na edição, o token guardado fica como está — a não ser que a URL ou o provedor mude: aí ele é pedido de novo." />
           {msg && <Aviso tipo={msg.tipo}>{msg.texto}</Aviso>}
           <button className="btn prim" disabled={estado === 'salvando' || !f.nome || !f.baseUrl}>
             {estado === 'salvando' ? 'Salvando…' : 'Salvar servidor'}

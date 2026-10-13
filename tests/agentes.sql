@@ -316,10 +316,14 @@ END;
 $$;
 
 -- Credencial que já tem chave guardada: editar só o que não é segredo não
--- chama o Vault, e é por isso que este caminho roda inteiro sem ele.
+-- chama o Vault, e é por isso que este caminho roda inteiro sem ele. D77: o
+-- `base_url` é DESTINO da chave, e mudá-lo pede a chave de novo
+-- (`tests/auditoria.sql`) — então o gateway já é o de antes, e o que muda é o
+-- modelo e a barra do fim.
 INSERT INTO ai_credentials (id, nome, provedor, modelo, chave_secret_id, config)
 VALUES ('aa000000-0000-0000-0000-0000000000c1','Claude de produção','anthropic',
-        'claude-sonnet-5','00000000-0000-0000-0000-000000000077','{}'::jsonb);
+        'claude-sonnet-5','00000000-0000-0000-0000-000000000077',
+        '{"base_url":"https://gw.interno/"}'::jsonb);
 
 DO $$
 BEGIN

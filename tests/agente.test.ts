@@ -157,8 +157,12 @@ test('saídas: erro definitivo fica gravado; transitório não vira linha', asyn
   await rascunharRespostas(def.b, 10, { criar: () => new IaFalsa({ ok: false, erro: 'HTTP 401', definitivo: true }) });
   assert.equal(def.gravados[0]!.s, 'erro');
 
+  // O relógio é do cenário: com o relógio real, a resposta fixa do BASE passou
+  // do prazo do transitório (D76) seis horas depois de escrita, e o teste virou
+  // outro — "transitório velho vira erro", que é o de baixo (D77).
   const trans = banco([BASE]);
-  const r = await rascunharRespostas(trans.b, 10, { criar: () => new IaFalsa({ ok: false, erro: 'HTTP 529', definitivo: false }) });
+  const r = await rascunharRespostas(trans.b, 10, { criar: () => new IaFalsa({ ok: false, erro: 'HTTP 529', definitivo: false }),
+    agora: () => Date.parse(BASE.resposta_em) + 60_000 });
   assert.equal(trans.gravados.length, 0, 'a próxima passada tenta de novo');
   assert.equal(r.adiadas, 1);
 });

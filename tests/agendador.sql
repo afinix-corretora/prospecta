@@ -241,7 +241,9 @@ BEGIN
   v_enr := inscrever('b1000000-0000-0000-0000-000000000006','b3000000-0000-0000-0000-000000000003',
                      'b5000000-0000-0000-0000-000000000001', now() - interval '1 minute');
   v_acao := a.acao_de(v_enr);
-  PERFORM a.confere('campanha desligada não processa', v_acao = 'ignorado_campanha_inativa', v_acao);
+  -- D77: campanha desligada nem entra no lote (antes entrava e era devolvida
+  -- como `ignorado_campanha_inativa`, ocupando o LIMIT — ver o cenário abaixo).
+  PERFORM a.confere('campanha desligada fica fora do lote', v_acao = 'nao_processado', v_acao);
   PERFORM a.confere('campanha desligada não encerra ninguém',
     (SELECT status = 'ativo' FROM enrollments WHERE id = v_enr));
   PERFORM a.confere('campanha desligada não cria mensagem',
@@ -486,6 +488,51 @@ BEGIN
     (SELECT passo_atual::text FROM enrollments WHERE id = v_enr));
 END;
 $$;
+
+-- ---------------------------------------------------------------------------
+-- D77: campanha desligada não ocupa o lote de ninguém
+-- ---------------------------------------------------------------------------
+--
+-- O achado: os vencidos de uma campanha desligada entravam no lote, voltavam
+-- sem mexer em next_run_at e ocupavam a cabeça da fila a cada batida. Com mais
+-- vencidos dela do que o LIMIT, nenhuma outra campanha criava mensagem. O
+-- cenário precisa de MAIS desligados que o limite, senão a asserção passa com e
+-- sem a correção (D36).
+
+INSERT INTO campaigns (id, nome, tipo, base_legal, canais_habilitados, ativa) VALUES
+  ('b3000000-0000-0000-0000-000000000077','Desligada para corrigir texto','morna','opt-in','{whatsapp}',false);
+
+INSERT INTO contacts (id, nome, origem)
+SELECT ('b1770000-0000-0000-0000-' || lpad(g::text, 12, '0'))::uuid, 'Lote ' || g, 'planilha'
+  FROM generate_series(1, 12) g;
+INSERT INTO contact_identities (contact_id, canal, valor, valor_norm, origem)
+SELECT ('b1770000-0000-0000-0000-' || lpad(g::text, 12, '0'))::uuid, 'whatsapp',
+       '+55139777' || lpad(g::text, 5, '0'), '55139777' || lpad(g::text, 5, '0'), 'planilha'
+  FROM generate_series(1, 12) g;
+
+-- Onze na desligada, vencidas há mais tempo: elas vêm primeiro na fila.
+SELECT inscrever(('b1770000-0000-0000-0000-' || lpad(g::text, 12, '0'))::uuid,
+                 'b3000000-0000-0000-0000-000000000077',
+                 'b5000000-0000-0000-0000-000000000001', now() - interval '2 hours')
+  FROM generate_series(1, 11) g;
+
+DO $$
+DECLARE v_enr uuid; v_acao text;
+BEGIN
+  -- Uma na campanha ligada, vencida depois de todas as da desligada.
+  v_enr := inscrever('b1770000-0000-0000-0000-000000000012','b3000000-0000-0000-0000-000000000002',
+                     'b5000000-0000-0000-0000-000000000001', now() - interval '1 minute');
+  SELECT acao INTO v_acao FROM processar_vencidos(10, 'simulado') WHERE enrollment_id = v_enr;
+  PERFORM a.confere('D77: onze vencidos de campanha desligada não tiram a vez da ligada (lote de 10)',
+    v_acao = 'mensagem_criada', coalesce(v_acao, 'ficou de fora do lote'));
+END;
+$$;
+
+SELECT a.confere('D77: e os da desligada continuam esperando, intactos',
+  (SELECT count(*) = 11 AND bool_and(status = 'ativo' AND passo_atual = 0)
+     FROM enrollments WHERE campaign_id = 'b3000000-0000-0000-0000-000000000077')
+  AND NOT EXISTS (SELECT 1 FROM messages m JOIN enrollments e ON e.id = m.enrollment_id
+                   WHERE e.campaign_id = 'b3000000-0000-0000-0000-000000000077'));
 
 -- ---------------------------------------------------------------------------
 -- Relatório

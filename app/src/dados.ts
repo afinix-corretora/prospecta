@@ -272,39 +272,16 @@ export async function salvarCredencial(senderId: string, credenciais: Record<str
   if (error) throw error;
 }
 
-/** Conta sem credencial ainda: a linha primeiro, o segredo logo depois. */
-export async function criarRemetente(dados: {
-  tenant: string; canal: string; provedor: string; identificador: string;
-  apelido: string; tipo: 'morna' | 'fria'; quota: number; config: Record<string, string>;
-}): Promise<string> {
-  const { data, error } = await sb
-    .from('sender_accounts')
-    .insert({
-      tenant_id: dados.tenant,
-      canal: dados.canal,
-      provedor: dados.provedor,
-      identificador: dados.identificador,
-      apelido: dados.apelido || null,
-      tipo_permitido: dados.tipo,
-      quota_diaria: dados.quota,
-      config: dados.config,
-    })
-    .select('id')
-    .single();
-  if (error) throw error;
-  return data.id as string;
-}
-
 /**
- * Conectar conta que já existe no provedor: a linha primeiro, o segredo logo
- * depois — `salvar_credencial_remetente` precisa do remetente para saber de
- * qual tenant e provedor ele é.
+ * Conectar conta que já existe no provedor. Uma chamada só, `conectar_conta`,
+ * que cria a linha e guarda o segredo na MESMA transação (D77): antes eram
+ * duas, e a credencial recusada deixava a conta ativa, no pool e sem segredo —
+ * o agendador a escolhia e o despacho queimava o passo do lead.
  *
  * Uma função só, chamada pela tela do canal e pelo assistente (D67): duas
  * cópias deste passo seriam duas respostas para "o que vai para `config`?", e
- * a que divergisse gravaria segredo em coluna (D28). O que se separa aqui é só
- * o que NÃO é segredo; tudo o que foi digitado vai para a função, e é ela que
- * lê o catálogo e decide.
+ * a que divergisse gravaria segredo em coluna (D28). Tudo o que foi digitado
+ * vai para a função, e é ela que lê o catálogo e decide.
  */
 export async function conectarConta(dados: {
   tenant: string; canal: string; provedor: Pick<ProvedorCanal, 'slug' | 'campos'>;
@@ -312,19 +289,16 @@ export async function conectarConta(dados: {
   valores: Record<string, string>;
 }): Promise<string> {
   const { provedor: p, valores } = dados;
-  const config = Object.fromEntries(
-    p.campos.filter((c) => !c.segredo && valores[c.chave]).map((c) => [c.chave, valores[c.chave]!]),
-  );
-  const id = await criarRemetente({
-    tenant: dados.tenant, canal: dados.canal, provedor: p.slug,
-    identificador: dados.identificador, apelido: dados.apelido,
-    tipo: dados.tipo, quota: dados.quota, config,
-  });
-  const segredos = Object.fromEntries(
+  const campos = Object.fromEntries(
     p.campos.filter((c) => valores[c.chave]).map((c) => [c.chave, valores[c.chave]!]),
   );
-  await salvarCredencial(id, segredos);
-  return id;
+  const { data, error } = await sb.rpc('conectar_conta', {
+    p_tenant: dados.tenant, p_canal: dados.canal, p_provedor: p.slug,
+    p_identificador: dados.identificador, p_apelido: dados.apelido,
+    p_tipo_permitido: dados.tipo, p_quota_diaria: dados.quota, p_campos: campos,
+  });
+  if (error) throw error;
+  return data as string;
 }
 
 /** A quota é das três colunas de `sender_accounts` que a grade deixa a tela
@@ -942,18 +916,28 @@ export interface Contato {
  * WhatsApp. `valor_norm` está no filtro de propósito — quem digita
  * "(15) 99123-4567" não acha nada procurando pelo que está gravado.
  */
-export async function lerContatos(busca = '', limite = 200): Promise<Contato[]> {
+/**
+ * Os contatos do cliente, mais novos primeiro — ou os que a busca acha.
+ *
+ * A busca é `buscar_contatos` (D77). Antes era um filtro `or` que citava a
+ * coluna da tabela embutida, e a gramática do PostgREST recusa isso com 400:
+ * a busca nunca funcionou. A função acha por nome, endereço e pelo número do
+ * jeito que se digita, trata `%` e `_` como texto, e recebe o cliente em voz
+ * alta — quem pertence a dois não vê os dois misturados.
+ */
+export async function lerContatos(tenant: string, busca = '', limite = 200): Promise<Contato[]> {
   const colunas = 'id, nome, origem, origem_ref, criado_em, '
     + 'contact_identities(canal, valor, valor_norm, valida)';
-  let q = sb.from('contacts').select(colunas).order('criado_em', { ascending: false }).limit(limite);
+  let q = sb.from('contacts').select(colunas).eq('tenant_id', tenant)
+    .order('criado_em', { ascending: false }).limit(limite);
 
   const termo = busca.trim();
   if (termo) {
-    const digitos = termo.replace(/\D/g, '');
-    const alvos = [`nome.ilike.%${termo}%`];
-    if (digitos.length >= 4) alvos.push(`contact_identities.valor_norm.ilike.%${digitos}%`);
-    else alvos.push(`contact_identities.valor_norm.ilike.%${termo.toLowerCase()}%`);
-    q = q.or(alvos.join(','));
+    const { data, error } = await sb.rpc('buscar_contatos', { p_tenant: tenant, p_termo: termo, p_limite: limite });
+    if (error) throw error;
+    const ids = ((data ?? []) as { contact_id: string }[]).map((r) => r.contact_id);
+    if (!ids.length) return [];
+    q = q.in('id', ids);
   }
 
   const { data, error } = await q;

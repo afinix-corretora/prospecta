@@ -17,7 +17,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
-  ESTADO_VAZIO, aceitarValor, aposConectar, aposFalhar, coletaDa, decidirFalha, esquecerIdentificador,
+  ESTADO_VAZIO, aceitarValor, aposConectar, aposFalhar, coletaDa, comoEntra, decidirFalha, esquecerIdentificador, fechamento,
   passoParaOAgente, proximoPasso,
 } from '../app/src/setupChat.ts';
 import type { EstadoSetup, PassoSetup } from '../app/src/setupChat.ts';
@@ -118,6 +118,60 @@ test('IA: chave antes do modelo, e conectar devolve a conta escolhida para a cam
   assert.deepEqual(col.campos.map((c) => c.chave), ['api_key', 'modelo']);
   const e = aposConectar(est(r), col, 'ok', 'cred-1');
   assert.equal(e.respostas['ia:conta'], 'cred-1');
+});
+
+test('o nome do modelo digitado é o modelo — Perplexity, que não lista, conecta pelo chat (D77)', () => {
+  const f: Foto = { ...FOTO, provedoresIA: [...FOTO.provedoresIA,
+    { slug: 'perplexity', nome: 'Perplexity', tem_adapter: true, modelos_sugeridos: [], campos: [campo('api_key', true)] }] };
+  const r: Respostas = { ...R_EMAIL, 'provedor:email': USAR, ia: 'perplexity' };
+  const col = coletaDa(f, r, 'ia')!;
+  const modelo = col.campos.find((c) => c.chave === 'modelo')!;
+  const passo: PassoSetup = { tipo: 'campo', coleta: col, campo: modelo };
+  const e = est(r);
+
+  assert.equal(comoEntra(e, passo, 'sonar-pro', true), 'campo');
+  assert.equal(comoEntra(e, passo, '  sonar-reasoning-pro ', false), 'campo', 'com o agente desligado também');
+  const a = aceitarValor(e, col, 'modelo', 'sonar-pro');
+  assert.ok(a.ok && a.estado.valores['ia']?.['modelo'] === 'sonar-pro');
+  // Pergunta e frase vão ao agente; a chave colada no lugar do modelo é barrada,
+  // e não vai parar em `config`.
+  assert.equal(comoEntra(e, passo, 'qual é o mais barato?', true), 'agente');
+  assert.equal(comoEntra(e, passo, 'o mais barato que tiver', true), 'agente');
+  assert.equal(comoEntra(e, passo, 'pplx-Ab12Cd34Ef56Gh78Ij90Kl12Mn34Op56Qr78St90Uv12', true), 'chave');
+});
+
+test('campo não secreto com cara de chave entra no campo; texto livre com chave é barrado (D77)', () => {
+  const f: Foto = { ...FOTO, provedoresCRM: [{ slug: 'salesforce', nome: 'Salesforce', tem_adapter: false,
+    campos: [campo('client_id'), campo('client_secret', true)] }] };
+  const col = coletaDa(f, { ...R_EMAIL, 'provedor:email': USAR, ia: NAO, crm: 'salesforce' }, 'crm')!;
+  const passo: PassoSetup = { tipo: 'campo', coleta: col, campo: col.campos.find((c) => c.chave === 'client_id')! };
+  const consumerKey = '3MVG9' + 'Ab1Cd2Ef3Gh4Ij5Kl6Mn7Op8Qr9St0Uv1Wx2Yz3aB4cD5eF6gH7iJ8kL9mN0oP1qR2sT3uV4wX5yZ6.aB7cD8';
+  assert.equal(comoEntra(est({}), passo, consumerKey, true), 'campo', 'o catálogo diz que não é segredo (D28)');
+  // A mesma chave numa frase, ou numa pergunta do roteiro, não sai do navegador.
+  assert.equal(comoEntra(est({}), passo, `a chave é ${consumerKey}`, true), 'chave');
+  const pergunta = proximoPasso(FOTO, est({}));
+  assert.equal(pergunta.tipo, 'pergunta');
+  assert.equal(comoEntra(est({}), pergunta, 'usa a chave re_Ab12Cd34_EfGh56IjKl78MnOp90QrSt12', true), 'chave');
+  assert.equal(comoEntra(est({}), pergunta, 'quero WhatsApp e e-mail', true), 'agente');
+});
+
+test('o fim da conversa diz o que ficou de fora, lido do banco (D77)', () => {
+  const chip = (pool: 'fria' | 'morna') => ({ id: pool, canal: 'whatsapp', provedor: 'uazapi', tipo_permitido: pool,
+    quota_diaria: 40, estado: 'ativo', apelido: pool, identificador: pool });
+  const camp = { id: 'c', nome: 'Resgate', ativa: true, tipo: 'morna' as const, canais_habilitados: ['whatsapp'] };
+
+  const pronto = fechamento({ ...FOTO, remetentes: [chip('morna')], campanhas: [camp] }, est({}));
+  assert.equal(pronto.tipo, 'feito');
+
+  const semConta = fechamento(FOTO, est({}, { pulados: ['canal:email'] }));
+  assert.equal(semConta.tipo, 'aviso');
+  assert.match(semConta.texto, /não está tudo pronto/);
+  assert.match(semConta.texto, /Canais: nenhuma conta conectada/);
+  assert.match(semConta.texto, /Uma peça ficou de fora/);
+
+  const outroPool = fechamento({ ...FOTO, remetentes: [chip('fria')], campanhas: [camp] }, est({}));
+  assert.equal(outroPool.tipo, 'aviso', 'campanha morna com chip frio não está pronta');
+  assert.match(outroPool.texto, /não tem conta WhatsApp no pool morna/);
 });
 
 test('quem não administra não configura conta, e a conversa diz isso em vez de pedir a chave', () => {

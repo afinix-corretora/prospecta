@@ -608,6 +608,12 @@ function FormularioDeIA(props: PropsFormularioIA) {
   // antes de salvar evita a descoberta pelo caminho ruim: duas credenciais
   // quase iguais e nenhuma pista de qual o agente está usando.
   const existente = props.credenciais.find((c) => c.nome === nome.trim());
+  // D77: a chave guardada vale para o provedor (e o endereço) a que foi dada.
+  // Trocar o provedor mantendo o nome pede a chave nova — o banco recusa, e a
+  // tela diz antes, para o botão não parecer quebrado.
+  const trocaDeProvedor = !!existente && existente.provedor !== provedor.slug;
+  const faltaChave = (!existente || trocaDeProvedor)
+    && provedor.campos.some((c) => c.segredo && c.obrigatorio && !(valores[c.chave] ?? '').trim());
 
   // D72: a lista de modelos vem do provedor, com a chave recém-colada — ou,
   // editando conta salva do mesmo provedor sem redigitar, com a do Vault.
@@ -688,7 +694,9 @@ function FormularioDeIA(props: PropsFormularioIA) {
       <Campo id="ia-nome" rotulo="Nome da credencial" valor={nome} aoMudar={setNome}
              placeholder="Claude de produção"
              ajuda={existente
-               ? `Já existe: salvar edita a credencial ${existente.provedor} em vez de criar outra.`
+               ? trocaDeProvedor
+                 ? `Já existe uma credencial ${existente.provedor} com este nome: salvar troca o provedor dela, e a chave guardada não vai junto — cole a chave nova.`
+                 : `Já existe: salvar edita a credencial ${existente.provedor} em vez de criar outra.`
                : 'É por ele que o agente escolhe. Reenviar o mesmo nome edita em vez de duplicar.'} />
 
       {provedor.campos.map((c) => (
@@ -696,7 +704,9 @@ function FormularioDeIA(props: PropsFormularioIA) {
                valor={valores[c.chave] ?? ''} obrigatorio={c.obrigatorio}
                aoMudar={(v) => setValores({ ...valores, [c.chave]: v })} ajuda={c.ajuda}
                vault={c.segredo
-                 ? 'Vai para o Vault. Em branco na edição, a chave guardada fica como está.'
+                 ? existente && !trocaDeProvedor
+                   ? 'Vai para o Vault. Em branco na edição, a chave guardada fica como está — a não ser que o endereço mude: aí ela é pedida de novo.'
+                   : 'Vai para o Vault.'
                  : undefined} />
       ))}
 
@@ -742,9 +752,14 @@ function FormularioDeIA(props: PropsFormularioIA) {
       </div>
 
       {msg && <Aviso tipo={msg.tipo}>{msg.texto}</Aviso>}
-      <button className="btn prim" disabled={estado === 'salvando' || !nome.trim() || !modelo.trim()}>
+      <button className="btn prim" disabled={estado === 'salvando' || !nome.trim() || !modelo.trim() || faltaChave}>
         {estado === 'salvando' ? 'Salvando…' : existente ? 'Atualizar credencial' : 'Salvar credencial'}
       </button>
+      {faltaChave && nome.trim() && (
+        <span className="ajuda">
+          {trocaDeProvedor ? 'Trocar o provedor pede a chave nova.' : 'Falta a chave.'}
+        </span>
+      )}
     </form>
   );
 }
@@ -962,10 +977,13 @@ function FormularioCRM(props: {
   // Obrigatório em branco: o banco recusa, mas com uma diferença que a tela
   // precisa repetir para o botão não parecer quebrado — segredo em branco passa
   // NA EDIÇÃO, porque a tela não consegue devolver o que não pode ler.
+  // D77: e só para a MESMA plataforma — trocar a plataforma mantendo o nome
+  // pede a credencial nova, porque a guardada foi dada à de antes.
+  const trocaDePlataforma = !!existente && existente.provedor !== provedor.slug;
   const faltando = provedor.campos.filter((c) => {
     if (!c.obrigatorio) return false;
     if ((valores[c.chave] ?? '').trim()) return false;
-    return !(c.segredo && existente?.credencial_secret_id);
+    return !(c.segredo && existente?.credencial_secret_id && !trocaDePlataforma);
   });
 
   async function salvar(e: React.FormEvent) {
@@ -1017,7 +1035,9 @@ function FormularioCRM(props: {
       <Campo id="crm-nome" rotulo="Nome da conexão" valor={nome} aoMudar={setNome}
              placeholder="Pipefy da matriz"
              ajuda={existente
-               ? `Já existe: salvar edita a conexão ${existente.provedor} em vez de criar outra.`
+               ? trocaDePlataforma
+                 ? `Já existe uma conexão ${existente.provedor} com este nome: salvar troca a plataforma dela, e a credencial guardada não vai junto — cole a nova.`
+                 : `Já existe: salvar edita a conexão ${existente.provedor} em vez de criar outra.`
                : 'Reenviar o mesmo nome edita em vez de duplicar.'} />
 
       {provedor.campos.map((c) => (
@@ -1025,7 +1045,9 @@ function FormularioCRM(props: {
                valor={valores[c.chave] ?? ''} obrigatorio={c.obrigatorio}
                aoMudar={(v) => setValores({ ...valores, [c.chave]: v })} ajuda={c.ajuda}
                vault={c.segredo
-                 ? 'Vai para o Vault. Em branco na edição, a credencial guardada fica como está.'
+                 ? existente && !trocaDePlataforma
+                   ? 'Vai para o Vault. Em branco na edição, a credencial guardada fica como está — a não ser que o endereço ou o domínio mude: aí ela é pedida de novo.'
+                   : 'Vai para o Vault.'
                  : undefined} />
       ))}
 

@@ -316,6 +316,24 @@ test('fonte: lê, pula o conhecido, ingere o novo e grava o resumo', async () =>
   assert.equal(b.execucoes[0]!.id, 'F');
 });
 
+test('fonte: valor que parecia identidade e não era sai no resumo, com o card e a coluna (D33, D77)', async () => {
+  const crm = new CrmFalso();
+  crm.listarCards = async () => [
+    // Entra pelo e-mail, e o fixo se perde — é este que ninguém via.
+    card('7', [{ id: 'tel', rotulo: 'Telefone', valor: '(11) 3333-4444' },
+               { id: 'mail', rotulo: 'E-mail', valor: 'gil@exemplo.com' }]),
+  ];
+  const b = bancoFalso({}, [FONTE]);
+  const [r] = await lerFontes(b.banco, { criar: () => crm });
+  assert.equal(b.ingeridos.length, 1, 'o card entra pelo e-mail');
+  assert.equal(r!.ignorados, 1);
+  assert.deepEqual(r!.ignorados_exemplos, [
+    { card: '7', coluna: 'Telefone', valor: '(11) 3333-4444', motivo: 'telefone fixo não recebe WhatsApp nem SMS' },
+  ]);
+  assert.deepEqual((b.execucoes[0]!.r as { ignorados_exemplos: unknown }).ignorados_exemplos, r!.ignorados_exemplos,
+    'o exemplo vai para o banco, não só a contagem');
+});
+
 test('fonte: plataforma que não responde grava o erro na fonte, e as outras seguem', async () => {
   const quebrado = new CrmFalso();
   quebrado.listarCards = async () => { throw new Error('Pipefy recusou o token (HTTP 401)'); };

@@ -34,11 +34,12 @@
  */
 import {
   CANAIS_DE_ENVIO, NAO, USAR, canaisEscolhidos, cumprida, impedimento, montarPlano, poolEscolhido,
-  roteiro, sugestaoDiaria, tetoPorConta,
+  roteiro, situacao, sugestaoDiaria, tetoPorConta,
 } from './assistente.ts';
 import type { Acao, CanalEnvio, Familia, Foto, Pergunta, Pool, Respostas } from './assistente.ts';
 import { normalizarTelefone, telefoneValido } from '../../adapters/telefone.ts';
 import { emailValido, normalizarEmail } from '../../adapters/email.ts';
+import { pareceSegredo } from '../../adapters/segredo.ts';
 
 const NOME: Record<string, string> = { whatsapp: 'WhatsApp', email: 'e-mail', sms: 'SMS' };
 
@@ -267,6 +268,56 @@ export function aceitarValor(
     ok: true,
     estado: { ...e, valores: { ...e.valores, [coleta.id]: { ...(e.valores[coleta.id] ?? {}), [chave]: v } } },
   };
+}
+
+/**
+ * A última fala da conversa. Era fixa — "o que dava para configurar por aqui
+ * está configurado" — com canal sem conta, peça pulada ou ação que falhou: o
+ * "correto e silencioso" do D55 na saída do setup (D77). O que falta é lido da
+ * foto (o banco), não do que a conversa acha que fez.
+ */
+export function fechamento(f: Foto, e: EstadoSetup): { tipo: 'feito' | 'aviso'; texto: string } {
+  const faltam = situacao(f).filter((i) => !i.feito && (i.id === 'canais' || i.id === 'campanha'));
+  const pulados = e.pulados.length;
+  if (!faltam.length && !pulados) {
+    return { tipo: 'feito', texto: 'Pronto: o que dava para configurar por aqui está configurado. O próximo passo é trazer contatos.' };
+  }
+  const partes = [
+    'Terminei o que dava para fazer por aqui, mas não está tudo pronto.',
+    ...faltam.map((i) => `${i.titulo}: ${i.detalhe}.`),
+    ...(pulados ? [`${pulados === 1 ? 'Uma peça ficou' : `${pulados} peças ficaram`} de fora (pulada${pulados > 1 ? 's' : ''} ou com erro): dá para fazer pelas telas abaixo.`] : []),
+    'Depois disso, o próximo passo é trazer contatos.',
+  ];
+  return { tipo: 'aviso', texto: partes.join('\n\n') };
+}
+
+/**
+ * Para onde vai o que a pessoa digitou na caixa de texto comum (o campo
+ * protegido não passa por aqui): o `campo` do passo, a recusa de `chave`, ou o
+ * `agente`. Pura, para o teste ver a mesma decisão que a tela toma (D77).
+ *
+ * - Num campo que NÃO é segredo, o valor digitado sozinho é o valor, mesmo com
+ *   cara de chave: o client_id do Pipefy e a consumer key do Salesforce são
+ *   aleatórios como uma, e barrá-los deixava a conversa sem saída. Ele não vai
+ *   ao agente — vai para o campo, que o catálogo diz não ser segredo (D28).
+ * - O NOME DO MODELO entra direto, mas só depois do filtro de chave: o passo
+ *   vem logo depois do da chave, e colar a chave no lugar errado a gravaria em
+ *   `config`. Antes, todo texto do passo ia ao agente, que não pode preencher
+ *   modelo — e quem não tem a lista (Perplexity) não conectava nunca.
+ * - Pergunta, e frase em volta de telefone ou e-mail, vão ao agente.
+ */
+export function comoEntra(e: EstadoSetup, passo: PassoSetup, texto: string, agenteLigado: boolean): 'campo' | 'chave' | 'agente' {
+  const m = texto.trim();
+  const campo = passo.tipo === 'campo' && !passo.campo.segredo ? passo : null;
+  const pergunta = m.endsWith('?');
+  const umaPalavra = !/\s/.test(m);
+  const aceita = !!campo && aceitarValor(e, campo.coleta, campo.campo.chave, m).ok;
+  if (campo && campo.campo.tipo !== 'modelo' && umaPalavra && !pergunta && aceita) return 'campo';
+  if (pareceSegredo(m)) return 'chave';
+  if (!campo || pergunta) return 'agente';
+  if (campo.campo.tipo === 'modelo') return aceita && umaPalavra ? 'campo' : 'agente';
+  const frase = (campo.campo.tipo === 'email' || campo.campo.tipo === 'telefone') && !umaPalavra && agenteLigado;
+  return aceita || !frase ? 'campo' : 'agente';
 }
 
 /** Depois de conectar: a peça está feita, e a resposta que a pediu passa a

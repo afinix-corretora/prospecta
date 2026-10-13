@@ -162,8 +162,9 @@ SELECT se.confere('a campanha ficou desligada de fato',
   NOT (SELECT ativa FROM campaigns WHERE id = :camp));
 
 SELECT se.vencer();
-SELECT se.confere_passada('campanha desligada: o agendador ignora o enrollment',
-                          'ignorado_campanha_inativa');
+-- D77: a campanha desligada nem entra no lote (antes entrava e voltava como
+-- `ignorado_campanha_inativa`, ocupando o LIMIT de todas as batidas).
+SELECT se.confere_passada('campanha desligada: o agendador nem pega o enrollment', NULL);
 
 BEGIN;
   SET LOCAL role authenticated;

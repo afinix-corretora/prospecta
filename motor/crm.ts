@@ -146,9 +146,18 @@ export interface ResumoFonte {
   readonly inscricao: Record<string, number>;
   readonly recusados: number;
   readonly ignorados: number;
+  /**
+   * Os primeiros valores que pareciam identidade e não eram (D33), com o card e
+   * a coluna. Antes só a contagem chegava ao banco, e a tela nem a mostrava: um
+   * card com telefone fixo entrava sem WhatsApp, e ninguém ficava sabendo (D77).
+   */
+  readonly ignorados_exemplos: { card: string; coluna: string; valor: string; motivo: string }[];
   readonly erros: string[];
   readonly erro?: string;
 }
+
+/** Quantos exemplos de valor ignorado uma passada guarda: o resumo é para ler, não para auditar. */
+export const EXEMPLOS_DE_IGNORADO = 5;
 
 export async function lerFontes(banco: BancoCrm, opcoes: OpcoesCrm = {}): Promise<ResumoFonte[]> {
   const criar = opcoes.criar ?? criarCrm;
@@ -170,7 +179,7 @@ export async function lerFontes(banco: BancoCrm, opcoes: OpcoesCrm = {}): Promis
       // seria uma fonte "sem cards novos" para sempre.
       r = {
         fonte_id: f.fonte_id, lidos: 0, novos: 0, criados: 0, atualizados: 0,
-        inscricao: {}, recusados: 0, ignorados: 0, erros: [],
+        inscricao: {}, recusados: 0, ignorados: 0, ignorados_exemplos: [], erros: [],
         erro: e instanceof Error ? e.message : String(e),
       };
     }
@@ -194,10 +203,15 @@ async function lerUma(
   let criados = 0, atualizados = 0, recusados = 0, ignorados = 0;
   const inscricao: Record<string, number> = {};
   const erros: string[] = [];
+  const ignoradosExemplos: ResumoFonte['ignorados_exemplos'] = [];
 
   for (const [i, card] of novos.entries()) {
     const leitura = lerRegistro(i + 1, celulasDoCard(card, f.mapa));
     ignorados += leitura.ignorados.length;
+    for (const x of leitura.ignorados) {
+      if (ignoradosExemplos.length >= EXEMPLOS_DE_IGNORADO) break;
+      ignoradosExemplos.push({ card: card.id, coluna: x.coluna, valor: x.valor, motivo: x.motivo });
+    }
     if (leitura.tipo === 'recusa') {
       recusados += 1;
       if (erros.length < 5) erros.push(`card ${card.id}: ${leitura.recusa.motivo}`);
@@ -220,6 +234,6 @@ async function lerUma(
 
   return {
     fonte_id: f.fonte_id, lidos: cards.length, novos: novos.length,
-    criados, atualizados, inscricao, recusados, ignorados, erros,
+    criados, atualizados, inscricao, recusados, ignorados, ignorados_exemplos: ignoradosExemplos, erros,
   };
 }

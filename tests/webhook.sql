@@ -382,14 +382,16 @@ UPDATE provider_servers SET admin_secret_id = '00000000-0000-0000-0000-000000000
 DO $$
 BEGIN
   PERFORM set_config('request.jwt.claims','{"sub":"11111111-aaaa-0000-0000-00000000000a"}', true);
+  -- D77: a URL é o DESTINO do token de admin; mudá-la pede o token de novo
+  -- (`tests/auditoria.sql`). A mesma URL, com a barra no fim, não é outra.
   PERFORM salvar_servidor_provedor('00000000-0000-0000-0000-0000000000aa','uazapi',
-            'UAZAPI Afinix','https://novo.uazapi.com', NULL);
+            'UAZAPI Afinix','https://afinix.uazapi.com/', NULL);
 END;
 $$;
 
 SELECT wh.confere('editar sem reenviar token preserva o segredo',
   (SELECT admin_secret_id = '00000000-0000-0000-0000-000000000099'
-      AND base_url = 'https://novo.uazapi.com'
+      AND base_url = 'https://afinix.uazapi.com/'
      FROM provider_servers WHERE id = 'ee000000-0000-0000-0000-0000000000d1'));
 
 SELECT wh.confere('editar não duplica servidor',

@@ -285,10 +285,21 @@ function resumoDaFonte(f: FonteCRM): string {
   const n = (k: string) => Number(r[k] ?? 0);
   const insc = (r.inscricao ?? {}) as Record<string, number>;
   const naoInscritos = Object.entries(insc).filter(([k]) => k !== 'inscrito' && k !== 'sem_campanha');
+  // D77: o que se perdeu aparece — é o que a ajuda da fonte promete (D33).
+  const exemplos = (Array.isArray(r.ignorados_exemplos) ? r.ignorados_exemplos : []) as
+    { card: string; coluna: string; valor: string; motivo: string }[];
   return `${quando}: ${n('lidos')} cards, ${n('novos')} novos, ${n('criados')} contatos criados`
+    + (n('atualizados') ? `, ${n('atualizados')} atualizados` : '')
     + (insc.inscrito ? `, ${insc.inscrito} inscritos` : '')
     + (naoInscritos.length ? `, não inscritos: ${naoInscritos.map(([k, v]) => `${v} ${k.replace(/_/g, ' ')}`).join(', ')}` : '')
-    + (n('recusados') ? `, ${n('recusados')} recusados` : '');
+    + (n('recusados') ? `, ${n('recusados')} recusados` : '')
+    + (n('ignorados')
+      ? `, ${n('ignorados')} ${n('ignorados') === 1 ? 'valor ignorado' : 'valores ignorados'}`
+        + (exemplos.length
+          ? ` (${exemplos.map((x) => `card ${x.card}, ${x.coluna} "${x.valor}": ${x.motivo}`).join('; ')}`
+            + `${n('ignorados') > exemplos.length ? '; …' : ''})`
+          : '')
+      : '');
 }
 
 function LinhaFonte({ fonte, pipes, campanhas, administra, aoMudar }: {

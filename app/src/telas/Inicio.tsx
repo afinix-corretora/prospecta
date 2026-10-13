@@ -36,11 +36,11 @@ import {
   provisionarInstancia, salvarCredencialCRM, salvarCredencialIA, verificarRemetente,
 } from '../dados';
 import {
-  aplicarSugestao, legenda, mapaDeRespostas, roteiro, situacao, valida,
+  aplicarSugestao, legenda, mapaDeRespostas, montarPlano, roteiro, situacao, valida,
 } from '../assistente';
 import type { Acao, Foto, Pergunta, Resposta } from '../assistente';
 import {
-  ESTADO_VAZIO, aceitarValor, aposConectar, aposFalhar, decidirFalha, esquecerIdentificador, nomeDaConta,
+  ESTADO_VAZIO, aceitarValor, aposConectar, aposFalhar, comoEntra, decidirFalha, fechamento, esquecerIdentificador, nomeDaConta,
   passoParaOAgente, proximoPasso,
 } from '../setupChat';
 import type { Coleta, EstadoSetup, PassoSetup } from '../setupChat';
@@ -186,13 +186,24 @@ export function Setup() {
       mudar((m) => ({ ...m, perguntado: k, falas: [...m.falas, {
         de: 'agente', texto: (m.falas.length ? '' : `${SAUDACAO}\n\n`) + textoDoPasso(passo) }] }));
     }
-    if (passo.tipo === 'fim' && memRef.current.perguntado !== 'fim' && memRef.current.falas.length) {
+    if (passo.tipo === 'fim' && memRef.current.perguntado !== 'fim' && memRef.current.falas.length && foto) {
+      // D77: o fim diz o que ficou de fora, lido do banco.
+      const fim = fechamento(foto, memRef.current.estado);
       mudar((m) => ({ ...m, perguntado: 'fim', falas: [...m.falas, {
-        de: 'sistema', tipo: 'feito', links: [...passo.links],
-        texto: 'Pronto: o que dava para configurar por aqui está configurado. O próximo passo é trazer contatos.',
+        de: 'sistema', tipo: fim.tipo, links: [...passo.links], texto: fim.texto,
       }] }));
     }
   }, [passo, ocupado]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // D77: os avisos do plano ("WhatsApp ficou sem conta", "faltam N contas")
+  // eram calculados e nunca mostrados. Cada um aparece uma vez, quando surge.
+  const avisos = useMemo(() => (foto ? montarPlano(foto, mem.estado.respostas).avisos : []),
+    [foto, mem.estado.respostas]);
+  useEffect(() => {
+    if (ocupado) return;
+    const novos = avisos.filter((x) => !memRef.current.falas.some((f) => f.de === 'sistema' && f.texto === x));
+    if (novos.length) dizer(...novos.map((texto): Fala => ({ de: 'sistema', tipo: 'aviso', texto })));
+  }, [avisos, ocupado]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Passos que não perguntam nada rodam sozinhos — é o "configurar à medida
   // que a informação chega". Um de cada vez: `ocupado` segura o próximo.
@@ -435,15 +446,11 @@ function Chat(props: {
       props.aoDizer({ de: 'pessoa', texto: `${passo.campo.rotulo.replace(/\?$/, '')}: guardada no cofre`, protegido: true });
       return;
     }
-    if (pareceSegredo(m)) { setTexto(''); props.aoDizer({ de: 'agente', texto: AVISO_DE_CHAVE }); return; }
-    // Num campo, o que se digita é o valor — a não ser que seja uma pergunta,
-    // ou uma frase em volta do valor ("pode usar contato@x.com"): número e
-    // e-mail que não passam direto vão ao agente, que separa o valor da frase.
-    if (passo.tipo === 'campo' && passo.campo.tipo !== 'modelo' && !m.endsWith('?')) {
-      const direto = aceitarValor(mem.estado, passo.coleta, passo.campo.chave, m).ok;
-      const frase = (passo.campo.tipo === 'email' || passo.campo.tipo === 'telefone') && /\s/.test(m) && agentePronto !== false;
-      if (direto || !frase) { setTexto(''); valorDoCampo(m); return; }
-    }
+    // Campo, recusa de chave ou agente: a regra mora em `comoEntra`, que o
+    // teste lê (D77).
+    const destino = comoEntra(mem.estado, passo, m, agentePronto !== false);
+    if (destino === 'chave') { setTexto(''); props.aoDizer({ de: 'agente', texto: AVISO_DE_CHAVE }); return; }
+    if (destino === 'campo') { setTexto(''); valorDoCampo(m); return; }
     if (agentePronto === false) {
       props.aoDizer({ de: 'pessoa', texto: m }, { de: 'agente', texto: 'O agente está desligado agora (a chave da plataforma não está no cofre). Use as opções acima para responder.' });
       setTexto(''); return;

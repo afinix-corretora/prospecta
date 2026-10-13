@@ -137,13 +137,14 @@ export function instrucoes(p: PedidoSetup): string {
     '',
     'Regras:',
     '1. Você conduz uma conversa de configuração. O sistema decide qual é o próximo passo e o mostra à pessoa logo depois da sua mensagem; você entende o que ela escreveu e preenche o que der.',
-    '2. Em "respostas", só use as chaves e os valores do VOCABULÁRIO abaixo, escritos exatamente como estão. Se a pessoa não disse algo, não invente: deixe de fora. Uma frase pode responder várias perguntas.',
+    '2. Em "respostas", só use as chaves e os valores do VOCABULÁRIO abaixo, escritos exatamente como estão. Se a pessoa não disse algo, não invente: deixe de fora. Uma frase pode responder várias perguntas. O que você preenche vale como o clique dela e já dispara configuração (contas, campanha): na dúvida, deixe de fora, que o sistema pergunta.',
     '3. Em "numeros", cada item é {canal, quantidade} com o total por dia daquele canal.',
     '4. Em "campos", só as chaves listadas em CAMPOS QUE VOCÊ PODE PREENCHER, com o valor que a pessoa deu (número, e-mail, nome). Nada inventado.',
     '5. Chave de API, token e senha NUNCA passam por você. Quando o passo pede um segredo, o sistema mostra um campo protegido que vai direto para o cofre; diga para colar ali. Nunca peça para digitar segredo na conversa e nunca repita um.',
     '6. Você não executa nada e não diz que algo foi feito: o sistema conecta cada conta e avisa o resultado ele mesmo.',
-    '7. Lista fria ("fria") e base própria ("morna") usam contas separadas; WhatsApp não oficial é o que roda lista fria, o oficial é para base própria com consentimento.',
+    '7. Lista fria ("fria") e base própria ("morna") usam contas separadas. WhatsApp oficial ou não oficial é decisão da pessoa — muda contrato, risco de bloqueio e pool: só preencha essa escolha se ela disser oficial, não oficial, API, chip ou QR. Nunca a deduza do tipo de lista.',
     '8. Se a pessoa perguntar algo, responda em poucas frases e volte ao passo. "mensagem": português do Brasil, curto (até 3 frases), sem markdown, sem repetir a pergunta do passo — o sistema já a mostra.',
+    '9. Canal que não está no vocabulário (Telegram, Instagram, ligação) não vira outro canal: diga que ele ainda não existe aqui e não preencha canais por ela.',
     '',
     `PASSO ATUAL: ${p.passo.tipo} — ${p.passo.descricao || 'sem descrição'}`,
     `CAMPOS QUE VOCÊ PODE PREENCHER: ${p.passo.campos.length ? p.passo.campos.map((c) => `${c.chave} (${c.rotulo})`).join('; ') : 'nenhum'}`,
@@ -216,9 +217,33 @@ export function corpoDoPedido(modelo: string, p: PedidoSetup): Record<string, un
  * valor fora da lista, número que não é inteiro positivo: some aqui, antes de
  * voltar para a tela — que confere de novo, pelo roteiro.
  */
+/**
+ * O freio em código da regra 7 e da 9 (D66: a instrução sozinha não freia). O
+ * modelo, com a mesma regra, escolheu "não oficial" para quem só disse "lista
+ * que comprei", e devolveu WhatsApp, e-mail e SMS para quem pediu Telegram — e
+ * a sugestão entra como clique e dispara configuração. Com a fala da pessoa na
+ * mão, canal e família só passam se ELA os mencionou (D77).
+ */
+const FALA_DE_FAMILIA = /oficial|\bapi\b|chip|\bqr\b|cloud|\bmeta\b|business|uazapi|evolution|gupshup/;
+const FALA_DE_CANAL: Record<string, RegExp> = {
+  whatsapp: /whats|\bzap|\bwpp\b|wats|uazapi|evolution|gupshup/,
+  email: /e-?mail|\bmail\b|resend|locaweb|smtp/,
+  sms: /\bsms\b|torpedo|mensagem de texto|comtele/,
+};
+const FALA_DE_TODOS = /\btod[oa]s\b|\btudo\b|\bos tres\b|\btodos os canais\b/;
+
+function disse(fala: string, chave: string, valor: string): boolean {
+  if (chave.startsWith('familia:')) return FALA_DE_FAMILIA.test(fala);
+  if (chave === 'canais') return FALA_DE_TODOS.test(fala) || (FALA_DE_CANAL[valor]?.test(fala) ?? false);
+  return true;
+}
+
 export function lerSaida(
   conteudo: string, mapa: Record<string, EntradaDoMapa>, camposDoPasso: readonly CampoDoPasso[] = [],
+  falaDaPessoa?: string,
 ): SaidaSetup {
+  const fala = falaDaPessoa === undefined ? null
+    : falaDaPessoa.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
   let o: Record<string, unknown> = {};
   try { o = JSON.parse(conteudo) as Record<string, unknown>; } catch { /* resposta fora do formato */ }
   const mensagem = typeof o.mensagem === 'string' && o.mensagem.trim()
@@ -253,7 +278,8 @@ export function lerSaida(
       if (Object.keys(n).length) respostas[chave] = n;
       continue;
     }
-    const vs = (Array.isArray(valores) ? valores : []).filter((v): v is string => typeof v === 'string' && permitidos.has(v));
+    const vs = (Array.isArray(valores) ? valores : []).filter((v): v is string => typeof v === 'string' && permitidos.has(v)
+      && (fala === null || disse(fala, chave, v)));
     if (!vs.length) continue;
     respostas[chave] = e.forma === 'multipla' ? [...new Set(vs)] : vs[0]!;
   }
@@ -306,7 +332,7 @@ export async function conversar(
     if (typeof msg?.refusal === 'string' && msg.refusal) {
       return { ok: true, modelo, saida: { mensagem: 'Não consigo ajudar com isso aqui. Posso ajudar a configurar canais, IA, CRM e a primeira campanha.', respostas: {}, campos: {} } };
     }
-    return { ok: true, modelo, saida: lerSaida(typeof msg?.content === 'string' ? msg.content : '', pedido.mapa, pedido.passo.campos) };
+    return { ok: true, modelo, saida: lerSaida(typeof msg?.content === 'string' ? msg.content : '', pedido.mapa, pedido.passo.campos, pedido.mensagem) };
   } catch (e) {
     return { ok: false, status: 502, erro: `sem resposta da OpenAI: ${e instanceof Error ? e.message : String(e)}` };
   }

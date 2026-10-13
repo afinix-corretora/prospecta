@@ -71,27 +71,41 @@ export function Campanha() {
   const [contasIA, setContasIA] = useState<CredencialIA[]>([]);
   const [provedoresIA, setProvedoresIA] = useState<ProvedorIA[]>([]);
   const [erro, setErro] = useState('');
+  // D77: o erro de uma AÇÃO (ligar, apontar cadência, escolher agente) aparece
+  // em cima da página, e o erro de uma leitura acessória vira aviso. Antes os
+  // dois trocavam a página inteira por uma linha vermelha.
+  const [erroDeAcao, setErroDeAcao] = useState('');
+  const [aviso, setAviso] = useState('');
   const [carregando, setCarregando] = useState(true);
 
   async function recarregar() {
     if (!tenant || !id) return;
-    setErro('');
+    setErro(''); setErroDeAcao('');
     try {
-      const [cs, r, ev, ms, vs, ags, qr, dc, rs, em, cia, pia] = await Promise.all([
-        lerCampanhas(),
-        lerResumoDaCampanha(tenant.tenant_id, id),
-        lerEventosDaCampanha(tenant.tenant_id, id),
-        lerMensagensDaCampanha(tenant.tenant_id, id),
-        lerVersoesDeFlow(),
+      // O essencial: sem a campanha e o resumo não há página.
+      const [cs, r] = await Promise.all([lerCampanhas(), lerResumoDaCampanha(tenant.tenant_id, id)]);
+      // O resto é acessório: uma leitura que falha não tira a página de quem só
+      // quer acompanhar. O leitor via "sem acesso a este cliente" no lugar da
+      // campanha inteira, porque `contas_de_email` é de quem opera (D77).
+      const falhas: string[] = [];
+      const ou = async <T,>(leitura: Promise<T>, padrao: T, oque: string): Promise<T> => {
+        try { return await leitura; } catch (e) { falhas.push(`${oque} (${mensagemDeErro(e)})`); return padrao; }
+      };
+      const [ev, ms, vs, ags, qr, dc, rs, em, cia, pia] = await Promise.all([
+        ou(lerEventosDaCampanha(tenant.tenant_id, id), [] as EventoDaCampanha[], 'linha do tempo'),
+        ou(lerMensagensDaCampanha(tenant.tenant_id, id), [] as MensagemComposta[], 'mensagens'),
+        ou(lerVersoesDeFlow(), [] as VersaoDeFlow[], 'cadências'),
         // Só os do cliente: o catálogo antigo não é mais escolha (D76).
-        lerAgentes().then((l) => l.filter((a) => a.tenant_id === tenant.tenant_id)),
-        quemResponde(tenant.tenant_id, id),
-        lerAgentesPorCanal(tenant.tenant_id),
-        lerRespostas(tenant.tenant_id, id),
-        lerContasDeEmail(tenant.tenant_id),
-        lerCredenciaisIA(),
-        lerProvedoresIA(),
+        ou(lerAgentes().then((l) => l.filter((a) => a.tenant_id === tenant.tenant_id)), [] as Agente[], 'agentes'),
+        ou(quemResponde(tenant.tenant_id, id), [] as QuemResponde[], 'quem responde'),
+        ou(lerAgentesPorCanal(tenant.tenant_id), [] as AgenteDoCanal[], 'agentes dos canais'),
+        ou(lerRespostas(tenant.tenant_id, id), [] as RespostaRecebida[], 'respostas'),
+        opera ? ou(lerContasDeEmail(tenant.tenant_id), [] as ContaDeEmail[], 'contas de e-mail')
+              : Promise.resolve([] as ContaDeEmail[]),
+        ou(lerCredenciaisIA(), [] as CredencialIA[], 'contas de IA'),
+        ou(lerProvedoresIA(), [] as ProvedorIA[], 'provedores de IA'),
       ]);
+      setAviso(falhas.length ? `Parte desta página não carregou: ${falhas.join('; ')}.` : '');
       setCampanha(cs.find((c) => c.id === id) ?? null);
       setResumo(r);
       setEventos(ev);
@@ -108,7 +122,7 @@ export function Campanha() {
     finally { setCarregando(false); }
   }
 
-  useEffect(() => { void recarregar(); }, [tenant?.tenant_id, id]);
+  useEffect(() => { void recarregar(); }, [tenant?.tenant_id, id, opera]);
 
   if (carregando) return <div className="wrap"><p className="vazio">Carregando…</p></div>;
   if (erro) return <div className="wrap"><Aviso tipo="erro">{erro}</Aviso></div>;
@@ -126,21 +140,23 @@ export function Campanha() {
       sub={`${campanha.tipo} · ${campanha.canais_habilitados.map((c) => NOME_CANAL[c] ?? c).join(', ')}`
            + (campanha.ativa ? '' : ' · DESLIGADA')}
     >
+      {erroDeAcao && <Aviso tipo="erro">{erroDeAcao}</Aviso>}
+      {aviso && <Aviso tipo="neutro">{aviso}</Aviso>}
 
       <Comando campanha={campanha} resumo={resumo} podeOperar={opera}
-               aoMudar={recarregar} aoFalhar={setErro} />
+               aoMudar={recarregar} aoFalhar={setErroDeAcao} />
 
       <Cadencia campanha={campanha} versoes={versoes} podeOperar={opera}
-                aoMudar={recarregar} aoFalhar={setErro} />
+                aoMudar={recarregar} aoFalhar={setErroDeAcao} />
 
       {campanha.canais_habilitados.includes('email') && (
         <EmailDaCampanha campanha={campanha} contas={emails} podeOperar={opera}
-                         aoMudar={recarregar} aoFalhar={setErro} />
+                         aoMudar={recarregar} aoFalhar={setErroDeAcao} />
       )}
 
       <Agentes campanha={campanha} agentes={agentes} quem={quem} doCanal={doCanal}
                contasIA={contasIA} provedoresIA={provedoresIA}
-               podeOperar={opera} aoMudar={recarregar} aoFalhar={setErro} />
+               podeOperar={opera} aoMudar={recarregar} aoFalhar={setErroDeAcao} />
 
       <div className="kpis cinco">
         <Kpi rotulo="Em cadência" valor={resumo.inscritos_ativos}
@@ -175,7 +191,9 @@ export function Campanha() {
       <div className="painel">
         <b>Próxima batida</b>
         <p style={{ color: 'var(--ink-2)', fontSize: 13, marginBottom: 0 }}>
-          {resumo.vencidos_agora > 0
+          {resumo.vencidos_agora > 0 && !campanha.ativa
+            ? `${resumo.vencidos_agora} enrollment(s) já vencido(s), esperando: a campanha está desligada, e o agendador só os pega depois de ligá-la.`
+            : resumo.vencidos_agora > 0
             ? `${resumo.vencidos_agora} enrollment(s) já vencido(s) — o worker pega na próxima passada.`
             : resumo.proximo_disparo
               ? `Nada vencido agora. O próximo é ${quando(resumo.proximo_disparo)}.`

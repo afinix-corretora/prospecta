@@ -150,6 +150,44 @@ END;
 $$;
 
 -- ---------------------------------------------------------------------------
+-- Conta no pool da campanha (D77)
+-- ---------------------------------------------------------------------------
+-- O caso de produção: campanha morna, e o único chip do cliente é frio. A
+-- inscrição entra, e o agendador adia o passo de hora em hora para sempre —
+-- sem erro, como o `sem_canal` de cima. A prévia diz.
+
+DO $$
+DECLARE v_alvo uuid[] := (SELECT array_agg(id) FROM quem WHERE rotulo = 'alcancavel');
+        v_p text; v_a text;
+BEGIN
+  SELECT acao, problema INTO v_a, v_p FROM prever_inscricao('00000000-0000-0000-0000-0000000000aa',
+    'dd000000-0000-0000-0000-000000000001', 'dd000000-0000-0000-0000-000000000003', v_alvo);
+  PERFORM pi.confere('sem conta no pool da campanha, a prévia avisa e não recusa',
+    v_a = 'inscrever' AND v_p LIKE 'sem conta morna ativa em whatsapp:%', v_a || ' / ' || coalesce(v_p, '(nulo)'));
+
+  INSERT INTO sender_accounts (tenant_id, canal, identificador, provedor, tipo_permitido, quota_diaria)
+  VALUES ('00000000-0000-0000-0000-0000000000aa', 'whatsapp', '5515990000001', 'evolution', 'fria', 50);
+  SELECT problema INTO v_p FROM prever_inscricao('00000000-0000-0000-0000-0000000000aa',
+    'dd000000-0000-0000-0000-000000000001', 'dd000000-0000-0000-0000-000000000003', v_alvo);
+  PERFORM pi.confere('chip frio não manda pela campanha morna',
+    v_p LIKE 'sem conta morna%', coalesce(v_p, '(nulo)'));
+
+  INSERT INTO sender_accounts (tenant_id, canal, identificador, provedor, tipo_permitido, quota_diaria, estado)
+  VALUES ('00000000-0000-0000-0000-0000000000aa', 'whatsapp', '5515990000002', 'evolution', 'morna', 50, 'circuito_aberto');
+  SELECT problema INTO v_p FROM prever_inscricao('00000000-0000-0000-0000-0000000000aa',
+    'dd000000-0000-0000-0000-000000000001', 'dd000000-0000-0000-0000-000000000003', v_alvo);
+  PERFORM pi.confere('conta morna fora do pool (circuito aberto) não conta',
+    v_p LIKE 'sem conta morna%', coalesce(v_p, '(nulo)'));
+
+  UPDATE sender_accounts SET estado = 'ativo'
+   WHERE tenant_id = '00000000-0000-0000-0000-0000000000aa' AND identificador = '5515990000002';
+  SELECT problema INTO v_p FROM prever_inscricao('00000000-0000-0000-0000-0000000000aa',
+    'dd000000-0000-0000-0000-000000000001', 'dd000000-0000-0000-0000-000000000003', v_alvo);
+  PERFORM pi.confere('com conta morna ativa, nada a avisar', v_p IS NULL, coalesce(v_p, '(nulo)'));
+END;
+$$;
+
+-- ---------------------------------------------------------------------------
 -- O que sustenta o nome
 -- ---------------------------------------------------------------------------
 

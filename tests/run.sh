@@ -133,6 +133,7 @@ rodar rascunhos      "$RAIZ/tests/rascunhos.sql"
 rodar agente_responde "$RAIZ/tests/agente_responde.sql"
 rodar agente_do_canal "$RAIZ/tests/agente_do_canal.sql"
 rodar agente_setup   "$RAIZ/tests/agente_de_setup.sql"
+rodar auditoria     "$RAIZ/tests/auditoria.sql"
 
 # ---------------------------------------------------------------------------
 # Adapters de canal — TypeScript, sem rede (fetch injetado).

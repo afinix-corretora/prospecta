@@ -314,15 +314,28 @@ DO $$
 DECLARE v_erro text;
 BEGIN
   BEGIN
-    -- Como 'motor': a checagem de permissão de 'pessoa' roda ANTES da busca
-    -- do estágio, e estouraria por outro motivo — o teste ficaria verde pela
-    -- razão errada.
+    -- Como pessoa que opera o cliente: a checagem de permissão de 'pessoa'
+    -- roda ANTES da busca do estágio, e sem papel estouraria por outro motivo
+    -- — o teste ficaria verde pela razão errada.
+    PERFORM set_config('request.jwt.claims', '{"sub":"f0000000-0000-0000-0000-0000000000a2"}', true);
     PERFORM mover_deal((SELECT id FROM deals WHERE contact_id = 'f0000000-0000-0000-0000-0000000000d2'),
-                       'estagio_que_nao_existe', 'motor', NULL);
+                       'estagio_que_nao_existe', 'pessoa', NULL);
     v_erro := '(aceitou)';
   EXCEPTION WHEN no_data_found THEN v_erro := 'recusou';
   END;
-  PERFORM fu.confere('estágio inexistente é recusado', v_erro = 'recusou', v_erro);
+  PERFORM set_config('request.jwt.claims', '', true);
+  PERFORM fu.confere('estágio inexistente é recusado a quem move à mão', v_erro = 'recusou', v_erro);
+
+  -- D77: e o motor não recusa — devolve "não moveu". Ele chama de dentro do
+  -- gatilho da resposta, e um erro aqui desfazia a resposta inteira.
+  BEGIN
+    v_erro := CASE WHEN mover_deal((SELECT id FROM deals WHERE contact_id = 'f0000000-0000-0000-0000-0000000000d2'),
+                                   'estagio_que_nao_existe', 'motor', NULL)
+                   THEN 'moveu' ELSE 'não moveu' END;
+  EXCEPTION WHEN others THEN v_erro := SQLSTATE || ': ' || SQLERRM;
+  END;
+  PERFORM fu.confere('D77: estágio inexistente, para o motor, é "não moveu" e não erro',
+    v_erro = 'não moveu', v_erro);
 
   BEGIN
     UPDATE deal_activities SET motivo = 'reescrito' WHERE tenant_id = 'f0000000-0000-0000-0000-0000000000a0';
@@ -364,6 +377,97 @@ BEGIN
 END;
 $$;
 COMMIT;
+
+-- ===========================================================================
+-- 8. D77: um estágio que some não derruba a resposta
+-- ===========================================================================
+--
+-- O achado: com UPDATE de tabela inteira em pipeline_stages, um operador
+-- renomeava o slug de `respondeu`, e o gatilho da resposta chamava
+-- `mover_deal`, que lançava. A transação inteira caía: a resposta não era
+-- gravada, a cadência seguia e o "pare" não suprimia.
+
+BEGIN;
+  SET LOCAL role authenticated;
+  SET LOCAL request.jwt.claims = '{"sub":"f0000000-0000-0000-0000-0000000000a2"}';
+DO $$
+DECLARE v_slug text; v_nome text; v_novo text; v_apaga text;
+BEGIN
+  BEGIN
+    UPDATE pipeline_stages SET slug = 'respondeu_renomeado' WHERE slug = 'respondeu';
+    v_slug := 'sem erro';
+  EXCEPTION WHEN others THEN v_slug := SQLSTATE;
+  END;
+  BEGIN
+    UPDATE pipeline_stages SET nome = 'Respondeu (renomeado pela tela)' WHERE slug = 'respondeu';
+    v_nome := 'sem erro';
+  EXCEPTION WHEN others THEN v_nome := SQLSTATE;
+  END;
+  BEGIN
+    INSERT INTO pipeline_stages (tenant_id, pipeline_id, nome, slug, posicao, tipo)
+    SELECT tenant_id, pipeline_id, 'Novo', 'novo', 99, tipo FROM pipeline_stages WHERE slug = 'respondeu';
+    v_novo := 'sem erro';
+  EXCEPTION WHEN others THEN v_novo := SQLSTATE;
+  END;
+  BEGIN
+    DELETE FROM pipeline_stages WHERE slug = 'oportunidade';
+    v_apaga := 'sem erro';
+  EXCEPTION WHEN others THEN v_apaga := SQLSTATE;
+  END;
+  PERFORM fu.confere('D77: operador não muda o slug do estágio', v_slug = '42501', v_slug);
+  PERFORM fu.confere('D77: mas renomeia o rótulo', v_nome = 'sem erro', v_nome);
+  PERFORM fu.confere('D77: nem cria nem apaga estágio', v_novo = '42501' AND v_apaga = '42501',
+    v_novo || ' / ' || v_apaga);
+END;
+$$;
+COMMIT;
+
+-- Por qualquer caminho que reste (o painel do Supabase, um dado antigo), o
+-- slug some — e a resposta de quem tem card chega, com um pedido de saída.
+UPDATE pipeline_stages SET slug = 'respondeu_de_antes'
+ WHERE slug = 'respondeu'
+   AND pipeline_id = (SELECT id FROM pipelines WHERE tenant_id = :tenant AND padrao);
+
+INSERT INTO contacts (id, tenant_id, nome, origem)
+VALUES ('f0000000-0000-0000-0000-0000000000d7', :tenant, 'Gil Pede Para Sair', 'planilha');
+INSERT INTO contact_identities (tenant_id, contact_id, canal, valor, valor_norm, origem)
+VALUES (:tenant, 'f0000000-0000-0000-0000-0000000000d7', 'whatsapp',
+        '+55 11 96000-0007', '5511960000007', 'planilha');
+INSERT INTO enrollments (id, tenant_id, contact_id, campaign_id, flow_version_id)
+VALUES ('f0000000-0000-0000-0000-0000000000b7', :tenant, 'f0000000-0000-0000-0000-0000000000d7',
+        'f0000000-0000-0000-0000-0000000000c1', 'f0000000-0000-0000-0000-0000000000e1');
+INSERT INTO messages (id, tenant_id, enrollment_id, step_id, contact_identity_id,
+                      sender_account_id, canal, status, conteudo)
+VALUES ('f0000000-0000-0000-0000-00000000aa07', :tenant, 'f0000000-0000-0000-0000-0000000000b7',
+        'f0000000-0000-0000-0000-0000000000e2',
+        (SELECT id FROM contact_identities WHERE contact_id = 'f0000000-0000-0000-0000-0000000000d7'),
+        'f0000000-0000-0000-0000-00000000005a', 'whatsapp', 'pendente', 'oi');
+UPDATE messages SET status = 'enviado' WHERE id = 'f0000000-0000-0000-0000-00000000aa07';
+
+CREATE TABLE fu.chegou (erro text);
+DO $$
+BEGIN
+  INSERT INTO message_events (tenant_id, message_id, tipo, payload)
+  VALUES ('f0000000-0000-0000-0000-0000000000a0', 'f0000000-0000-0000-0000-00000000aa07', 'respondido',
+          '{"texto":"pare de me mandar mensagem"}'::jsonb);
+  INSERT INTO fu.chegou VALUES (NULL);
+EXCEPTION WHEN others THEN
+  INSERT INTO fu.chegou VALUES (SQLSTATE || ': ' || SQLERRM);
+END;
+$$;
+
+-- Em instruções separadas da gravação (D38).
+SELECT fu.confere('D77: com o estágio sumido, a resposta é gravada mesmo assim',
+  (SELECT erro IS NULL FROM fu.chegou)
+  AND EXISTS (SELECT 1 FROM message_events WHERE message_id = 'f0000000-0000-0000-0000-00000000aa07'
+                                             AND tipo = 'respondido'),
+  coalesce((SELECT erro FROM fu.chegou), 'evento não gravado'));
+SELECT fu.confere('D77: e encerra a cadência (invariante 4)',
+  (SELECT status = 'encerrado' FROM enrollments WHERE id = 'f0000000-0000-0000-0000-0000000000b7'),
+  (SELECT status::text FROM enrollments WHERE id = 'f0000000-0000-0000-0000-0000000000b7'));
+SELECT fu.confere('D77: e o "pare" suprime (invariante 2)',
+  EXISTS (SELECT 1 FROM suppression WHERE tenant_id = :tenant
+                                      AND contact_id = 'f0000000-0000-0000-0000-0000000000d7'));
 
 SELECT CASE WHEN ok THEN 'PASS' ELSE 'FAIL' END AS status, nome, detalhe
   FROM fu.resultado ORDER BY id;

@@ -168,6 +168,31 @@ test('usar as contas que existem distribui o total, e só propõe mexer na que m
   assert.ok(!doTipo(plano.acoes, 'configurar').some((a) => a.id === 'config:whatsapp'), 'quem usa o que tem não é mandado conectar');
 });
 
+test('usar o chip que existe nunca sobe a quota além do ponto de partida (D77)', () => {
+  // O chip nasceu na conversa com 40 (o teto de chip frio), e a pessoa pediu
+  // 100. O cartão de ajuste roda sozinho: levá-lo a 100 desfazia o freio da
+  // coleta na mesma conversa. O que falta vira "faltam N contas".
+  const chip = (id: string, quota: number) => ({ id, canal: 'whatsapp', provedor: 'uazapi', tipo_permitido: 'fria' as const,
+    quota_diaria: quota, estado: 'ativo', apelido: id, identificador: id });
+  const pedir = (f: Foto, n: number) => montarPlano(f, { ...COMPLETO, canais: ['whatsapp'], porDia: { whatsapp: n }, 'provedor:whatsapp': USAR });
+
+  const criado = pedir({ ...FOTO, remetentes: [chip('a', 40)] }, 100);
+  assert.deepEqual(doTipo(criado.acoes, 'ajustar_quota'), [], 'nada sobe acima de 40');
+  assert.ok(criado.avisos.some((x) => /pediu 100.*chega a 40.*mais 2 contas/.test(x)), criado.avisos.join('\n'));
+
+  const absurdo = pedir({ ...FOTO, remetentes: [chip('a', 40)] }, 100000);
+  assert.deepEqual(doTipo(absurdo.acoes, 'ajustar_quota'), [], 'nem o que o agente sugerir');
+
+  // Abaixo do teto, sobe ATÉ o teto, não até o pedido.
+  const baixo = pedir({ ...FOTO, remetentes: [chip('a', 20)] }, 100);
+  assert.deepEqual(doTipo(baixo.acoes, 'ajustar_quota').map((a) => [a.de, a.para]), [[20, 40]]);
+
+  // Quem já pôs acima do teto pela tela do canal decidiu: o plano não baixa
+  // o que a pessoa não pediu para baixar.
+  const decidido = pedir({ ...FOTO, remetentes: [chip('a', 150)] }, 200);
+  assert.deepEqual(doTipo(decidido.acoes, 'ajustar_quota'), []);
+});
+
 test('"configurar depois" sem conta nenhuma avisa que o canal fica parado', () => {
   const plano = montarPlano(FOTO, { ...COMPLETO, 'provedor:email': NAO });
   assert.ok(plano.avisos.some((x) => /E-mail ficou sem conta.*nada sai/.test(x)));
@@ -335,6 +360,26 @@ test('situação é lida da foto, e conta desligada não conta', () => {
   assert.match(s.canais!.detalhe, /WhatsApp: 1 conta, até 40\/dia/);
   assert.equal(s.ia!.feito, false);
   assert.equal(s.contatos!.detalhe, '3 na base');
+});
+
+test('situação: campanha ligada sem conta no PRÓPRIO pool não está pronta (D77)', () => {
+  // O caso de produção: a campanha é morna e o único chip é frio. O pool exige
+  // o mesmo tipo, e o agendador adiava cada passo para sempre.
+  const chipFrio = { id: 'a', canal: 'whatsapp', provedor: 'uazapi', tipo_permitido: 'fria' as const,
+    quota_diaria: 50, estado: 'ativo', apelido: 'A', identificador: '1' };
+  const camp = { id: 'c', nome: 'Resgate por WhatsApp', ativa: true, tipo: 'morna' as const, canais_habilitados: ['whatsapp'] };
+  const f = { ...FOTO, remetentes: [chipFrio], campanhas: [camp] };
+  const s = Object.fromEntries(situacao(f).map((i) => [i.id, i]));
+  assert.equal(s.canais!.feito, true, 'há conta, então o item de canais segue feito');
+  assert.equal(s.campanha!.feito, false);
+  assert.match(s.campanha!.detalhe, /não tem conta WhatsApp no pool morna/);
+
+  const comMorno = { ...f, remetentes: [chipFrio, { ...chipFrio, id: 'b', tipo_permitido: 'morna' as const }] };
+  assert.equal(Object.fromEntries(situacao(comMorno).map((i) => [i.id, i])).campanha!.feito, true);
+
+  // Conta morna com o circuito aberto (fora do pool) não conta.
+  const parada = { ...f, remetentes: [chipFrio, { ...chipFrio, id: 'b', tipo_permitido: 'morna' as const, estado: 'circuito_aberto' }] };
+  assert.equal(Object.fromEntries(situacao(parada).map((i) => [i.id, i])).campanha!.feito, false);
 });
 
 // ---------------------------------------------------------------------------

@@ -36,9 +36,12 @@ export function Contatos() {
   const [erro, setErro] = useState('');
 
   async function recarregar(termo: string) {
+    if (!tenant) return;
     setCarregando(true); setErro('');
-    try { setContatos(await lerContatos(termo)); }
-    catch (e) { setErro(mensagemDeErro(e)); }
+    try { setContatos(await lerContatos(tenant.tenant_id, termo)); }
+    // A lista de antes, sem o filtro, ao lado de um erro de busca parecia
+    // resultado. Errou, a lista some e o erro fala sozinho (D77).
+    catch (e) { setContatos([]); setErro(mensagemDeErro(e)); }
     finally { setCarregando(false); }
   }
 
@@ -46,7 +49,7 @@ export function Contatos() {
   useEffect(() => {
     const t = setTimeout(() => { void recarregar(busca); }, 250);
     return () => clearTimeout(t);
-  }, [busca]);
+  }, [busca, tenant?.tenant_id]);
 
   const visiveis = contatos.map((c) => c.id);
   const todosMarcados = visiveis.length > 0 && visiveis.every((id) => escolhidos.has(id));

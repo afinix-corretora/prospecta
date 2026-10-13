@@ -158,10 +158,14 @@ SELECT pl.confere('conexão não fica meio gravada quando o Vault falha',
 -- `v_antigo IS NOT NULL` libera o caminho de edição, onde o segredo volta vazio
 -- da tela e a função não chama o Vault.
 INSERT INTO crm_connections (id, tenant_id, nome, provedor, credencial_secret_id, config) VALUES
+  -- D77: o data center é DESTINO da chave; mudá-lo pede as chaves de novo.
+  -- A conexão já estava no `com`, e a edição abaixo não o muda.
   ('59000000-0000-0000-0000-0000000000c1', :tenant, 'Zoho da matriz', 'zoho_crm',
-   '59000000-0000-0000-0000-0000000077a1', '{}'::jsonb),
+   '59000000-0000-0000-0000-0000000077a1', '{"data_center":"com"}'::jsonb),
+  -- D77: o domínio da instância é DESTINO da chave; a conexão já apontava
+  -- para ele, e a edição abaixo não o muda.
   ('59000000-0000-0000-0000-0000000000c2', :tenant, 'Salesforce corp', 'salesforce',
-   '59000000-0000-0000-0000-0000000077a2', '{}'::jsonb),
+   '59000000-0000-0000-0000-0000000077a2', '{"dominio":"https://afinix.my.salesforce.com"}'::jsonb),
   ('59000000-0000-0000-0000-0000000000c3', :tenant, 'Pipedrive vendas', 'pipedrive',
    '59000000-0000-0000-0000-0000000077a3', '{"dominio_empresa":"afinix"}'::jsonb);
 
@@ -230,9 +234,11 @@ DO $$
 DECLARE v_id uuid; v_config jsonb; v_secret uuid; v_quantas integer;
 BEGIN
   PERFORM set_config('request.jwt.claims', '{"sub":"59000000-0000-0000-0000-00000000dd00"}', true);
+  -- D77: o domínio é DESTINO do token; trocá-lo pede o token de novo
+  -- (`tests/auditoria.sql`). O MESMO domínio em outra caixa não é outro.
   v_id := salvar_credencial_crm(
     '59000000-0000-0000-0000-0000000000a0'::uuid, 'Pipedrive vendas', 'pipedrive',
-    jsonb_build_object('api_token', '', 'dominio_empresa', 'afinix-novo'));
+    jsonb_build_object('api_token', '', 'dominio_empresa', 'AFINIX'));
 
   SELECT config, credencial_secret_id INTO v_config, v_secret
     FROM crm_connections WHERE id = '59000000-0000-0000-0000-0000000000c3';
@@ -244,7 +250,7 @@ BEGIN
     v_id = '59000000-0000-0000-0000-0000000000c3', v_id::text);
   PERFORM pl.confere('editar não duplica a conexão', v_quantas = 1, v_quantas::text);
   PERFORM pl.confere('o campo de config editado mudou',
-    v_config ->> 'dominio_empresa' = 'afinix-novo', v_config::text);
+    v_config ->> 'dominio_empresa' = 'AFINIX', v_config::text);
   PERFORM pl.confere('segredo vazio na edição preserva a credencial',
     v_secret = '59000000-0000-0000-0000-0000000077a3', coalesce(v_secret::text, 'nulo'));
 END;
@@ -290,14 +296,18 @@ DECLARE v_erro text;
 BEGIN
   PERFORM set_config('request.jwt.claims', '{"sub":"59000000-0000-0000-0000-00000000dd00"}', true);
   BEGIN
-    -- Pipedrive pede token E domínio. O token em branco passa (a conexão já tem
-    -- credencial guardada), o domínio em branco não — ele não é segredo, então
-    -- a tela consegue devolvê-lo e branco ali é branco de verdade.
+    -- Salesforce pede client_id, domínio e secret. O secret em branco passa (a
+    -- conexão já tem credencial guardada), o client_id em branco não — ele não
+    -- é segredo, então a tela consegue devolvê-lo e branco ali é branco de
+    -- verdade. D77: era o domínio do Pipedrive, mas o domínio é destino da
+    -- chave, e em branco ele recusaria pelo OUTRO motivo — a asserção passaria
+    -- pela razão errada. A mensagem diz qual dos dois.
     PERFORM salvar_credencial_crm(
-      '59000000-0000-0000-0000-0000000000a0'::uuid, 'Pipedrive vendas', 'pipedrive',
-      '{"api_token":"","dominio_empresa":"  "}'::jsonb);
+      '59000000-0000-0000-0000-0000000000a0'::uuid, 'Salesforce corp', 'salesforce',
+      '{"client_secret":"","client_id":"  ","dominio":"https://afinix.my.salesforce.com"}'::jsonb);
     v_erro := 'passou';
-  EXCEPTION WHEN invalid_parameter_value THEN v_erro := 'recusou';
+  EXCEPTION WHEN invalid_parameter_value THEN
+    v_erro := CASE WHEN SQLERRM LIKE 'campo obrigatório em branco:%' THEN 'recusou' ELSE SQLERRM END;
   END;
   PERFORM pl.confere('campo obrigatório não-secreto em branco é recusado',
     v_erro = 'recusou', v_erro);
