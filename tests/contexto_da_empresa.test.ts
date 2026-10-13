@@ -137,11 +137,11 @@ test('o caminho inteiro: site, perfil colado, PDF e print viram um pedido, e o r
   assert.equal(r.corpo.texto, 'A Corretora Exemplo vende planos.');
   assert.equal(r.corpo.conferir, '');
   assert.equal(r.corpo.modelo, 'claude-x');
-  assert.deepEqual(r.corpo.fontes.map((f) => [f.origem, f.rotulo, f.lida]), [
-    ['site', 'https://empresa.com.br/', true],
-    ['instagram', '@corretora', true],
-    ['material', 'catalogo.pdf', true],
-    ['instagram', 'print do Instagram (perfil.png)', true],
+  assert.deepEqual(r.corpo.fontes.map((f) => [f.origem, f.rotulo, f.apelido, f.lida]), [
+    ['site', 'https://empresa.com.br/', 'Site A', true],
+    ['instagram', '@corretora', undefined, true],
+    ['material', 'catalogo.pdf', 'Arquivo A', true],
+    ['instagram', 'print do Instagram (perfil.png)', 'Print A', true],
   ]);
   assert.equal(m.chamadas.segredos, 1);
   const p = m.chamadas.leituras[0]!;
@@ -159,6 +159,12 @@ test('o teto de tokens fora do Claude é o do rascunho — ia.ts acrescenta a fo
   const m = montar({ conta: { provedor: 'openai', modelo: 'gpt-4o' } });
   await pedir(m, { credencial_id: ID, materiais: [{ nome: 'a.txt', base64: b64(TEXTO_LONGO) }] });
   assert.equal(m.chamadas.leituras[0]!.maxTokens, TOKENS_DA_LEITURA);
+  // O Claude pelo OpenRouter ou por endpoint compatível raciocina igual ao direto.
+  for (const conta of [{ provedor: 'openrouter', modelo: 'anthropic/claude-opus-5-5' }, { provedor: 'compativel', modelo: 'claude-sonnet-5-5' }]) {
+    const c = montar({ conta });
+    await pedir(c, { credencial_id: ID, materiais: [{ nome: 'a.txt', base64: b64(TEXTO_LONGO) }] });
+    assert.equal(c.chamadas.leituras[0]!.maxTokens, TOKENS_DA_LEITURA_CLAUDE, conta.modelo);
+  }
 });
 
 test('a conta que não lê anexo: o PDF é recusado com o motivo, e o texto segue', async () => {
@@ -181,20 +187,37 @@ test('o MODELO que não lê imagem: o anexo sai, dizendo por quê, e o resto é 
   assert.deepEqual(m.chamadas.leituras[1]!.partes.map((x) => x.tipo), ['texto', 'texto'], 'a segunda vai sem o anexo');
   const print = r.corpo.fontes.find((f) => f.rotulo === 'print.png')!;
   assert.equal(print.lida, false);
-  assert.match(print.detalhe, /o modelo deepseek\/deepseek-chat-v3\.1 não aceitou o anexo \(HTTP 404/);
+  assert.match(print.detalhe, /o modelo deepseek\/deepseek-chat-v3\.1 não aceitou este tipo de anexo \(HTTP 404/);
   assert.equal(r.corpo.fontes[0]!.lida, true, 'o site lido não se perde');
 
   // Só o anexo para ler: não há segunda leitura, e o motivo é o do anexo.
   const so = montar({ conta: { provedor: 'openrouter', modelo: 'm' }, respostas: [recusa] });
   const s = await pedir(so, { credencial_id: ID, materiais: [{ nome: 'print.png', base64: PNG }] });
-  assert.ok(s.corpo.ok && s.corpo.situacao === 'erro' && /não aceitou o anexo/.test(s.corpo.motivo));
+  assert.ok(s.corpo.ok && s.corpo.situacao === 'erro' && /não aceitou este tipo de anexo/.test(s.corpo.motivo));
   assert.equal(so.chamadas.leituras.length, 1);
+
+  // Erro de TAMANHO com anexo: o resto é lido de novo, e o anexo diz que passou de um limite — não que o modelo não lê.
+  for (const erro of ['HTTP 400: A maximum of 100 PDF pages may be provided.', 'HTTP 400: prompt is too long: 312000 tokens > 200000 maximum']) {
+    const grande = montar({ respostas: [{ ok: false, definitivo: true, erro }], paginas: { 'https://empresa.com.br/': `<p>${TEXTO_LONGO}</p>` } });
+    const g = await pedir(grande, { credencial_id: ID, site: 'empresa.com.br', materiais: [{ nome: 'catalogo.pdf', base64: PDF }] });
+    assert.ok(g.corpo.ok && g.corpo.situacao === 'pronto', erro);
+    assert.equal(grande.chamadas.leituras.length, 2, erro);
+    const pdf = g.corpo.fontes.find((f) => f.rotulo === 'catalogo.pdf')!;
+    assert.match(pdf.detalhe, /passou de um limite do modelo/, erro);
+    assert.doesNotMatch(pdf.detalhe, /não aceitou/, erro);
+  }
 
   // Erro que não é de anexo (chave recusada) não faz segunda leitura.
   const chave = montar({ conta: { provedor: 'openrouter', modelo: 'm' },
     respostas: [{ ok: false, definitivo: true, erro: 'HTTP 401: chave recusada' }] });
   await pedir(chave, { credencial_id: ID, materiais: [{ nome: 'print.png', base64: PNG }, { nome: 'a.txt', base64: b64(TEXTO_LONGO) }] });
   assert.equal(chave.chamadas.leituras.length, 1);
+});
+
+test('o prazo conta desde a CHEGADA do pedido: o corpo que demorou a subir também gastou o tempo', async () => {
+  const m = montar({ paginas: { 'https://empresa.com.br/': `<p>${TEXTO_LONGO}</p>` }, msDoSite: 10_000 });
+  await colherDoPedido(m.porta, { credencial_id: ID, site: 'empresa.com.br' }, m.rede, { ...m.opcoes, inicio: -30_000 });
+  assert.deepEqual(m.chamadas.leitores, [['anthropic', PRAZO_TOTAL_MS - 30_000 - 10_000]]);
 });
 
 test('o prazo: o modelo recebe o que sobrou, e sem tempo bastante não é chamado — nem pago', async () => {
@@ -213,8 +236,10 @@ test('o que o modelo devolve: erro, nada a dizer, divergência e texto grande de
   const pedido = { credencial_id: ID, materiais: [{ nome: 'sobre.txt', base64: b64(TEXTO_LONGO) }] };
   const erro = await pedir(montar({ respostas: [{ ok: false, erro: 'HTTP 401: chave recusada', definitivo: true }] }), pedido);
   assert.ok(erro.corpo.ok && erro.corpo.situacao === 'erro' && erro.corpo.motivo === 'HTTP 401: chave recusada');
-  const nada = await pedir(montar({ respostas: [{ ok: true, texto: '[SEM INFORMAÇÃO]' }] }), pedido);
-  assert.ok(nada.corpo.ok && nada.corpo.situacao === 'sem_informacao');
+  for (const texto of ['[SEM INFORMAÇÃO]', '[SEM INFORMAÇÃO]\n\nPARA CONFERIR: nenhuma', '[SEM INFORMAÇÃO]\nPARA CONFERIR:\n- Nenhuma divergência.']) {
+    const nada = await pedir(montar({ respostas: [{ ok: true, texto }] }), pedido);
+    assert.ok(nada.corpo.ok && nada.corpo.situacao === 'sem_informacao', texto);
+  }
   const diverge = await pedir(montar({ respostas: [{ ok: true,
     texto: 'A Corretora vende planos.\n\nPARA CONFERIR:\n- Essencial: R$ 289,90 (site) e R$ 249,90 (arquivo tabela.pdf)' }] }), pedido);
   assert.ok(diverge.corpo.ok && diverge.corpo.situacao === 'pronto');

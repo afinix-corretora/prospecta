@@ -18,7 +18,7 @@ import { juntarCredenciais, PROVEDORES_IA_COM_ADAPTER } from '../adapters/ia.ts'
 import type { Leitor, Parte } from '../adapters/ia-leitura.ts';
 import { criarLeitor, leAnexos, PRAZO_DO_MODELO_MS } from '../adapters/ia-leitura.ts';
 import {
-  cabecalhoDaLeitura, cabemJuntos, cortar, lerInstagram, lerMaterial, lerSite, MAX_ARQUIVOS, semInformacao,
+  cabecalhoDaLeitura, cabemJuntos, cortar, lerInstagram, lerMaterial, lerSite, letra, MAX_ARQUIVOS, semInformacao,
   separarConferir, SISTEMA_DA_COLETA, tamanhoDoBase64,
 } from '../adapters/coleta.ts';
 import type { Fonte, MaterialDoPedido } from '../adapters/coleta.ts';
@@ -52,6 +52,12 @@ export interface OpcoesDaColeta {
   readonly criar?: (provedor: string, prazoMs: number) => Leitor;
   /** O relógio, em ms. */
   readonly agora?: () => number;
+  /**
+   * Quando o pedido CHEGOU, pelo mesmo relógio. O corpo de até 20 MB leva
+   * tempo para subir, e esse tempo também conta nos 150 s do Supabase: medir
+   * a partir daqui é medir o pedido inteiro.
+   */
+  readonly inicio?: number;
 }
 
 export type PedidoDaColeta = {
@@ -92,8 +98,15 @@ export const PRAZO_TOTAL_MS = 140_000;
 /** Menos que isto para o modelo, e a leitura é recusada antes de ser paga. */
 export const PRAZO_MINIMO_DO_MODELO_MS = 20_000;
 
-/** O erro de quem não lê o anexo: o OpenRouter devolve 404, a OpenAI 400. */
-const NAO_LE_ANEXO = /image|imagem|file|pdf|document|modalit|vision|multimodal/i;
+/**
+ * O erro de quem não aceita o TIPO do anexo — o OpenRouter devolve 404 "No
+ * endpoints found that support image input", a OpenAI 400. Palavra solta
+ * ("pdf", "image") não basta: o limite de páginas de um PDF também fala em
+ * PDF, e o diagnóstico seria o errado.
+ */
+const NAO_LE_ANEXO = /no endpoints? found that supports? (image|file|pdf)|(does not|doesn't|do not) support (image|file|pdf|document)|(image|file|pdf|document)s? (input|inputs|content|url)s? (is|are) not supported|not supported for this model|image_url is only supported|modalit|unsupported (content|file|image|mime)|invalid (content|image|file) type/i;
+/** O erro de tamanho com anexo: o resto é lido de novo sem os anexos, que levam o motivo. */
+const PASSOU_DO_LIMITE = /too long|too large|maximum|exceed|pages? may be provided|request_too_large/i;
 
 function recusa(status: 400 | 401 | 404 | 409 | 413, erro: string): RespostaDaColeta {
   return { status, corpo: { ok: false, erro } };
@@ -174,7 +187,7 @@ export async function colherDoPedido(
 ): Promise<RespostaDaColeta> {
   const agora = opcoes.agora ?? Date.now;
   const criar = opcoes.criar ?? ((provedor: string, prazoMs: number) => criarLeitor(provedor, fetch, prazoMs));
-  const inicio = agora();
+  const inicio = opcoes.inicio ?? agora();
   if (!(await porta.pessoaLogada())) return recusa(401, 'entre com a sua conta');
 
   const id = typeof pedido.credencial_id === 'string' ? pedido.credencial_id : '';
@@ -214,8 +227,10 @@ export async function colherDoPedido(
   const ig = lerInstagram(lido.handle, lido.perfil);
   juntar(ig.parte, ig.fonte, ig.conteudo);
   const anexos = leAnexos(conta.provedor);
+  let arquivos = 0, prints = 0;
   for (const m of lido.materiais) {
-    const r = lerMaterial(m, conta.provedor, anexos);
+    const apelido = m.origem === 'instagram' ? `Print ${letra(prints++)}` : `Arquivo ${letra(arquivos++)}`;
+    const r = lerMaterial(m, conta.provedor, anexos, apelido);
     juntar(r.parte, r.fonte);
   }
 
@@ -239,7 +254,8 @@ export async function colherDoPedido(
     if (prazo < PRAZO_MINIMO_DO_MODELO_MS) return null;
     return criar(conta.provedor, prazo).ler({
       credenciais, modelo, sistema: SISTEMA_DA_COLETA,
-      maxTokens: conta.provedor === 'anthropic' ? TOKENS_DA_LEITURA_CLAUDE : TOKENS_DA_LEITURA,
+      // O Claude pelo OpenRouter ou por endpoint compatível raciocina igual.
+      maxTokens: conta.provedor === 'anthropic' || /(^|\/)claude/i.test(modelo) ? TOKENS_DA_LEITURA_CLAUDE : TOKENS_DA_LEITURA,
       partes: [cabecalho, ...escolhidas.map((j) => j.parte)],
     });
   };
@@ -249,22 +265,29 @@ export async function colherDoPedido(
   let r = await ler(noLimite);
   if (!r) return erro(SEM_TEMPO);
   // O modelo que não lê imagem (no OpenRouter, quem lê é o modelo, não o
-  // provedor) recusa o pedido INTEIRO. O anexo sai, dizendo por quê, e o resto
-  // é lido de novo — em vez de o site já lido se perder junto.
+  // provedor) recusa o pedido INTEIRO, e o anexo grande demais também. O
+  // anexo sai, dizendo por quê, e o resto é lido de novo — em vez de o site já
+  // lido se perder junto.
   const deAnexo = noLimite.filter((j) => j.parte.tipo !== 'texto');
-  if (!r.ok && r.definitivo && deAnexo.length && NAO_LE_ANEXO.test(r.erro)) {
-    const motivo = `o modelo ${modelo} não aceitou o anexo (${r.erro}): leia com um modelo que leia imagem e PDF, ou anexe o texto em .txt`;
+  const recusouAnexo = !r.ok && r.definitivo && deAnexo.length > 0 && NAO_LE_ANEXO.test(r.erro);
+  const passouDoLimite = !r.ok && deAnexo.length > 0 && !recusouAnexo && PASSOU_DO_LIMITE.test(r.erro);
+  if (!r.ok && (recusouAnexo || passouDoLimite)) {
+    const motivo = recusouAnexo
+      ? `o modelo ${modelo} não aceitou este tipo de anexo (${r.erro}): leia com um modelo que leia imagem e PDF, ou anexe o texto em .txt`
+      : `o pedido passou de um limite do modelo (${r.erro}): leia menos arquivos de uma vez, ou PDFs menores`;
     for (const j of deAnexo) fontes[j.fonte] = { ...fontes[j.fonte]!, lida: false, detalhe: motivo };
     if (!conteudoEmTexto) return erro(motivo);
     r = await ler(noLimite.filter((j) => j.parte.tipo === 'texto'));
     if (!r) return erro(SEM_TEMPO);
   }
   if (!r.ok) return erro(r.erro);
-  if (semInformacao(r.texto)) {
+  // Separar antes de perguntar: "[SEM INFORMAÇÃO]" seguido de "PARA CONFERIR:
+  // nenhuma" ainda é "nada a dizer", e não um rascunho com a marca dentro.
+  const { texto: rascunho, conferir } = separarConferir(r.texto);
+  if (semInformacao(rascunho)) {
     return { status: 200, corpo: { ok: true, situacao: 'sem_informacao', modelo, fontes,
       motivo: 'o modelo leu e não achou nada sobre a empresa nos materiais' } };
   }
-  const { texto: rascunho, conferir } = separarConferir(r.texto);
   if (!rascunho) return erro('o modelo devolveu só divergências, sem texto sobre a empresa');
   if (rascunho.length > TETOS_DO_AGENTE.contexto) {
     return erro(`o rascunho passou de ${TETOS_DO_AGENTE.contexto.toLocaleString('pt-BR')} caracteres; leia menos material de uma vez`);

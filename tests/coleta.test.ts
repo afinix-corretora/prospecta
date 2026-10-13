@@ -53,8 +53,8 @@ test('arquivo: a extensão escolhe o formato e os primeiros bytes confirmam', ()
 test('arquivo: o "Texto Unicode" do Excel (UTF-16 com marca) é texto, e se lê', () => {
   const utf16 = new Uint8Array([0xff, 0xfe, ...[...'Ação'].flatMap((c) => [c.charCodeAt(0), 0])]);
   assert.ok(conferirArquivo('tabela.txt', utf16.length, utf16).ok);
-  const lido = lerMaterial({ nome: 'tabela.txt', origem: 'material', base64: b64(utf16) }, 'deepseek', false);
-  assert.deepEqual(lido.parte, { tipo: 'texto', texto: '[Arquivo] tabela.txt\nAção' });
+  const lido = lerMaterial({ nome: 'tabela.txt', origem: 'material', base64: b64(utf16) }, 'deepseek', false, 'Arquivo A');
+  assert.deepEqual(lido.parte, { tipo: 'texto', texto: '[Arquivo A]\nAção' });
 });
 
 test('arquivo: o teto é por formato, no teto exato ainda entra, e a recusa nunca diz o tamanho igual ao teto', () => {
@@ -156,12 +156,38 @@ test('html: tag de texto não parte o preço — "R$ 189,90" continua inteiro, e
   assert.equal(aplicarFreios('O Plano Bronze sai por R$ 90 por mês.', base).situacao, 'bloqueado');
 });
 
+test('html: a fronteira de uma tag de texto separa letra de letra e dígito de dígito — nada de "R$ 8990"', () => {
+  const t = (h: string) => htmlParaTexto(h).texto;
+  assert.equal(t('<p class="preco">R$ 89<sup>90</sup><small>/mês</small></p>'), 'R$ 89 90/mês');
+  assert.equal(t('<p><strong>R$ 99</strong><span>2 vidas</span></p>'), 'R$ 99 2 vidas');
+  assert.equal(t('<p>Plano Ouro: R$ 189,90<sup>1</sup> por mês</p>'), 'Plano Ouro: R$ 189,90 1 por mês');
+  assert.equal(t('<div><span>Plano 2</span><span>4 vidas</span></div>'), 'Plano 2 4 vidas');
+  assert.equal(t('<nav><a href="/">Início</a><a href="/sobre">Sobre</a></nav>'), 'Início Sobre');
+  assert.equal(t('<p><a href="tel:1">(11) 4000-1234</a><a href="tel:2">(11) 4000-5678</a></p>'), '(11) 4000-1234 (11) 4000-5678');
+  assert.equal(t('<p><b>Planos</b>: a partir de R$<b>99</b>,<sup>90</sup>.</p>'), 'Planos: a partir de R$ 99,90.');
+  const contexto = `A Corretora Exemplo vende planos.\n- ${t('<p><strong>R$ 99</strong><span>2 vidas</span></p>')}`;
+  const base = { proibido: [], tamanho_maximo: null, canal: 'whatsapp', contexto, objetivo: 'resgate' };
+  assert.equal(aplicarFreios('O plano custa R$ 992 por mês.', base).situacao, 'bloqueado', 'número que a página não escreve');
+});
+
+test('html: o bloco que não fecha não leva o resto da página junto', () => {
+  assert.equal(htmlParaTexto('<body><svg class="i"/><h1>Plano Ouro</h1><p>R$ 189,90 por mês</p></body>').texto, 'Plano Ouro\nR$ 189,90 por mês');
+  assert.match(htmlParaTexto('<p>Antes</p><iframe src="x"><p>Depois do iframe aberto</p>').texto, /Depois do iframe aberto/);
+  assert.equal(htmlParaTexto('<title>Só título').titulo, '');
+});
+
 test('html: a página que repete a mesma linha seguida não a repete no texto', () => {
   const p = htmlParaTexto('<p>Ligue</p><p>Ligue</p><p>Agora</p><p>Ligue</p>');
   assert.equal(p.texto, 'Ligue\nAgora\nLigue');
 });
 
-test('html: HTML hostil de 2 MB custa o mesmo que HTML comum — nada de voltar atrás', () => {
+test('html: HTML hostil de 2 MB custa o mesmo que HTML comum do mesmo tamanho — medido na mesma execução', () => {
+  const melhor = (html: string) => {
+    let m = Infinity;
+    for (let k = 0; k < 3; k++) { const t0 = performance.now(); htmlParaTexto(html); m = Math.min(m, performance.now() - t0); }
+    return m;
+  };
+  const comum = melhor(`<html><body>${'<div class="x"><p>Planos de saúde para famílias e <b>empresas</b>.</p><a href="/sobre">Sobre</a></div>'.repeat(2 * MB / 90)}</body></html>`);
   const casos: [string, string][] = [
     ['meta com atributo sem =', `<meta ${'a'.repeat(2 * MB)}>`],
     ['link com atributo sem =', `<a ${'x'.repeat(2 * MB)}>sobre</a>`],
@@ -171,12 +197,14 @@ test('html: HTML hostil de 2 MB custa o mesmo que HTML comum — nada de voltar 
     ['muitos meta', '<meta name="description" content="x">'.repeat(MB / 20)],
     ['entidade sem ponto e vírgula', `&${'a'.repeat(2 * MB)}`],
     ['muitos <', '<'.repeat(2 * MB)],
+    ['< com espaço', '< '.repeat(MB)],
+    ['< com dígito', '<1'.repeat(MB)],
+    ['parágrafos vazios', '<p>'.repeat(2 * MB / 3)],
   ];
+  // O quadrático de antes custava 10 a 100 vezes o comum; a varredura linear fica perto dele.
   for (const [nome, html] of casos) {
-    const t0 = performance.now();
-    htmlParaTexto(html);
-    const ms = performance.now() - t0;
-    assert.ok(ms < 400, `${nome}: ${Math.round(ms)} ms`);
+    const ms = melhor(html);
+    assert.ok(ms < Math.max(6 * comum, 60), `${nome}: ${Math.round(ms)} ms, contra ${Math.round(comum)} ms do comum`);
   }
 });
 
@@ -216,6 +244,15 @@ test('html: rótulo de várias palavras sobre caminho neutro, e post de blog nã
     { href: '/planos', texto: 'Planos' }, { href: '/contato', texto: 'Contato' },
   ], base).map((u) => u.href);
   assert.deepEqual(blog, ['https://empresa.com.br/planos', 'https://empresa.com.br/contato']);
+});
+
+test('html: o slug da página conta pedaço a pedaço, com plural, extensão e "sobre-…"', () => {
+  const base = new URL('https://www.empresa.com.br/');
+  for (const [href, texto] of [['/contatos', 'Contatos'], ['/nossa-empresa', 'Nossa Empresa'], ['/sobre-a-escola/', 'A Escola'],
+    ['/sobre-o-escritorio/', 'O Escritório'], ['/contatos/', 'Fale com a gente'], ['/quemsomos.php', ''],
+    ['/sobre.php', 'Conheça a Clínica'], ['/nossosservicos.html', ''], ['/?page_id=13', 'Contatos'], ['/planos-de-saude', '']]) {
+    assert.equal(paginasParaLer([{ href: href!, texto: texto! }], base).length, 1, href);
+  }
 });
 
 test('html: link com porta, usuário e senha ou rede social não vira página extra', () => {
@@ -355,7 +392,8 @@ test('site: a página e até três do mesmo site, cada uma com a sua linha', asy
   assert.match(r.fontes[3]!.detalhe, /HTTP 500/);
   assert.equal(r.partes.length, 3, 'uma parte por página lida');
   assert.ok(r.partes.every((p) => p.tipo === 'texto'));
-  assert.match((r.partes[0] as { texto: string }).texto, /^\[Site\] https:\/\/www\.empresa\.com\.br\/\nTítulo: Empresa\n/);
+  assert.match((r.partes[0] as { texto: string }).texto, /^\[Site A\]\nTítulo: Empresa\n/);
+  assert.deepEqual(r.fontes.map((f) => f.apelido), ['Site A', 'Site B', 'Site C', undefined]);
   assert.match(r.fontes[2]!.detalhe, /quase não tem texto/, 'página curta diz que chegou curta');
 });
 
@@ -498,7 +536,7 @@ test('site: o charset que o site declara', async () => {
   // O rótulo tem de MANDAR: UTF-8 válido declarado como iso-8859-2 é lido como iso-8859-2.
   const declarado = new Uint8Array([...b('<p>'), 0xe3, 0x20, ...b(TEXTO_LONGO), ...b('</p>')]);
   const l2 = redeFalsa({ 'https://a.com.br/': { tipo: 'text/html; charset=iso-8859-2', corpo: declarado } });
-  assert.match((((await lerSite('a.com.br', l2.rede)).partes[0]) as { texto: string }).texto, /^\[Site\][^\n]*\nă /m);
+  assert.match((((await lerSite('a.com.br', l2.rede)).partes[0]) as { texto: string }).texto, /^\[Site A\]\nă /m);
   const m2 = redeFalsa({ 'https://a.com.br/': { tipo: 'text/html', corpo: new Uint8Array([...b('<meta charset="iso-8859-2">'), ...declarado]) } });
   assert.match((((await lerSite('a.com.br', m2.rede)).partes[0]) as { texto: string }).texto, /\nă /);
 });
@@ -507,33 +545,41 @@ test('site: o charset que o site declara', async () => {
 // Materiais e Instagram, como chegam à function
 // ---------------------------------------------------------------------------
 
-test('material: PDF e imagem só vão a quem os lê, com o rótulo que o modelo lê antes; texto vai a todos', () => {
-  const pdf = { nome: 'catalogo.pdf', origem: 'material' as const, base64: b64(PDF) };
-  const lido = lerMaterial(pdf, 'anthropic', true);
-  assert.deepEqual(lido.parte, { tipo: 'pdf', nome: 'catalogo.pdf', rotulo: '[Arquivo] catalogo.pdf', base64: b64(PDF) });
+test('material: PDF e imagem só vão a quem os lê, com um apelido sem dígito que o modelo cita; texto vai a todos', () => {
+  const pdf = { nome: 'Tabela_Precos_2025_v350.pdf', origem: 'material' as const, base64: b64(PDF) };
+  const lido = lerMaterial(pdf, 'anthropic', true, 'Arquivo B');
+  assert.deepEqual(lido.parte, { tipo: 'pdf', nome: 'Arquivo B.pdf', rotulo: '[Arquivo B]', base64: b64(PDF) });
   assert.equal(lido.fonte.lida, true);
-  const recusado = lerMaterial(pdf, 'deepseek', false);
+  assert.equal(lido.fonte.apelido, 'Arquivo B');
+  assert.equal(lido.fonte.rotulo, 'Tabela_Precos_2025_v350.pdf', 'a tela mostra o nome de verdade');
+  const recusado = lerMaterial(pdf, 'deepseek', false, 'Arquivo B');
   assert.equal(recusado.parte, null);
   assert.match(recusado.fonte.detalhe, /\(deepseek\) não lê PDF nem imagem.*Claude, OpenAI ou OpenRouter/);
 
-  const print = lerMaterial({ nome: 'perfil.jpg', origem: 'instagram', base64: b64(PNG) }, 'openai', true);
-  assert.deepEqual(print.parte, { tipo: 'imagem', nome: 'perfil.jpg', rotulo: '[Instagram] print perfil.jpg', mime: 'image/png', base64: b64(PNG) });
-  assert.equal(print.fonte.rotulo, 'print do Instagram (perfil.jpg)');
+  const print = lerMaterial({ nome: 'IMG_4521.jpg', origem: 'instagram', base64: b64(PNG) }, 'openai', true, 'Print A');
+  assert.deepEqual(print.parte, { tipo: 'imagem', nome: 'Print A', rotulo: '[Print A]', mime: 'image/png', base64: b64(PNG) });
+  assert.equal(print.fonte.rotulo, 'print do Instagram (IMG_4521.jpg)');
 
-  const txt = lerMaterial({ nome: 'sobre.txt', origem: 'material', base64: b64(new Uint8Array([0x61, 0xe7, 0xe3, 0x6f, 0x0d, 0x0a, 0x6f, 0x6b])) }, 'deepseek', false);
-  assert.deepEqual(txt.parte, { tipo: 'texto', texto: '[Arquivo] sobre.txt\nação\nok' });
-  const html = lerMaterial({ nome: 'pagina.html', origem: 'material', base64: b64('<title>T</title><script>x()</script><p>Planos</p>') }, 'perplexity', false);
-  assert.deepEqual(html.parte, { tipo: 'texto', texto: '[Arquivo] pagina.html\nT\nPlanos' });
+  const txt = lerMaterial({ nome: 'sobre_2025.txt', origem: 'material', base64: b64(new Uint8Array([0x61, 0xe7, 0xe3, 0x6f, 0x0d, 0x0a, 0x6f, 0x6b])) }, 'deepseek', false, 'Arquivo A');
+  assert.deepEqual(txt.parte, { tipo: 'texto', texto: '[Arquivo A]\nação\nok' });
+  const html = lerMaterial({ nome: 'pagina.html', origem: 'material', base64: b64('<title>T</title><script>x()</script><p>Planos</p>') }, 'perplexity', false, 'Arquivo C');
+  assert.deepEqual(html.parte, { tipo: 'texto', texto: '[Arquivo C]\nT\nPlanos' });
+  // O número do nome do arquivo nunca chega ao modelo: na linha do preço, o freio o aceitaria como valor.
+  for (const r of [lido, print, txt]) {
+    const p = r.parte as { nome?: string; rotulo?: string; texto?: string };
+    assert.doesNotMatch(`${p.nome ?? ''} ${p.rotulo ?? ''} ${p.texto ?? ''}`, /\d/);
+  }
 });
 
 test('material: o que chega errado é recusado com o nome do arquivo', () => {
-  assert.match(lerMaterial({ nome: 'a.pdf', origem: 'material', base64: 'não é base64' }, 'anthropic', true).fonte.detalhe, /corrompido/);
-  assert.match(lerMaterial({ nome: 'a.pdf', origem: 'material', base64: b64('<html>') }, 'anthropic', true).fonte.detalhe, /"a\.pdf" não é um PDF/);
-  assert.match(lerMaterial({ nome: 'a.exe', origem: 'material', base64: b64('MZ') }, 'anthropic', true).fonte.detalhe, /só PDF/);
-  assert.match(lerMaterial({ nome: 'a.txt', origem: 'material', base64: b64('   \n ') }, 'anthropic', true).fonte.detalhe, /não tem texto/);
-  const longo = lerMaterial({ nome: 'a.txt', origem: 'material', base64: b64('x'.repeat(TETO_TEXTO_DO_ARQUIVO + 10)) }, 'anthropic', true);
+  const ler = (nome: string, base64: string) => lerMaterial({ nome, origem: 'material', base64 }, 'anthropic', true, 'Arquivo A');
+  assert.match(ler('a.pdf', 'não é base64').fonte.detalhe, /corrompido/);
+  assert.match(ler('a.pdf', b64('<html>')).fonte.detalhe, /"a\.pdf" não é um PDF/);
+  assert.match(ler('a.exe', b64('MZ')).fonte.detalhe, /só PDF/);
+  assert.match(ler('a.txt', b64('   \n ')).fonte.detalhe, /não tem texto/);
+  const longo = ler('a.txt', b64('x'.repeat(TETO_TEXTO_DO_ARQUIVO + 10)));
   assert.match(longo.fonte.detalhe, /lido até 40\.000 caracteres/);
-  assert.equal((longo.parte as { texto: string }).texto.length, '[Arquivo] a.txt\n'.length + TETO_TEXTO_DO_ARQUIVO);
+  assert.equal((longo.parte as { texto: string }).texto.length, '[Arquivo A]\n'.length + TETO_TEXTO_DO_ARQUIVO);
 });
 
 test('instagram: o @ não se lê por robô; o que se lê é o que a pessoa colou', () => {
@@ -562,6 +608,11 @@ test('instagram: link de publicação no campo do perfil não vira "@p"', () => 
     assert.equal(r.parte, null);
     assert.equal(r.fonte!.lida, false);
   }
+  for (const s2 of ['https://www.instagram.com/s/aGlnaGxpZ2h0OjE4MDQ1?story_media_id=123&igsh=abc',
+    'https://www.instagram.com/share/BAm3XyZ12/', 'https://www.instagram.com/corretora/p/C8x/']) {
+    assert.match(perfilDoInstagram(s2).motivo ?? '', /link de uma publicação/, s2);
+  }
+  assert.deepEqual(perfilDoInstagram('https://www.instagram.com/corretora/reels/'), { handle: 'corretora', motivo: null });
   assert.deepEqual(perfilDoInstagram('@corretora'), { handle: 'corretora', motivo: null });
   assert.deepEqual(perfilDoInstagram(''), { handle: '', motivo: null });
   const comTexto = lerInstagram('https://www.instagram.com/reel/X/', 'bio');
@@ -578,37 +629,55 @@ test('sem informação: só quando a resposta É a marca', () => {
   assert.equal(semInformacao('A Corretora Exemplo vende planos. Sobre preços: [SEM INFORMAÇÃO] nos materiais.'), false);
 });
 
-test('divergência sai do texto: o que vem depois de PARA CONFERIR não entra no agente', () => {
-  const r = separarConferir('A Corretora Exemplo vende planos.\n- Plano Bronze (site).\n\nPARA CONFERIR:\n- Essencial: R$ 289,90 (site) e R$ 249,90 (arquivo tabela-2023.pdf)');
-  assert.equal(r.texto, 'A Corretora Exemplo vende planos.\n- Plano Bronze (site).');
-  assert.equal(r.conferir, '- Essencial: R$ 289,90 (site) e R$ 249,90 (arquivo tabela-2023.pdf)');
-  assert.doesNotMatch(r.texto, /289|249/);
-  assert.deepEqual(separarConferir('Texto.\nPara conferir: nenhuma.'), { texto: 'Texto.', conferir: '' });
-  assert.deepEqual(separarConferir('Só texto.'), { texto: 'Só texto.', conferir: '' });
+test('divergência sai do texto: o que vem depois de PARA CONFERIR não entra no agente, escrito como for', () => {
+  const corpo = 'A Corretora Exemplo vende planos.\n- Plano Bronze (Site A).';
+  const div = '- Essencial: R$ 289,90 (Site A) e R$ 249,90 (Arquivo B)';
+  for (const marca of ['PARA CONFERIR:', '**PARA CONFERIR:**', '**PARA CONFERIR**:', '5. PARA CONFERIR:', 'PARA CONFERIR (divergências):',
+    'PARA CONFERIR', 'PARA CONFERIR：', '### PARA CONFERIR', 'PARA CONFERIR —', '**Para conferir**:', 'Para conferir:']) {
+    const r = separarConferir(`${corpo}\n\n${marca}\n${div}`);
+    assert.equal(r.texto, corpo, marca);
+    assert.equal(r.conferir, div, marca);
+  }
+  assert.deepEqual(separarConferir(`${corpo} PARA CONFERIR: ${div.slice(2)}`), { texto: corpo, conferir: div.slice(2) },
+    'o marcador no fim de uma linha');
   assert.deepEqual(separarConferir('Texto.\n**PARA CONFERIR:** o prazo de carência diverge'), { texto: 'Texto.', conferir: 'o prazo de carência diverge' });
+  for (const nada of ['nenhuma.', 'Nenhuma divergência encontrada.', '\n- Nenhuma divergência.', '\nNão há divergências.', 'Sem divergências encontradas.', '(nenhuma)']) {
+    assert.deepEqual(separarConferir(`Texto.\nPARA CONFERIR: ${nada}`), { texto: 'Texto.', conferir: '' }, nada);
+  }
+  assert.deepEqual(separarConferir('Só texto.'), { texto: 'Só texto.', conferir: '' });
+  // "para conferir" de frase não é marcador.
+  const frase = 'A Corretora Exemplo vende planos.\n- Ligue para conferir a cobertura da sua região.\n- Plano Bronze (Site A).';
+  assert.deepEqual(separarConferir(frase), { texto: frase, conferir: '' });
 });
 
-test('o formato que o prompt pede é o que o freio lê: valor e "sem carência" passam, telefone não vira preço', () => {
-  // As três regras de formato do SISTEMA_DA_COLETA, cada uma posta contra o freio de verdade.
+test('o formato que o prompt pede é o que o freio lê — dos dois lados', () => {
   assert.match(SISTEMA_DA_COLETA, /Uma condição por linha/);
-  assert.match(SISTEMA_DA_COLETA, /Ausência se escreve com "sem"/);
+  assert.match(SISTEMA_DA_COLETA, /"Sem carência" só quando o material diz isso do plano INTEIRO/);
+  assert.match(SISTEMA_DA_COLETA, /nunca "sem carência para consultas"/);
   assert.match(SISTEMA_DA_COLETA, /Telefone, endereço, horário e site ficam numa linha própria/);
-  const contexto = [
+  const freio = (contexto: string, t: string) =>
+    aplicarFreios(t, { proibido: [], tamanho_maximo: null, canal: 'whatsapp', contexto, objetivo: 'resgate' }).situacao;
+  const base = [
     'A Corretora Exemplo vende planos de saúde em Sorocaba.',
-    '- Plano Empresarial: R$ 150,00 por vida (site, página Planos).',
-    '- Sem taxa de adesão no Plano Empresarial (site, página Planos).',
-    '- Sem carência para consultas no Plano Empresarial (site, página Planos).',
+    '- Plano Empresarial: R$ 150,00 por vida (Site A).',
+    '- Sem taxa de adesão no Plano Empresarial (Site A).',
     '- Atendimento: (11) 4004-1234, das 8h às 20h.',
-  ].join('\n');
-  const freio = (t: string) => aplicarFreios(t, { proibido: [], tamanho_maximo: null, canal: 'whatsapp', contexto, objetivo: 'resgate' }).situacao;
-  assert.equal(freio('O Empresarial custa R$ 150,00 por vida.'), 'pronto');
-  assert.equal(freio('No Empresarial não tem carência para consultas.'), 'pronto');
-  assert.equal(freio('O plano custa R$ 20,00.'), 'bloqueado', 'o horário do atendimento não vira preço');
-  assert.equal(freio('O plano custa R$ 1.234,00.'), 'bloqueado', 'o telefone não vira preço');
-  // E o formato que o prompt proíbe é o que dava errado.
-  const negando = contexto.replace('Sem carência para consultas', 'Não há carência para consultas');
-  assert.equal(aplicarFreios('No Empresarial não tem carência para consultas.',
-    { proibido: [], tamanho_maximo: null, canal: 'whatsapp', contexto: negando, objetivo: 'resgate' }).situacao, 'bloqueado');
+  ];
+  // Preço escrito passa; telefone e horário não viram preço.
+  assert.equal(freio(base.join('\n'), 'O Empresarial custa R$ 150,00 por vida.'), 'pronto');
+  assert.equal(freio(base.join('\n'), 'O plano custa R$ 20,00.'), 'bloqueado', 'o horário do atendimento não vira preço');
+  assert.equal(freio(base.join('\n'), 'O plano custa R$ 1.234,00.'), 'bloqueado', 'o telefone não vira preço');
+  // Carência do plano inteiro, na forma "sem": o agente pode dizer.
+  const inteiro = [...base, '- Sem carência no Plano Empresarial (Site A).'].join('\n');
+  assert.equal(freio(inteiro, 'O Empresarial não tem carência.'), 'pronto');
+  // Carência de UMA parte, na forma "não há": sai da fonte, e o agente que
+  // promete carência zero para o resto é barrado — o lado do erro do D76.
+  const parte = [...base, '- Não há carência para consultas no Plano Empresarial (Site A).'].join('\n');
+  assert.equal(freio(parte, 'No Empresarial não tem carência para internação, parto e cirurgia.'), 'bloqueado');
+  assert.equal(freio(parte, 'Pode contratar tranquila: zero carência para tudo.'), 'bloqueado');
+  // E a forma que o prompt PROÍBE para a ausência parcial é a que liberaria isso.
+  const proibida = [...base, '- Sem carência para consultas no Plano Empresarial (Site A).'].join('\n');
+  assert.equal(freio(proibida, 'No Empresarial não tem carência para internação, parto e cirurgia.'), 'pronto');
 });
 
 function modeloFalso(respostas: (() => Response)[] = []) {

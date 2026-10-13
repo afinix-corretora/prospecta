@@ -303,25 +303,62 @@ const BLOCOS = new Set(['p', 'div', 'section', 'article', 'header', 'footer', 'n
   'h4', 'h5', 'h6', 'ul', 'ol', 'tr', 'table', 'thead', 'tbody', 'tfoot', 'blockquote', 'dd', 'dt', 'dl', 'form',
   'figure', 'figcaption', 'address', 'pre', 'hr', 'body', 'html', 'head']);
 /**
- * O que NÃO separa nada: `R$ <strong>189</strong><sup>,90</sup>` é "R$ 189,90".
- * Com espaço, o preço virava "189 ,90", e o freio passava a barrar o valor
- * certo e liberar "R$ 189" e "R$ 90" (D76).
+ * As tags de texto. Elas não decidem sozinhas se separam: quem decide são os
+ * caracteres dos dois lados (`resolverFronteiras`). `R$ <b>189</b><sup>,90</sup>`
+ * é "R$ 189,90" — com espaço, o preço virava "189 ,90" e o freio passava a
+ * barrar o valor certo (D76) —, mas `R$ 89<sup>90</sup>` é "R$ 89 90", e não um
+ * "R$ 8990" que a página não escreve e o freio liberaria.
  */
 const EM_LINHA = new Set(['a', 'span', 'strong', 'b', 'i', 'em', 'sup', 'sub', 'small', 'font', 'label', 'abbr',
   'u', 's', 'mark', 'code', 'q', 'cite', 'time', 'data', 'bdi', 'bdo', 'wbr', 'ins', 'del', 'big', 'nobr']);
 const MAX_LINKS = 2000;
 const NOME_DA_TAG = /<(\/?)([a-zA-Z][a-zA-Z0-9:-]*)/y;
 const fechamentos = new Map<string, RegExp>();
+/** A marca de fronteira de tag de texto, resolvida no fim. Escrita pelo código, e não como escape (D77b). */
+const FRONTEIRA = String.fromCharCode(0);
+/** Depois destes, a fronteira junta: ",90", "/mês", "%". */
+const JUNTA_COM_O_QUE_VEM = new Set([',', '.', ';', ':', '!', '?', '/', '%', ')', ']']);
+/** Antes destes também: "(11)", "[1]". */
+const JUNTA_COM_O_QUE_VEIO = new Set(['(', '[', '/']);
+/** Vírgula ou ponto seguido de dígito é o centavo ou o milhar: "99,<sup>90</sup>" é "99,90". */
+const DECIMAL = /[,.]/;
+
+function ehBranco(c: string | undefined): boolean {
+  return c === undefined || /\s/.test(c);
+}
+
+/** A fronteira entre duas letras ou dois dígitos separa; junto de pontuação, junta. */
+function resolverFronteiras(s: string): string {
+  if (!s.includes(FRONTEIRA)) return s;
+  const partes: string[] = [];
+  let i = 0;
+  while (i < s.length) {
+    const j = s.indexOf(FRONTEIRA, i);
+    if (j < 0) { partes.push(s.slice(i)); break; }
+    partes.push(s.slice(i, j));
+    let k = j;
+    while (s[k] === FRONTEIRA) k++;
+    const antes = s[j - 1];
+    const depois = s[k];
+    if (!ehBranco(antes) && !ehBranco(depois) && !JUNTA_COM_O_QUE_VEM.has(depois!) && !JUNTA_COM_O_QUE_VEIO.has(antes!)
+      && !(DECIMAL.test(antes!) && /\d/.test(depois!))) {
+      partes.push(' ');
+    }
+    i = k;
+  }
+  return partes.join('');
+}
 
 /**
  * O texto que uma pessoa leria na página — sem script, estilo, menus de ícone
  * e comentários. Não executa nada: site que monta o conteúdo no navegador
  * chega quase vazio, e quem lê isto diz que chegou (`POUCO_TEXTO`).
  *
- * Uma varredura só, para a frente: cada `<` é olhado uma vez, e o que abre e
- * não fecha (comentário, script) encerra a leitura ali em vez de ser procurado
- * de novo a cada posição — HTML hostil de 2 MB não pode custar mais que HTML
- * comum de 2 MB.
+ * Uma varredura só, para a frente: cada `<` é olhado uma vez, o texto entre
+ * duas tags de verdade vira UMA fatia (o `<` que não abre tag fica dentro
+ * dela), e o bloco que abre e não fecha é lembrado pelo nome, para não ser
+ * procurado de novo. HTML hostil não pode custar muito mais que HTML comum do
+ * mesmo tamanho — `tests/coleta.test.ts` mede os dois na mesma execução.
  */
 export function htmlParaTexto(html: string): PaginaLida {
   const saida: string[] = [];
@@ -330,54 +367,62 @@ export function htmlParaTexto(html: string): PaginaLida {
   let descricao = '';
   let tituloOg = '';
   let link: { href: string; desde: number } | null = null;
+  const semFechamento = new Set<string>();
+  const separar = (x: string) => { if (saida[saida.length - 1] !== x) saida.push(x); };
   const fecharLink = () => {
     if (link && links.length < MAX_LINKS) {
-      links.push({ href: decodificarEntidades(link.href).trim(), texto: limparLinha(decodificarEntidades(saida.slice(link.desde).join(''))) });
+      const escrito = resolverFronteiras(decodificarEntidades(saida.slice(link.desde).join(''))).replace(/\n/g, ' ');
+      links.push({ href: decodificarEntidades(link.href).trim(), texto: limparLinha(escrito) });
     }
     link = null;
   };
   const n = html.length;
+  let texto = 0; // onde começa o texto ainda não emitido
+  const emitir = (ate: number) => { if (ate > texto) saida.push(html.slice(texto, ate)); };
   let i = 0;
   while (i < n) {
     const lt = html.indexOf('<', i);
-    if (lt < 0) { saida.push(html.slice(i)); break; }
-    if (lt > i) saida.push(html.slice(i, lt));
-    i = lt;
-    if (html.startsWith('<!--', i)) {
-      const fim = html.indexOf('-->', i + 4);
-      if (fim < 0) break;
-      i = fim + 3;
+    if (lt < 0) break;
+    if (html.startsWith('<!--', lt)) {
+      emitir(lt);
+      const fim = html.indexOf('-->', lt + 4);
+      if (fim < 0) { texto = n; break; }
+      i = texto = fim + 3;
       continue;
     }
-    NOME_DA_TAG.lastIndex = i;
+    NOME_DA_TAG.lastIndex = lt;
     const m = NOME_DA_TAG.exec(html);
     if (!m) {
-      // "<!doctype", "<?xml" e o "<" de texto ("menos de < 3 vidas").
-      if (html[i + 1] === '!' || html[i + 1] === '?') {
-        const fim = html.indexOf('>', i);
-        if (fim < 0) break;
-        i = fim + 1;
+      // "<!doctype" e "<?xml" saem; o "<" de texto ("menos de < 3 vidas") fica na fatia.
+      if (html[lt + 1] === '!' || html[lt + 1] === '?') {
+        emitir(lt);
+        const fim = html.indexOf('>', lt);
+        if (fim < 0) { texto = n; break; }
+        i = texto = fim + 1;
       } else {
-        saida.push('<');
-        i++;
+        i = lt + 1;
       }
       continue;
     }
-    const fimDaTag = html.indexOf('>', i);
-    if (fimDaTag < 0) break;
-    const tag = html.slice(i, Math.min(fimDaTag + 1, i + 4096));
+    const fimDaTag = html.indexOf('>', lt);
+    if (fimDaTag < 0) { emitir(lt); texto = n; break; }
+    emitir(lt);
+    const tag = html.slice(lt, Math.min(fimDaTag + 1, lt + 4096));
     const nome = m[2]!.toLowerCase();
     const fecha = m[1] === '/';
-    i = fimDaTag + 1;
-    if (!fecha && PULADAS.has(nome)) {
+    i = texto = fimDaTag + 1;
+    if (!fecha && PULADAS.has(nome) && !tag.endsWith('/>') && !semFechamento.has(nome)) {
       let re = fechamentos.get(nome);
       if (!re) { re = new RegExp(`</${nome}\\s*>`, 'gi'); fechamentos.set(nome, re); }
       re.lastIndex = i;
       const f = re.exec(html);
-      if (nome === 'title' && !titulo) titulo = limparLinha(decodificarEntidades(html.slice(i, f ? f.index : i)));
-      if (!f) break;
-      i = f.index + f[0].length;
-      continue;
+      if (f) {
+        if (nome === 'title' && !titulo) titulo = limparLinha(decodificarEntidades(html.slice(i, f.index)));
+        i = texto = f.index + f[0].length;
+        continue;
+      }
+      // Sem fechamento: a tag vale como tag comum, e o resto da página continua sendo lido.
+      semFechamento.add(nome);
     }
     if (nome === 'meta') {
       const a = atributos(tag);
@@ -390,6 +435,7 @@ export function htmlParaTexto(html: string): PaginaLida {
     }
     if (nome === 'a') {
       fecharLink();
+      separar(FRONTEIRA);
       if (!fecha) {
         const href = atributos(tag).href;
         if (href) link = { href, desde: saida.length };
@@ -397,12 +443,13 @@ export function htmlParaTexto(html: string): PaginaLida {
       continue;
     }
     if (nome === 'li' && !fecha) saida.push('\n- ');
-    else if (nome === 'br' || BLOCOS.has(nome)) saida.push('\n');
-    else if (!EM_LINHA.has(nome)) saida.push(' ');
+    else if (nome === 'br' || BLOCOS.has(nome)) separar('\n');
+    else separar(EM_LINHA.has(nome) ? FRONTEIRA : ' ');
   }
+  emitir(n);
   fecharLink();
   const linhas: string[] = [];
-  for (const l of decodificarEntidades(saida.join('')).split('\n').map(limparLinha)) {
+  for (const l of resolverFronteiras(decodificarEntidades(saida.join(''))).split('\n').map(limparLinha)) {
     if (!l || l === '-' || l === linhas[linhas.length - 1]) continue;
     linhas.push(l);
   }
@@ -538,8 +585,23 @@ export function enderecoInterno(ip: string): boolean {
 export interface Fonte {
   readonly origem: 'site' | 'instagram' | 'material';
   readonly rotulo: string;
+  /**
+   * Como o modelo conhece esta fonte ("Site A", "Arquivo B", "Print A"), e
+   * como o rascunho a cita. Sem dígito de propósito: o freio aceita como valor
+   * todo número da frase que fala de preço, e "(Tabela_2025_v350.pdf)" na linha
+   * do preço tornaria "R$ 350" um preço que o agente pode dizer. A tela mostra
+   * o apelido ao lado do nome de verdade.
+   */
+  readonly apelido?: string;
   readonly lida: boolean;
   readonly detalhe: string;
+}
+
+/** A, B, …, Z, AA, AB… */
+export function letra(n: number): string {
+  let s = '';
+  for (let i = n; i >= 0; i = Math.floor(i / 26) - 1) s = String.fromCharCode(65 + (i % 26)) + s;
+  return s;
 }
 
 export interface RedeDoSite {
@@ -671,21 +733,21 @@ export function chaveDaPagina(u: URL): string {
   return host + caminho + (params.length ? `?${params.map(([k, v]) => `${k}=${v}`).join('&')}` : '');
 }
 
-// O alvo é o caminho e o texto do link, sem acento e com espaço virando hífen:
-// "Quem Somos" sobre `?page_id=12` (o padrão do WordPress) é a página sobre.
-const SOBRE = /(^|[^a-z])(quem-somos|a-empresa|sobre-nos|sobre-a-empresa|institucional|nossa-historia|historia|about|about-us)([^a-z]|$)/;
-const OFERTA = /(^|[^a-z])(produtos?|servicos?|planos?|solucoes|solucao|seguros?|ofertas?|catalogo|precos?|beneficios)([^a-z]|$)/;
-const CONTATO = /(^|[^a-z])(contato|fale-conosco|atendimento|onde-estamos|unidades|contact)([^a-z]|$)/;
+// O alvo é cada pedaço do caminho (sem a extensão) e o texto do link, sem
+// acento e com espaço virando hífen: "Quem Somos" sobre `?page_id=12` (o padrão
+// do WordPress) é a página sobre, e `/sobre-a-escola` e `/contatos.php` também.
+const SOBRE = /^(sobre|quem-?somos|a-?empresa|nossa-?empresa|institucional|nossa-?historia|historia|about(-us)?|empresa)(-|$)/;
+const OFERTA = /^(nossos?-?)?(produtos?|servicos?|planos?|solucoes|solucao|seguros?|ofertas?|catalogo|precos?|beneficios)(-|$)/;
+const CONTATO = /^(contatos?|fale-?conosco|atendimento|onde-?estamos|unidades|contact(-us)?)(-|$)/;
 // Post de blog fala "sobre" tudo; não é a página sobre a empresa.
 const CONTEUDO = /\/(blog|noticias?|artigos?|posts?|tags?|categorias?|category|author|autor|eventos?)(\/|$)/;
 
 function notaDaPagina(caminho: string, rotulo: string): number {
   if (CONTEUDO.test(caminho)) return 0;
-  const alvo = `${caminho} ${rotulo}`;
-  const segmentos = caminho.split('/').filter(Boolean);
-  if (SOBRE.test(alvo) || segmentos.includes('sobre') || segmentos.includes('empresa') || /^sobre(-|$)/.test(rotulo) || rotulo === 'empresa') return 3;
-  if (OFERTA.test(alvo)) return 2;
-  if (CONTATO.test(alvo)) return 1;
+  const pedacos = [...caminho.split('/').filter(Boolean).map((x) => x.replace(/\.(php|html?|aspx?|jsp)$/, '')), rotulo];
+  if (pedacos.some((x) => SOBRE.test(x))) return 3;
+  if (pedacos.some((x) => OFERTA.test(x))) return 2;
+  if (pedacos.some((x) => CONTATO.test(x))) return 1;
   return 0;
 }
 
@@ -723,10 +785,10 @@ export function paginasParaLer(links: PaginaLida['links'], base: URL, max = PAGI
   return candidatas.sort((a, b) => b.nota - a.nota || a.ordem - b.ordem).slice(0, max).map((c) => c.url);
 }
 
-function parteDaPagina(url: URL, p: PaginaLida, texto: string): Parte {
+function parteDaPagina(apelido: string, p: PaginaLida, texto: string): Parte {
   return {
     tipo: 'texto',
-    texto: [`[Site] ${url.href}`, p.titulo && `Título: ${p.titulo}`, p.descricao && `Descrição: ${p.descricao}`, texto]
+    texto: [`[${apelido}]`, p.titulo && `Título: ${p.titulo}`, p.descricao && `Descrição: ${p.descricao}`, texto]
       .filter(Boolean).join('\n'),
   };
 }
@@ -761,8 +823,10 @@ export async function lerSite(bruto: string, rede: RedeDoSite): Promise<{ partes
         + 'o site. Cole o texto dele no campo acima ou anexe a página salva em Materiais');
     }
     const lida = (p.titulo + p.descricao + p.texto).trim().length > 0;
-    fontes.push({ origem: 'site', rotulo: url.href, lida, detalhe: lida ? notas.join('; ') : notas.slice(1).join('; ') });
-    if (lida) partes.push(parteDaPagina(url, p, corpo));
+    const apelido = `Site ${letra(partes.length)}`;
+    fontes.push({ origem: 'site', rotulo: url.href, ...(lida ? { apelido } : {}), lida,
+      detalhe: lida ? notas.join('; ') : notas.slice(1).join('; ') });
+    if (lida) partes.push(parteDaPagina(apelido, p, corpo));
     return p;
   };
 
@@ -793,20 +857,19 @@ function rotuloDoMaterial(m: MaterialDoPedido): string {
   return m.origem === 'instagram' ? `print do Instagram (${m.nome})` : m.nome;
 }
 
-/** O que o modelo lê antes do anexo: sem isto ele não sabe de onde veio o que cita. */
-function rotuloParaOModelo(m: MaterialDoPedido): string {
-  return m.origem === 'instagram' ? `[Instagram] print ${m.nome}` : `[Arquivo] ${m.nome}`;
-}
 
 /**
  * Um arquivo anexado. A tela já conferiu — esta é a conferência que vale,
  * porque o pedido pode não ter vindo da tela. PDF e imagem só vão a quem os
  * lê (`leAnexos`); HTML e TXT viram texto aqui e vão a qualquer conta.
  */
-export function lerMaterial(m: MaterialDoPedido, provedor: string, leAnexos: boolean): { parte: Parte | null; fonte: Fonte } {
+export function lerMaterial(
+  m: MaterialDoPedido, provedor: string, leAnexos: boolean, apelido: string,
+): { parte: Parte | null; fonte: Fonte } {
   const rotulo = rotuloDoMaterial(m);
   const origem = m.origem;
   const recusa = (detalhe: string) => ({ parte: null, fonte: { origem, rotulo, lida: false, detalhe } });
+  const lida = (detalhe: string) => ({ origem, rotulo, apelido, lida: true, detalhe });
   const tamanho = tamanhoDoBase64(m.base64);
   if (tamanho === null) return recusa('o arquivo chegou corrompido (não é base64)');
   const conf = conferirArquivo(m.nome, tamanho, bytesDoBase64(m.base64, CABECA));
@@ -818,9 +881,9 @@ export function lerMaterial(m: MaterialDoPedido, provedor: string, leAnexos: boo
         + 'OpenRouter (com modelo que leia imagem), ou anexe o texto em .txt');
     }
     const parte: Parte = f.tipo === 'pdf'
-      ? { tipo: 'pdf', nome: m.nome, rotulo: rotuloParaOModelo(m), base64: m.base64 }
-      : { tipo: 'imagem', nome: m.nome, rotulo: rotuloParaOModelo(m), mime: f.mime as 'image/png' | 'image/jpeg', base64: m.base64 };
-    return { parte, fonte: { origem, rotulo, lida: true, detalhe: `${f.nome}, ${emMb(tamanho)}` } };
+      ? { tipo: 'pdf', nome: `${apelido}.pdf`, rotulo: `[${apelido}]`, base64: m.base64 }
+      : { tipo: 'imagem', nome: apelido, rotulo: `[${apelido}]`, mime: f.mime as 'image/png' | 'image/jpeg', base64: m.base64 };
+    return { parte, fonte: lida(`${f.nome}, ${emMb(tamanho)}`) };
   }
   const bytes = bytesDoBase64(m.base64);
   const texto = f.tipo === 'html'
@@ -830,17 +893,16 @@ export function lerMaterial(m: MaterialDoPedido, provedor: string, leAnexos: boo
   const corpo = cortar(texto, TETO_TEXTO_DO_ARQUIVO);
   const notas = [`${f.nome}, ${numero(corpo.length)} caracteres`];
   if (texto.length > TETO_TEXTO_DO_ARQUIVO) notas.push(`lido até ${numero(corpo.length)} caracteres`);
-  return {
-    parte: { tipo: 'texto', texto: `${rotuloParaOModelo(m)}\n${corpo}` },
-    fonte: { origem, rotulo, lida: true, detalhe: notas.join('; ') },
-  };
+  return { parte: { tipo: 'texto', texto: `[${apelido}]\n${corpo}` }, fonte: lida(notas.join('; ')) };
 }
 
 export const TETO_DO_PERFIL = 5_000;
 
-/** O que vem depois de instagram.com/ e não é perfil: publicação, reel, story… */
+/** O que vem depois de instagram.com/ e não é perfil: publicação, reel, story, destaque, compartilhamento… */
 const NAO_E_PERFIL = new Set(['p', 'reel', 'reels', 'tv', 'stories', 'explore', 'accounts', 'direct', '_u', 'about',
-  'legal', 'developer', 'web', 'challenge']);
+  'legal', 'developer', 'web', 'challenge', 's', 'share', 'highlights']);
+/** O que pode vir depois do @ num link de perfil. */
+const ABAS_DO_PERFIL = new Set(['reels', 'tagged', 'guides', 'channel', 'saved']);
 
 /**
  * O @ como a pessoa digitou, conferido: vazio, um perfil, ou o motivo de não
@@ -850,7 +912,10 @@ const NAO_E_PERFIL = new Set(['p', 'reel', 'reels', 'tv', 'stories', 'explore', 
 export function perfilDoInstagram(bruto: string): { handle: string; motivo: string | null } {
   const h = normalizarHandle(bruto ?? '');
   if (!h) return { handle: '', motivo: null };
-  if (NAO_E_PERFIL.has(h)) return { handle: h, motivo: 'é o link de uma publicação, não do perfil: cole o @ ou o link do perfil' };
+  // Num link, o perfil é UM pedaço do caminho (e, no máximo, uma aba dele): o resto é publicação.
+  const caminho = (bruto ?? '').match(/instagram[.]com\/([^?#]*)/i)?.[1]?.split('/').filter(Boolean) ?? [];
+  const publicacao = NAO_E_PERFIL.has(h) || caminho.length > 2 || (caminho.length === 2 && !ABAS_DO_PERFIL.has(caminho[1]!.toLowerCase()));
+  if (publicacao) return { handle: h, motivo: 'é o link de uma publicação, não do perfil: cole o @ ou o link do perfil' };
   if (!handleValido(h)) return { handle: h, motivo: 'não é um @ do Instagram' };
   return { handle: h, motivo: null };
 }
@@ -930,15 +995,18 @@ export const SISTEMA_DA_COLETA = [
   '- para quem é cada oferta e o que a diferencia;',
   '- as condições que os materiais ESCREVEM (preço, carência, cobertura, prazo, região), copiadas exatamente',
   '  como estão, cada uma com a origem entre parênteses — o rótulo entre colchetes que abre o material, por',
-  '  exemplo "(site, página Planos)" ou o nome do arquivo;',
+  '  exemplo "(Site A)" ou "(Arquivo B)", e nada além dele;',
   '- como contratar ou falar com uma pessoa (canais, horários), se os materiais disserem.',
   '',
   'Regras:',
   '- Use só o que está nos materiais. O que não estiver lá não se escreve, nem como suposição: não complete',
   '  preço, carência, cobertura ou prazo que falte, e não arredonde número.',
   '- Uma condição por linha, começando com hífen.',
-  '- Ausência se escreve com "sem": "sem carência para consultas", "sem taxa de adesão". Nunca "não há" ou',
-  '  "não tem" numa linha de preço ou de carência.',
+  '- Ausência de taxa ou de custo se escreve com "sem": "sem taxa de adesão". Nunca "não há" ou "não tem"',
+  '  numa linha de preço.',
+  '- Carência: escreva cada uma com a cobertura a que se refere, como o material diz ("carência de 24 horas',
+  '  para urgência"). "Sem carência" só quando o material diz isso do plano INTEIRO; se for só de uma parte',
+  '  (só consultas, só exames), escreva "não há carência para consultas" — nunca "sem carência para consultas".',
   '- Telefone, endereço, horário e site ficam numa linha própria, sem palavra de preço, valor ou pagamento.',
   '- Se dois materiais dizem coisas diferentes sobre a mesma condição, não escreva nenhuma das versões no texto.',
   `  Depois de tudo, numa linha sozinha, escreva ${PARA_CONFERIR} e liste ali cada divergência, com as duas`,
@@ -966,14 +1034,30 @@ export function semInformacao(texto: string): boolean {
 
 /**
  * O rascunho e as divergências, separados: o que vem depois de
- * `PARA_CONFERIR` não entra no texto do agente. "Nenhuma" não é divergência.
+ * `PARA_CONFERIR` não entra no texto do agente. O marcador é reconhecido pelo
+ * sentido e não pela pontuação — "**PARA CONFERIR**:", "5. Para conferir",
+ * "PARA CONFERIR (divergências)", no começo ou no fim de uma linha —, porque
+ * marcador que escapa deixa as duas versões de um preço no contexto. E
+ * "nenhuma divergência encontrada" não é divergência.
  */
 export function separarConferir(resposta: string): { texto: string; conferir: string } {
   const linhas = resposta.split('\n');
-  const i = linhas.findIndex((l) => /^\W*para conferir\s*:/i.test(semMarcas(l)));
+  // "Ligue para conferir a cobertura" é frase, não marcador: o marcador abre a
+  // linha seguido de dois-pontos, parêntese ou fim — ou vem em maiúsculas,
+  // como o prompt pede, em qualquer ponto dela.
+  const i = linhas.findIndex((l) => /^[\s*_#>\-\d.)]*para conferir[\s*_]*([(:：—–-]|$)/i.test(l) || l.includes('PARA CONFERIR'));
   if (i < 0) return { texto: resposta.trim(), conferir: '' };
-  const primeira = linhas[i]!.replace(/^.*?:/, '').replace(/^[\s*_]+/, '').trim();
-  const conferir = [primeira, ...linhas.slice(i + 1)].join('\n').trim();
-  const vazio = /^[\s\-.(]*(nenhuma?|nada|sem divergencias?)[\s.)]*$/.test(semMarcas(conferir));
-  return { texto: linhas.slice(0, i).join('\n').trim(), conferir: vazio ? '' : conferir };
+  const linha = linhas[i]!;
+  const onde = linha.includes('PARA CONFERIR') ? linha.indexOf('PARA CONFERIR') : linha.search(/para conferir/i);
+  // O que vem antes do marcador na mesma linha: texto, ou só a numeração e a marcação ("5. **").
+  const cru = linha.slice(0, onde);
+  const antes = /^[\s*_#>\-:\d.)]*$/.test(cru) ? '' : cru.replace(/[\s*_#>\-:—–]+$/, '').trim();
+  const depois = linha.slice(onde + 'para conferir'.length)
+    .replace(/^[\s*_]*(\([^)\n]{0,40}\))?[\s*_]*[:：—–-]?[\s*_]*/, '').trim();
+  const conferir = [depois, ...linhas.slice(i + 1)].join('\n').trim();
+  const texto = [...linhas.slice(0, i), ...(antes ? [antes] : [])].join('\n').trim();
+  const normal = semMarcas(conferir).replace(/^[\s\-*•.]+/, '').replace(/^\((.*)\)\.?$/, '$1');
+  const vazio = !conferir || (!/\d/.test(normal) && !normal.includes('(')
+    && /^(nenhuma?|nada|sem|nao (ha|houve|foram|existem|encontrei|identifiquei))\b/.test(normal) && normal.length < 80);
+  return { texto, conferir: vazio ? '' : conferir };
 }

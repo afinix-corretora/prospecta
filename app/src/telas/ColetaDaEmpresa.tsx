@@ -61,6 +61,9 @@ export function ColetaDaEmpresa({ contexto, aoUsar, contas, provedores, contaDoA
   // campo continua como o rascunho deixou — depois disso, desfazer apagaria o
   // que a pessoa escreveu em cima.
   const [desfazer, setDesfazer] = useState<{ antes: string; depois: string } | null>(null);
+  // O que os materiais divergem continua à vista DEPOIS de usar — é aí que a
+  // pessoa escreve a versão certa —, até ela dispensar.
+  const [divergencia, setDivergencia] = useState('');
   // Um clique, uma leitura: a trava é ref, não estado (D73) — cada leitura
   // gasta a conta de IA do cliente.
   const emCurso = useRef(false);
@@ -113,7 +116,7 @@ export function ColetaDaEmpresa({ contexto, aoUsar, contas, provedores, contaDoA
   async function ler() {
     if (!conta || falta.length || anexando || emCurso.current) return;
     emCurso.current = true;
-    setLendo(true); setErro(''); setRes(null);
+    setLendo(true); setErro(''); setRes(null); setDivergencia('');
     try { setRes({ ...await lerEmpresa(pedidoDaColeta(e, conta.id, empresa)), lidoCom: conta.nome }); }
     catch (x) { setErro(mensagemDeErro(x)); }
     finally { setLendo(false); emCurso.current = false; }
@@ -124,6 +127,7 @@ export function ColetaDaEmpresa({ contexto, aoUsar, contas, provedores, contaDoA
     const r = aplicarRascunho(contexto, res.texto, modo);
     if (!r.ok) { setErro(r.motivo); return; }
     setDesfazer({ antes: contexto, depois: r.texto });
+    setDivergencia(res.conferir ?? '');
     aoUsar(r.texto);
     setRes(null); setErro('');
   }
@@ -239,7 +243,7 @@ export function ColetaDaEmpresa({ contexto, aoUsar, contas, provedores, contaDoA
               {res.fontes.map((f, i) => (
                 <li key={i}>
                   <span className={`chip ${f.lida ? 'ok' : 'erro'}`}>{f.lida ? 'lido' : 'não lido'}</span>
-                  <span><b>{f.rotulo}</b> — {f.detalhe}</span>
+                  <span><b>{f.apelido ? `${f.apelido} · ` : ''}{f.rotulo}</b> — {f.detalhe}</span>
                 </li>
               ))}
             </ul>
@@ -254,7 +258,7 @@ export function ColetaDaEmpresa({ contexto, aoUsar, contas, provedores, contaDoA
               {res.conferir && (
                 <Aviso tipo="neutro"><b>Os materiais divergem — nada disto foi para o rascunho:</b>
                   <span className="conferir">{res.conferir}</span>
-                  Se a condição vale, escreva a versão certa no texto depois de usar.</Aviso>
+                  Se a condição vale, escreva a versão certa no texto antes de salvar o agente.</Aviso>
               )}
               <Aviso tipo="neutro">Confira antes de usar, principalmente os números: preço, carência e prazo que
                 estiverem neste texto o agente passa a poder dizer, porque o freio confere o que ele escreve contra o que
@@ -273,9 +277,14 @@ export function ColetaDaEmpresa({ contexto, aoUsar, contas, provedores, contaDoA
         </div>
       )}
 
+      {divergencia && !res && (
+        <Aviso tipo="neutro"><b>Para conferir antes de salvar — os materiais divergem, e nada disto está no texto:</b>
+          <span className="conferir">{divergencia}</span>
+          <button className="link" type="button" onClick={() => setDivergencia('')}>Dispensar</button></Aviso>
+      )}
       {desfazer && !res && contexto === desfazer.depois && (
         <Aviso tipo="ok">O rascunho foi para o texto acima — ele só fica no agente quando você salvar.{' '}
-          <button className="link" type="button" onClick={() => { aoUsar(desfazer.antes); setDesfazer(null); }}>Desfazer</button></Aviso>
+          <button className="link" type="button" onClick={() => { aoUsar(desfazer.antes); setDesfazer(null); setDivergencia(''); }}>Desfazer</button></Aviso>
       )}
     </div>
   );

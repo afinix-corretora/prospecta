@@ -50,6 +50,9 @@ async function lerCorpo(req: Request, teto: number): Promise<string | null> {
 }
 
 Deno.serve(async (req) => {
+  // O prazo conta desde aqui: o corpo grande leva tempo para subir, e esse
+  // tempo também é dos 150 s em que o Supabase corta com 504.
+  const inicio = Date.now();
   if (req.method === 'OPTIONS') return preflight();
   if (req.method !== 'POST') return responder({ ok: false, erro: 'use POST' }, 405);
 
@@ -90,7 +93,7 @@ Deno.serve(async (req) => {
       },
     };
 
-    const r = await colherDoPedido(porta, pedido, { buscar: fetch, resolver });
+    const r = await colherDoPedido(porta, pedido, { buscar: fetch, resolver }, { inicio });
     return responder(r.corpo, r.status);
   } catch (e) {
     // A mensagem fica no log; a tela recebe uma frase que não carrega nada interno.
