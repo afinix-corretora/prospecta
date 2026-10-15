@@ -3751,6 +3751,11 @@ ser conferida pelo privilégio. A forma por SQLSTATE não mordia: com EXECUTE co
 `privado.regra_da_resposta`, lá dentro. O meta-teste "o motor não é API" de `tenants.sql` também exige,
 agora, que todo nome da lista exista em `public`: quatro deles moravam em `privado` e não conferiam nada.
 
+Conferido por sabotagem, uma garantia de cada vez na `fila_do_agente` (teto por cliente, histórico,
+teto fixo, autonomia fixa, recusa e janela de 24h no teto, devolvido nas trocas, regra, conta que
+compõe, conta da campanha, supressão, rascunho por pessoa, EXECUTE para a tela) e um nome morto na lista
+de `tenants.sql`: as 14 acendem a asserção que deviam, e a linha de base passa inteira (86, 40, 26, 47).
+
 **O que não muda.** O comentário em `supabase/functions/_shared/banco-agente.ts` ainda diz que a fila
 do D69 "sai pelo SQL Editor": o arquivo está no bundle do `motor-worker`, e mudar uma linha de
 comentário pediria republicar o worker (D51) por nada.
