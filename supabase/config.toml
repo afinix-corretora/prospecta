@@ -1,0 +1,26 @@
+# Configuração do projeto para a CLI do Supabase.
+#
+# O que este arquivo existe para dizer é a linha `verify_jwt` de cada função.
+# O padrão da CLI é exigir JWT do Supabase em toda edge function, e provedor
+# de WhatsApp não tem JWT nenhum: ele faz POST no endereço que a gente deu e
+# pronto. Deixar o padrão valendo em `canal-webhook` faria todo webhook voltar
+# 401 — e o efeito não é um erro visível, é a invariante 4 parando de valer de
+# novo: o contato responde, o motor não fica sabendo, a cadência continua
+# tocando. Foi exatamente o D23.
+
+project_id = "hucuwjvihqgftdjpnych"
+
+# Quem autentica aqui é o token do chip no caminho da URL — aleatório de 128
+# bits, um por conta, e é ele que diz chip, tenant e provedor (D24). Token
+# desconhecido responde 404 antes de qualquer leitura.
+[functions.canal-webhook]
+verify_jwt = false
+
+# Chamada pelo cron com a service key. JWT exigido.
+[functions.motor-worker]
+verify_jwt = true
+
+# Chamada pela tela, com a sessão de quem está logado. JWT exigido — é ele que
+# diz qual tenant está criando a instância.
+[functions.provisionar-instancia]
+verify_jwt = true
