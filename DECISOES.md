@@ -3714,3 +3714,43 @@ modelo, que pedem uma pessoa logada com uma conta de IA, e o `Deno.resolveDns` n
 que o edge-runtime expõe desde o PR que acrescentou o módulo de TLS. Se ele se comportar diferente do
 Deno, a falha é fechada: o site não é lido e a lista de fontes diz por quê. A primeira leitura de
 verdade é a conferência que falta.
+
+### D78c — As duas filas antigas do agente saem (15/10)
+
+Pedido do usuário: apagar as duas funções sem chamador. `public.respostas_para_rascunhar` (D66, com a
+credencial da campanha no D68) ficou sem chamador quando o worker passou a responder sozinho pela fila
+do D69; `public.respostas_para_o_agente` (D69), quando o worker v8 passou a perguntar a
+`public.fila_do_agente` (D76). Ficaram de pé de propósito, como rollback do worker anterior, e o
+rollback já não tem para onde voltar: o `motor-worker` publicado é o v9, lido de volta 27/27, e nenhuma
+das duas está no bundle dele.
+
+**A migration é só o DROP**, como a do D63 (`20261015120000_filas_antigas_sem_chamador`): no projeto o
+DROP espera a confirmação de uma pessoa, e quem aplica é ela, no SQL Editor. O down recria as duas com
+o corpo e a grade que tinham — só `service_role` executa —, e foi conferido indo e voltando num banco
+montado do zero: as 129 funções de `public` e `privado`, com definição e grade, iguais antes e depois.
+
+**O que os testes protegiam.** As duas filas eram chamadas por quatro arquivos de teste, e apagar a
+função sem olhar o teste seria trocar uma garantia testada por uma que só parece testada. Cada asserção
+foi mapeada contra a `fila_do_agente`, com um verificador cético conferindo o mapa:
+
+- quatro só valiam para a fila do v7 (ela ignorava o agente de todos os canais, devolvia 700 no
+  tamanho nulo, não sabia do agente do canal) e saem — o contrário de cada uma já tinha teste na fila
+  nova, e sabotar a fila nova com o comportamento do v7 derruba essas asserções;
+- a vigência do agente religado já era coberta na fila nova pelo mesmo cenário (8c), e a duplicata sai;
+- o resto passou a perguntar à `fila_do_agente`, e onde só trocar o nome não mordia o cenário mudou: o
+  teto do cliente vai a 7 (com 200, uma fila que devolvesse a constante passava), a autonomia é
+  conferida desligada, a recusa que não chamou o modelo vai numa resposta sem rascunho, um rascunho
+  fica com mais de 24h, e em `rascunhos.sql` o agente é escolhido 30 dias antes das respostas, porque a
+  fila nova respeita a vigência (D76) e sem o recuo ela saía vazia — com as asserções de supressão e de
+  idempotência passando em vão.
+
+E três lacunas que as filas velhas também tinham ganharam teste: o teto é POR CLIENTE (as composições
+de um não contam no do outro — o D76 de um cliente parar o agente dos outros, sem teste até aqui), o
+histórico leva só o que SAIU (o toque pendente não é conversa), e a tela não executar a fila passou a
+ser conferida pelo privilégio. A forma por SQLSTATE não mordia: com EXECUTE concedido, o 42501 vinha de
+`privado.regra_da_resposta`, lá dentro. O meta-teste "o motor não é API" de `tenants.sql` também exige,
+agora, que todo nome da lista exista em `public`: quatro deles moravam em `privado` e não conferiam nada.
+
+**O que não muda.** O comentário em `supabase/functions/_shared/banco-agente.ts` ainda diz que a fila
+do D69 "sai pelo SQL Editor": o arquivo está no bundle do `motor-worker`, e mudar uma linha de
+comentário pediria republicar o worker (D51) por nada.

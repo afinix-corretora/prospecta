@@ -418,7 +418,8 @@ e elas têm teste automatizado obrigatório.**
   instrução pede; o freio em código confere o texto composto (proibido, tamanho, dado sensível,
   escalar) e barra o rascunho, com o motivo (D66).
 - **Nunca** compor rascunho para quem está suprimido. Rascunho pronto é convite a uma pessoa
-  mandar; `respostas_para_rascunhar` exclui a pessoa e o endereço, como o despacho faz (D66).
+  mandar; a fila do agente (`fila_do_agente` desde o D76) exclui a pessoa e o endereço, como o
+  despacho faz (D66).
 - **Nunca** deixar "sem rascunho" ser silêncio. Recusa, limite de trocas, falta de credencial,
   freio, escalar e erro do provedor são situações com nome, gravadas e mostradas na tela — e erro
   transitório não vira linha, para a próxima passada tentar de novo (D66).
@@ -779,8 +780,8 @@ e elas têm teste automatizado obrigatório.**
 > (`agents.autonomo`, ligada por padrão), a janela de 24h vale no WhatsApp e no Instagram, e há teto
 > diário de composições por cliente (`tenants.teto_agente_dia`). O que o motor não manda volta a uma
 > pessoa com o motivo em `rascunhos.envio_motivo`, e a tela de Respostas diz o que aconteceu com cada
-> texto. `respostas_para_rascunhar` ficou sem chamador (a fila nova é `respostas_para_o_agente`) e sai
-> numa migration própria, pelo SQL Editor (D63).
+> texto. As filas de antes — `respostas_para_rascunhar` (D66) e `respostas_para_o_agente` (D69) —
+> ficaram sem chamador e saem no **D78c**, numa migration só de DROP aplicada pelo SQL Editor (D63).
 >
 > Desde o **D76** o agente é **um só para todos os canais**, e criar um é escolher **persona** e
 > **objetivo** (resgate, prospecção fria, follow-up, renovação, agendamento, atendimento, pós-venda),
@@ -796,7 +797,7 @@ e elas têm teste automatizado obrigatório.**
 > `enfileirar_resposta` e por `reivindicar_pendentes`, e o agente responde só o que chegou DEPOIS de
 > passar a responder. O "Testar" (`agente-testar`) compõe com o texto que está na tela pelo mesmo
 > `montarPedido` e pelos mesmos freios do worker, com a blacklist do cliente lendo a fala antes. A
-> fila do D69 (`respostas_para_o_agente`) ficou sem chamador e sai pelo SQL Editor (D63).
+> fila do D69 (`respostas_para_o_agente`) ficou sem chamador e sai no D78c.
 >
 > O **D77** é o resto da auditoria que pediu o D76, e o **D77b**, o que a revisão adversarial achou
 > nele, em duas rodadas (24 e 14 achados). Os críticos: a chave do CLIENTE colada no texto livre do
@@ -893,8 +894,8 @@ e elas têm teste automatizado obrigatório.**
 > **derivados do schema** cobram `tenant_id`, RLS e FK composta de toda tabela nova — lista escrita
 > à mão envelhece sem avisar, e essa já tinha perdido a `provider_servers` (D31).
 >
-> O schema está **aplicado no projeto `hucuwjvihqgftdjpnych`** (68 migrations no repositório, 77
-> registros no projeto — a 55ª, que só apaga os dois classificadores sem chamador do D63, entrou em
+> O schema está **aplicado no projeto `hucuwjvihqgftdjpnych`** (69 migrations no repositório, 77
+> registros no projeto — a 69ª, só de DROP das duas filas sem chamador (D78c), espera o SQL Editor; a 55ª, que só apaga os dois classificadores sem chamador do D63, entrou em
 > 05/10 pelo SQL Editor, porque o DROP pelo MCP espera uma confirmação que não chega à sessão remota
 > (D63) — duas corretivas de texto, uma separação, duas do D46 (superfície e
 > tenant explícito), o bootstrap do tenant de teste, a corretiva de `search_path` do D54 e a do

@@ -55,6 +55,15 @@ INSERT INTO campaigns (id, tenant_id, nome, tipo, base_legal, canais_habilitados
   (:camp,  :tenant, 'Com agente', 'morna', 'opt-in', '{whatsapp}'),
   (:semag, :tenant, 'Sem agente', 'morna', 'opt-in', '{whatsapp}');
 INSERT INTO campaign_agents (tenant_id, campaign_id, canal, agent_id) VALUES (:tenant, :camp, 'whatsapp', :agente);
+-- A Lia foi escolhida e ligada antes de todas as respostas do cenário,
+-- inclusive a de oito dias (pessoa 5): quem a tira da fila tem de ser a janela
+-- de sete dias, não a vigência do D76. Sem recuar, a fila nova sai vazia (D78c).
+ALTER TABLE campaign_agents DISABLE TRIGGER campaign_agents_vigencia;
+ALTER TABLE agents DISABLE TRIGGER agents_ativo_desde;
+UPDATE campaign_agents SET vigente_desde = now() - interval '30 days' WHERE campaign_id = :camp;
+UPDATE agents SET ativo_desde = now() - interval '30 days' WHERE id = :agente;
+ALTER TABLE campaign_agents ENABLE TRIGGER campaign_agents_vigencia;
+ALTER TABLE agents ENABLE TRIGGER agents_ativo_desde;
 INSERT INTO flows (id, tenant_id, nome) VALUES ('ad000000-0000-0000-0000-0000000000f1', :tenant, 'F');
 INSERT INTO flow_versions (id, tenant_id, flow_id, versao) VALUES (:versao, :tenant, 'ad000000-0000-0000-0000-0000000000f1', 1);
 INSERT INTO flow_steps (id, tenant_id, flow_version_id, ordem, canal, atraso_horas, template)
@@ -103,7 +112,7 @@ SELECT rs.pessoa(4, :camp, '0'::interval, 'ja tenho corretor, obrigado');     --
 -- Resposta de oito dias atrás não espera rascunho.
 SELECT rs.pessoa(5, :camp, '8 days'::interval, 'antiga');
 
-CREATE TABLE rs.fila AS SELECT * FROM respostas_para_rascunhar(50);
+CREATE TABLE rs.fila AS SELECT * FROM fila_do_agente(50);
 
 SELECT rs.confere('linha de base: entram as pessoas 1, 2 e 4',
   (SELECT array_agg(contact_id ORDER BY contact_id) FROM rs.fila)
@@ -127,12 +136,12 @@ SELECT rs.confere('a recusa vem marcada como recusa (e não foi suprimida)',
 INSERT INTO suppression (tenant_id, contact_id, motivo)
 VALUES (:tenant, 'ad000000-0000-0000-0000-000000000102', 'pediu por telefone');
 SELECT rs.confere('suprimida, ela some da fila do agente',
-  NOT EXISTS (SELECT 1 FROM respostas_para_rascunhar(50) WHERE contact_id = 'ad000000-0000-0000-0000-000000000102'));
+  NOT EXISTS (SELECT 1 FROM fila_do_agente(50) WHERE contact_id = 'ad000000-0000-0000-0000-000000000102'));
 
 -- Credencial desligada: a resposta continua na fila, mas diz que não compõe.
 UPDATE ai_credentials SET ativo = false WHERE id = 'ad000000-0000-0000-0000-0000000000d1';
 SELECT rs.confere('credencial desligada: provedor_compoe falso, e o motivo vai ser dito',
-  (SELECT NOT provedor_compoe FROM respostas_para_rascunhar(50) WHERE contact_id = 'ad000000-0000-0000-0000-000000000101'));
+  (SELECT NOT provedor_compoe FROM fila_do_agente(50) WHERE contact_id = 'ad000000-0000-0000-0000-000000000101'));
 UPDATE ai_credentials SET ativo = true WHERE id = 'ad000000-0000-0000-0000-0000000000d1';
 
 -- A campanha escolhe a conta de IA (D68): uma das contas conectadas em
@@ -143,7 +152,7 @@ VALUES ('ad000000-0000-0000-0000-0000000000d2', :tenant, 'OpenAI comercial', 'op
 UPDATE campaigns SET ai_credential_id = 'ad000000-0000-0000-0000-0000000000d2' WHERE id = :camp;
 SELECT rs.confere('a conta escolhida na campanha vale sobre a do agente',
   (SELECT credencial_id = 'ad000000-0000-0000-0000-0000000000d2' AND provedor = 'openai' AND provedor_compoe
-     FROM respostas_para_rascunhar(50) WHERE contact_id = 'ad000000-0000-0000-0000-000000000101'));
+     FROM fila_do_agente(50) WHERE contact_id = 'ad000000-0000-0000-0000-000000000101'));
 SELECT rs.confere('a campanha não aponta a conta de outro cliente',
   rs.sqlstate_de($q$UPDATE campaigns SET ai_credential_id = 'ad000000-0000-0000-0000-0000000000d3'
      WHERE id = 'ad000000-0000-0000-0000-0000000000c1'$q$) = '23503');
@@ -152,7 +161,7 @@ SELECT rs.confere('apagar a conta solta a campanha, que continua existindo',
   (SELECT ai_credential_id IS NULL FROM campaigns WHERE id = :camp));
 SELECT rs.confere('e sem escolha na campanha, volta a valer a conta do agente',
   (SELECT credencial_id = 'ad000000-0000-0000-0000-0000000000d1'
-     FROM respostas_para_rascunhar(50) WHERE contact_id = 'ad000000-0000-0000-0000-000000000101'));
+     FROM fila_do_agente(50) WHERE contact_id = 'ad000000-0000-0000-0000-000000000101'));
 
 -- Uma resposta, um rascunho.
 DO $$
@@ -168,7 +177,7 @@ BEGIN
     (SELECT r.resposta_em = me.ocorrido_em FROM rascunhos r JOIN message_events me ON me.id = r.message_event_id
       WHERE r.message_event_id = v_ev));
   PERFORM rs.confere('rascunhada, a resposta sai da fila',
-    NOT EXISTS (SELECT 1 FROM respostas_para_rascunhar(50) WHERE message_event_id = v_ev));
+    NOT EXISTS (SELECT 1 FROM fila_do_agente(50) WHERE message_event_id = v_ev));
   PERFORM rs.confere('pronto sem texto não existe',
     rs.sqlstate_de(format('SELECT registrar_rascunho(%L, NULL, %L)',
       (SELECT message_event_id FROM rs.fila WHERE contact_id = 'ad000000-0000-0000-0000-000000000104'), 'pronto')) = '23514');
@@ -181,7 +190,7 @@ SELECT :tenant, m.id, 'respondido', '{"texto":"tenho 40 e ela 38"}'
  WHERE e.contact_id = 'ad000000-0000-0000-0000-000000000101';
 SELECT rs.confere('a resposta nova entra, contando o rascunho anterior para o limite',
   (SELECT rascunhos_anteriores = 1 AND texto = 'tenho 40 e ela 38'
-     FROM respostas_para_rascunhar(50) WHERE contact_id = 'ad000000-0000-0000-0000-000000000101'));
+     FROM fila_do_agente(50) WHERE contact_id = 'ad000000-0000-0000-0000-000000000101'));
 
 -- ===========================================================================
 -- A grade
@@ -207,8 +216,10 @@ BEGIN;
     rs.sqlstate_de($q$INSERT INTO rascunhos (tenant_id, message_event_id, contact_id, resposta_em, situacao, texto)
        SELECT tenant_id, id, 'ad000000-0000-0000-0000-000000000104', now(), 'pronto', 'x'
          FROM message_events LIMIT 1$q$) = '42501');
+  -- Pelo privilégio, não pelo SQLSTATE: com EXECUTE concedido, a chamada
+  -- ainda daria 42501 em privado.regra_da_resposta, lá dentro (D36).
   SELECT rs.confere('nem chama a fila do worker',
-    rs.sqlstate_de('SELECT * FROM respostas_para_rascunhar(5)') = '42501');
+    NOT has_function_privilege('authenticated', 'fila_do_agente(integer)', 'EXECUTE'));
   SELECT rs.confere('e lê o rascunho do próprio cliente',
     (SELECT count(*) FROM rascunhos) = 1);
 COMMIT;

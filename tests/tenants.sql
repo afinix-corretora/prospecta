@@ -438,18 +438,24 @@ SELECT tn.confere('auxiliares de RLS não são chamáveis por anon nem authentic
       'pode_operar','pode_administrar','tenant_atual','tenant_padrao')
       AND has_function_privilege('authenticated', p.oid, 'EXECUTE')));
 
+-- Todo nome da lista tem de EXISTIR em public: nome que saiu (a fila do D69, no
+-- D78c) ou que mora em `privado` (proximos_vencidos, reservar_envio,
+-- registrar_falha_remetente e encerrar_enrollment estavam aqui) não conferia
+-- nada e passava em silêncio — a asserção que o cenário não consegue violar (D36).
 SELECT tn.confere('o motor não é API: worker só por service_role',
-  NOT EXISTS (
-    SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
-     WHERE n.nspname = 'public'
-       AND p.proname IN ('processar_vencidos','reivindicar_pendentes','proximos_vencidos',
-                         'registrar_resultado_envio','registrar_evento_provedor',
-                         'reservar_envio','registrar_falha_remetente','encerrar_enrollment',
-                         -- D76: as quatro do agente também são do worker.
-                         'fila_do_agente','respostas_para_o_agente','enfileirar_resposta',
-                         'registrar_rascunho')
-       AND (has_function_privilege('anon', p.oid, 'EXECUTE')
-         OR has_function_privilege('authenticated', p.oid, 'EXECUTE'))));
+  (WITH lista(nomes) AS (SELECT ARRAY[
+     'processar_vencidos','reivindicar_pendentes','registrar_resultado_envio',
+     'registrar_evento_provedor','registrar_resposta_por_numero','reivindicar_writebacks',
+     -- D76: as três do agente também são do worker.
+     'fila_do_agente','enfileirar_resposta','registrar_rascunho'])
+   SELECT (SELECT count(DISTINCT p.proname) FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+            WHERE n.nspname = 'public' AND p.proname = ANY (nomes)) = cardinality(nomes)
+      AND NOT EXISTS (
+        SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+         WHERE n.nspname = 'public' AND p.proname = ANY (nomes)
+           AND (has_function_privilege('anon', p.oid, 'EXECUTE')
+             OR has_function_privilege('authenticated', p.oid, 'EXECUTE')))
+     FROM lista));
 
 -- D76: com o ALL de tabela que o Supabase dá a anon (o run.sh imita), quem
 -- tira a escrita é a grade estreita. Sem ela, o RLS segurava a linha enquanto

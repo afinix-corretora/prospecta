@@ -127,10 +127,18 @@ CREATE TABLE ar.ev (n int PRIMARY KEY, evento uuid NOT NULL);
 GRANT SELECT ON ar.ev TO authenticated;
 INSERT INTO ar.ev VALUES (1, ar.pessoa(1));
 
+-- Teto fora do padrão (200): uma fila que devolvesse a constante passaria.
+UPDATE tenants SET teto_agente_dia = 7 WHERE id = :tenant;
 SELECT ar.confere('a fila do agente diz que ele é autônomo, e traz o teto do cliente',
-  (SELECT autonomo AND teto = 200 AND composicoes_hoje = 0
-     FROM respostas_para_o_agente(50) WHERE contact_id = ar.c(1)),
-  (SELECT row(autonomo, teto, composicoes_hoje)::text FROM respostas_para_o_agente(50) WHERE contact_id = ar.c(1)));
+  (SELECT autonomo AND teto = 7 AND composicoes_hoje = 0
+     FROM fila_do_agente(50) WHERE contact_id = ar.c(1)),
+  (SELECT row(autonomo, teto, composicoes_hoje)::text FROM fila_do_agente(50) WHERE contact_id = ar.c(1)));
+UPDATE tenants SET teto_agente_dia = 200 WHERE id = :tenant;
+-- O histórico é o que SAIU: o segundo toque, pendente, não é conversa.
+SELECT ar.confere('o histórico leva só o que saiu (o toque pendente fica de fora)',
+  (SELECT jsonb_array_length(historico) = 2 AND historico::text NOT LIKE '%Ainda por aí%'
+     FROM fila_do_agente(50) WHERE contact_id = ar.c(1)),
+  (SELECT historico::text FROM fila_do_agente(50) WHERE contact_id = ar.c(1)));
 SELECT ar.confere('a resposta encerrou a inscrição por resposta (invariante 4, intocada)',
   (SELECT status = 'encerrado' AND motivo_encerramento = 'resposta' FROM enrollments WHERE contact_id = ar.c(1)));
 
@@ -182,6 +190,8 @@ SELECT registrar_resultado_envio((SELECT id FROM ar.msg1), true, 'wamid.agente.1
 
 INSERT INTO ar.ev VALUES (2, ar.pessoa(2));
 UPDATE agents SET autonomo = false WHERE id = :agente;
+SELECT ar.confere('desligada a autonomia, a fila diz ao worker que não é autônomo',
+  (SELECT NOT autonomo FROM fila_do_agente(50) WHERE contact_id = ar.c(2)));
 -- Chamar e conferir em instruções separadas: na mesma, o EXISTS lê o
 -- snapshot de antes da chamada (D38).
 CREATE TABLE ar.destino (n int PRIMARY KEY, envio text);
@@ -215,7 +225,7 @@ SELECT ar.confere('ela é cancelada, e o rascunho volta para uma pessoa com o mo
      FROM messages m JOIN rascunhos r ON r.id = m.rascunho_id
      JOIN enrollments e ON e.id = m.enrollment_id WHERE e.contact_id = ar.c(3)));
 SELECT ar.confere('a resposta nova espera o seu próprio rascunho',
-  (SELECT texto = 'ah, e meu filho também' FROM respostas_para_o_agente(50) WHERE contact_id = ar.c(3)));
+  (SELECT texto = 'ah, e meu filho também' FROM fila_do_agente(50) WHERE contact_id = ar.c(3)));
 SELECT ar.confere('chamar de novo não ressuscita a mensagem devolvida',
   (SELECT enfileirar_resposta(me.id, 'real') FROM message_events me
      JOIN messages m ON m.id = me.message_id JOIN enrollments e ON e.id = m.enrollment_id
@@ -286,8 +296,6 @@ SELECT ar.confere('suprimida depois de enfileirar: não sai, vira cancelado (D39
   (SELECT m.status = 'cancelado' AND r.envio = 'devolvido' AND r.envio_motivo LIKE '%suprimido%'
      FROM messages m JOIN rascunhos r ON r.id = m.rascunho_id
     WHERE r.message_event_id = (SELECT evento FROM ar.ev WHERE n = 6)));
-SELECT ar.confere('e suprimida antes, nem entra na fila do agente',
-  NOT EXISTS (SELECT 1 FROM respostas_para_o_agente(50) WHERE contact_id = ar.c(6)));
 
 -- ===========================================================================
 -- 6. Conta fora do ar: espera, não troca de chip
@@ -370,13 +378,22 @@ SELECT ar.confere('a tela da campanha mostra a mensagem do agente, sem passo',
            WHERE message_id = (SELECT id FROM ar.msg1) AND passo IS NULL));
 
 -- (d) O teto conta o que chamou o modelo.
-SELECT registrar_rascunho((SELECT evento FROM ar.ev WHERE n = 1), :agente, 'recusa', NULL, 'x', NULL);
+-- A recusa vai numa resposta SEM rascunho (a do evento 1 já tinha um, e o
+-- ON CONFLICT DO NOTHING a engolia), e um rascunho fica com mais de 24h.
+SELECT registrar_rascunho(me.id, :agente, 'recusa', NULL, 'x', NULL)
+  FROM message_events me WHERE me.tenant_id = :tenant AND me.payload ->> 'texto' = 'esquece, já resolvi';
+UPDATE rascunhos SET criado_em = now() - interval '25 hours'
+ WHERE message_event_id = (SELECT evento FROM ar.ev WHERE n = 4);
 SELECT ar.confere('o teto conta as composições do cliente nas últimas 24h',
-  (SELECT composicoes_hoje FROM respostas_para_o_agente(50) LIMIT 1)
-    = (SELECT count(*) FROM rascunhos WHERE tenant_id = :tenant AND situacao IN ('pronto','escalar','bloqueado','erro')),
-  (SELECT composicoes_hoje::text FROM respostas_para_o_agente(50) LIMIT 1));
+  (SELECT composicoes_hoje FROM fila_do_agente(50) WHERE tenant_id = :tenant LIMIT 1)
+    = (SELECT count(*) FROM rascunhos WHERE tenant_id = :tenant AND situacao IN ('pronto','escalar','bloqueado','erro')
+         AND criado_em > now() - interval '1 day')
+  AND EXISTS (SELECT 1 FROM rascunhos WHERE tenant_id = :tenant AND situacao = 'recusa')
+  AND EXISTS (SELECT 1 FROM rascunhos WHERE tenant_id = :tenant AND situacao = 'pronto'
+                AND criado_em <= now() - interval '1 day'),
+  (SELECT composicoes_hoje::text FROM fila_do_agente(50) WHERE tenant_id = :tenant LIMIT 1));
 SELECT ar.confere('e o devolvido não conta como troca da conversa',
-  (SELECT rascunhos_anteriores = 0 FROM respostas_para_o_agente(50) WHERE contact_id = ar.c(3)));
+  (SELECT rascunhos_anteriores = 0 FROM fila_do_agente(50) WHERE contact_id = ar.c(3)));
 
 -- ===========================================================================
 -- 10. A grade
@@ -388,8 +405,10 @@ SET request.jwt.claims = '{"sub":"ae000000-0000-0000-0000-0000000000a2"}';
     ar.sqlstate_de($q$UPDATE agents SET autonomo = false WHERE id = 'ae000000-0000-0000-0000-0000000000a9'$q$) = 'sem erro');
   SELECT ar.confere('a tela não enfileira resposta',
     ar.sqlstate_de(format('SELECT enfileirar_resposta(%L)', (SELECT evento FROM ar.ev WHERE n = 2))) = '42501');
+  -- Pelo privilégio: o 42501 de chamar a fila vem de `privado.regra_da_resposta`,
+  -- lá dentro, e continuaria com a fila aberta à tela (D78c).
   SELECT ar.confere('nem lê a fila do agente',
-    ar.sqlstate_de('SELECT * FROM respostas_para_o_agente(5)') = '42501');
+    NOT has_function_privilege(current_user, 'fila_do_agente(integer)', 'EXECUTE'));
   SELECT ar.confere('nem marca rascunho como enviado',
     ar.sqlstate_de($q$UPDATE rascunhos SET envio = 'fila'$q$) = '42501');
   SELECT ar.confere('nem escreve mensagem com rascunho',

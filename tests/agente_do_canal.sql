@@ -267,35 +267,13 @@ SELECT adc.confere('e com a conta de IA do próprio cliente',
   AND (SELECT credencial_id FROM adc.fila WHERE contact_id = adc.c(1)) = :creda);
 
 -- O que o prompt lê vem na fila: o agente novo traz persona, objetivo e
--- contexto; o tamanho nulo é "o do canal", e a fila antiga devolve 700 para o
--- v7 seguir sendo rollback seguro.
+-- contexto, e o tamanho nulo é "o do canal" (quem o resolve é
+-- `limiteEfetivo`, em adapters/prompt-do-agente.ts).
 SELECT adc.confere('a fila traz tom, contexto, objetivo e o tamanho nulo',
   (SELECT objetivo = 'resgate' AND contexto LIKE 'Falamos em nome da Corretora Canal A%' AND tom <> ''
           AND tamanho_maximo IS NULL FROM adc.fila WHERE contact_id = adc.c(1)));
 SELECT adc.confere('o agente de antes vem sem objetivo (o título da instrução depende disso)',
   (SELECT objetivo IS NULL AND tamanho_maximo = 700 FROM adc.fila WHERE contact_id = adc.c(3)));
--- O v7 não sabe montar o prompt do agente de todos os canais (sem tom, sem
--- contexto, sem o bloco do canal): com ele, o agente novo não compõe.
-SELECT adc.confere('a fila antiga (v7) não compõe com o agente de todos os canais',
-  NOT EXISTS (SELECT 1 FROM respostas_para_o_agente(100) WHERE contact_id = adc.c(7))
-  AND EXISTS (SELECT 1 FROM respostas_para_o_agente(100) WHERE contact_id = adc.c(3)));
--- O agente de antes também pode ficar com o tamanho nulo ("o do canal") pela
--- tela nova; o v7 só conhece número.
-UPDATE agents SET tamanho_maximo = NULL WHERE id = :lia;
-SELECT adc.confere('a fila antiga (v7) devolve 700 onde o tamanho é nulo',
-  (SELECT tamanho_maximo FROM respostas_para_o_agente(100) WHERE contact_id = adc.c(3)) = 700);
-UPDATE agents SET tamanho_maximo = 700 WHERE id = :lia;
--- E a vigência vale também na fila antiga: religar a Lia não faz o v7
--- responder o que chegou com ela desligada.
-UPDATE agents SET ativo = false WHERE id = :lia;
-UPDATE agents SET ativo = true WHERE id = :lia;
-SELECT adc.confere('a fila antiga (v7) também respeita a vigência (religado)',
-  NOT EXISTS (SELECT 1 FROM respostas_para_o_agente(100) WHERE contact_id = adc.c(3)));
-ALTER TABLE agents DISABLE TRIGGER agents_ativo_desde;
-UPDATE agents SET ativo_desde = now() - interval '2 days' WHERE id = :lia;
-ALTER TABLE agents ENABLE TRIGGER agents_ativo_desde;
-SELECT adc.confere('e a fila antiga não sabe do agente do canal (o v8 é quem sabe)',
-  NOT EXISTS (SELECT 1 FROM respostas_para_o_agente(100) WHERE contact_id = adc.c(1)));
 
 -- ===========================================================================
 -- 4. A tela e a fila dão a mesma resposta
@@ -455,8 +433,10 @@ SET request.jwt.claims = '{"sub":"ad000000-0000-0000-0000-0000000000a2"}';
     (SELECT count(*) FROM quem_responde('ad000000-0000-0000-0000-0000000000a0', 'ad000000-0000-0000-0000-0000000000c1')) = 2);
   SELECT adc.confere('e não enxerga a resposta de outro cliente',
     (SELECT count(*) FROM quem_responde('ad000000-0000-0000-0000-0000000000b0', 'ad000000-0000-0000-0000-0000000000cb')) = 0);
+  -- Pelo privilégio, e não pelo SQLSTATE: o 42501 de chamar a fila vinha de
+  -- `privado.regra_da_resposta`, lá dentro, e continuava com a fila aberta (D78c).
   SELECT adc.confere('a tela não lê a fila do worker',
-    adc.sqlstate_de('SELECT * FROM fila_do_agente(5)') = '42501');
+    NOT has_function_privilege(current_user, 'fila_do_agente(integer)', 'EXECUTE'));
   SELECT adc.confere('nem escreve no vocabulário do catálogo',
     adc.sqlstate_de('INSERT INTO opt_out_termos DEFAULT VALUES') = '42501'
     AND adc.sqlstate_de('INSERT INTO recusa_termos DEFAULT VALUES') = '42501');
@@ -524,6 +504,12 @@ SELECT adc.confere('resposta com rascunho não volta à fila',
 SELECT adc.confere('antes da supressão, as duas estão na fila',
   EXISTS (SELECT 1 FROM fila_do_agente(100) WHERE contact_id = adc.c(5))
   AND EXISTS (SELECT 1 FROM fila_do_agente(100) WHERE contact_id = adc.c(8)));
+-- O teto é por cliente: as composições de um não contam no do outro (D76). O
+-- único rascunho até aqui é o "escalar" de c(3), da seção (f), no cliente A.
+SELECT adc.confere('o teto conta só as composições do próprio cliente',
+  (SELECT composicoes_hoje FROM fila_do_agente(100) WHERE contact_id = adc.c(5)) = 1
+  AND (SELECT composicoes_hoje FROM fila_do_agente(100) WHERE contact_id = adc.c(8)) = 0,
+  (SELECT string_agg(contact_id::text || '=' || composicoes_hoje, ', ') FROM fila_do_agente(100)));
 INSERT INTO suppression (tenant_id, contact_id, motivo) VALUES (:ta, adc.c(5), 'pediu para sair');
 INSERT INTO suppression (tenant_id, canal, valor_norm, motivo) VALUES (:tb, 'whatsapp', '5511980000308', 'pediu para sair');
 SELECT adc.confere('pessoa suprimida não entra na fila',
