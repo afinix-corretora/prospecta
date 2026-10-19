@@ -349,6 +349,12 @@ e elas têm teste automatizado obrigatório.**
 - **Nunca** mandar `DROP` junto com o resto pelo MCP do Supabase. O DROP espera a confirmação de uma
   pessoa e o chamado inteiro estoura o tempo sem aplicar nada; a migration que apaga vai separada,
   e o que ela apaga precisa estar sem chamador antes (D63).
+- **Nunca** desfazer uma migration pelo Restore do painel. Ele volta o banco INTEIRO para a hora do
+  backup e apaga o que o motor gravou depois; quem desfaz é a reversão de `supabase/down/` ou o script
+  gerado do banco vivo ANTES de aplicar, como o `supabase/sql-editor/d78c/2_backup.sql` (D78c).
+- **Nunca** procurar chamada de rpc no `pg_stat_statements` só depois de `FROM`. O PostgREST chama
+  por `LATERAL`, e a primeira guarda do D78c deixava passar o worker que dizia vigiar — e quem roda
+  sem `pg_read_all_stats` não vê consulta de outro papel: "não vejo" não é "ninguém chamou" (D78c).
 - **Nunca** isentar uma tabela de um meta-teste antes de conferir de QUAL pergunta ela está sendo
   isenta. `recusa_termos` é catálogo e não tem `tenant_id` com razão — mas a mesma lista a isentava
   também do teste de RLS, e ela precisava de RLS. Quem pegou foi o advisor (D58).

@@ -3759,3 +3759,33 @@ de `tenants.sql`: as 14 acendem a asserção que deviam, e a linha de base passa
 **O que não muda.** O comentário em `supabase/functions/_shared/banco-agente.ts` ainda diz que a fila
 do D69 "sai pelo SQL Editor": o arquivo está no bundle do `motor-worker`, e mudar uma linha de
 comentário pediria republicar o worker (D51) por nada.
+
+**Antes de aplicar, o backup do que o DROP muda (19/10).** Pedido do usuário: um backup antes de rodar.
+O do banco inteiro não é o que desfaz este DROP: no Free não há backup no painel; nos pagos há um por
+dia, sem botão de "agora", e o físico (Postgres recente) não se baixa; e o Restore volta o banco INTEIRO
+para a hora do backup, apagando o que o motor gravou depois. O que desfaz é a cópia exata das duas
+funções e da linha de registro, gerada do banco vivo. Ficou em `supabase/sql-editor/d78c/`, para rodar
+no SQL Editor: `1_retrato.sql` e `2_backup.sql` só leem; o `2_backup.sql` devolve o script de
+restauração, que recria com `check_function_bodies` desligado (como o `pg_dump`), refaz a grade sem
+supor quais default privileges existem e confere tudo ANTES do COMMIT; `3_apagar.modelo.sql` é o DROP
+com marcadores que só se trocam pelo que os dois primeiros devolveram.
+
+A guarda nova confere o que a de 15/10 não via: o **selo** (definição, dono, comentário e grade) não
+mudou entre o backup e o DROP — senão a restauração devolveria outra coisa e diria "confere"; nenhum
+gatilho cita as filas no argumento, que é onde o Database Webhook guarda a URL, nem com o nome em
+`%XX`, que o PostgREST decodifica; nada depende delas no `pg_depend`, com recusa em português em vez do
+HINT do Postgres sugerindo CASCADE; e ninguém as chamou depois do retrato, pelo `pg_stat_statements`.
+
+As duas rodadas de revisão acharam dezoito pontos (nove e nove), e os dois que mais importavam
+estavam na guarda das chamadas. A busca procurava o nome depois de `FROM`, `SELECT` ou vírgula, e o
+PostgREST de verdade (v12 e v13, testados com o binário) chama `sb.rpc` por `LATERAL`: três chamadas do
+worker v7 e a guarda apagava. E quem roda sem `pg_read_all_stats` lê o `pg_stat_statements` mas não
+vê o texto das consultas de `service_role` — legível e cego ao mesmo tempo, que é o "não sei" com
+cara de "ninguém". Agora a linha `chamadas` diz `le_outras_contas`, e a guarda recusa contar sem ver;
+`track = none` e `compute_query_id = off` também.
+O `-1` ("não conferir") só é aceito quando conferir é impossível.
+
+A restauração tem prazo: os corpos citam colunas que o `pg_depend` não liga a elas, e uma migration
+que as mude depois do DROP faz a função voltar quebrada — a conferência diz isso em `roda_hoje`. E
+voltar o `motor-worker` a uma versão ≤ v7 exige restaurar ANTES de publicar: sem as filas, cada passada
+dele responde 500.
