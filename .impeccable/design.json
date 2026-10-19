@@ -1,0 +1,1173 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-10-06T17:11:31+00:00",
+  "title": "Design System: Prospecta",
+  "extensions": {
+    "colorMeta": {
+      "ground": {
+        "role": "neutral",
+        "displayName": "Chão Noturno",
+        "canonical": "oklch(16.2% 0.010 285.2)",
+        "tonalRamp": [
+          "#0B0B0F",
+          "#24242A",
+          "#414147",
+          "#606067",
+          "#818289",
+          "#A4A4AC",
+          "#C8C8D0",
+          "#EDEEF5"
+        ]
+      },
+      "rail": {
+        "role": "neutral",
+        "displayName": "Rail",
+        "canonical": "oklch(18.5% 0.012 285.2)",
+        "tonalRamp": [
+          "#0B0A10",
+          "#24242B",
+          "#414148",
+          "#606068",
+          "#81818A",
+          "#A4A4AD",
+          "#C8C8D1",
+          "#EDEDF7"
+        ]
+      },
+      "surface": {
+        "role": "neutral",
+        "displayName": "Cartão",
+        "canonical": "oklch(22.1% 0.014 285.2)",
+        "tonalRamp": [
+          "#0A0A11",
+          "#24242C",
+          "#414149",
+          "#606069",
+          "#81818A",
+          "#A4A4AD",
+          "#C8C8D2",
+          "#EDEDF8"
+        ]
+      },
+      "surface-2": {
+        "role": "neutral",
+        "displayName": "Superfície 2",
+        "canonical": "oklch(26.0% 0.017 285.2)",
+        "tonalRamp": [
+          "#0A0A12",
+          "#24242D",
+          "#41414B",
+          "#60606B",
+          "#81818C",
+          "#A4A4AF",
+          "#C8C8D4",
+          "#EDEDFA"
+        ]
+      },
+      "surface-3": {
+        "role": "neutral",
+        "displayName": "Superfície 3",
+        "canonical": "oklch(30.2% 0.020 285.2)",
+        "tonalRamp": [
+          "#0A0A13",
+          "#24242E",
+          "#41414C",
+          "#60606C",
+          "#81818E",
+          "#A3A4B1",
+          "#C7C8D6",
+          "#EDEDFC"
+        ]
+      },
+      "field": {
+        "role": "neutral",
+        "displayName": "Campo",
+        "canonical": "oklch(19.4% 0.012 285.2)",
+        "tonalRamp": [
+          "#0B0A10",
+          "#24242B",
+          "#414148",
+          "#606068",
+          "#818189",
+          "#A4A4AC",
+          "#C8C8D1",
+          "#EDEDF6"
+        ]
+      },
+      "line": {
+        "role": "neutral",
+        "displayName": "Linha",
+        "canonical": "oklch(28.9% 0.018 285.2)",
+        "tonalRamp": [
+          "#0A0A13",
+          "#24242E",
+          "#41414C",
+          "#60606B",
+          "#81818D",
+          "#A3A4B0",
+          "#C7C8D5",
+          "#EDEDFB"
+        ]
+      },
+      "line-strong": {
+        "role": "neutral",
+        "displayName": "Linha Forte",
+        "canonical": "oklch(36.2% 0.024 285.1)",
+        "tonalRamp": [
+          "#0A0A15",
+          "#242430",
+          "#40404F",
+          "#5F606F",
+          "#808191",
+          "#A3A3B4",
+          "#C7C7D9",
+          "#ECEDFF"
+        ]
+      },
+      "ink": {
+        "role": "neutral",
+        "displayName": "Tinta",
+        "canonical": "oklch(96.5% 0.011 297.6)",
+        "tonalRamp": [
+          "#0C0A0F",
+          "#25242A",
+          "#424147",
+          "#626067",
+          "#838188",
+          "#A6A4AB",
+          "#CAC8CF",
+          "#EFEDF5"
+        ]
+      },
+      "ink-2": {
+        "role": "neutral",
+        "displayName": "Tinta de Apoio",
+        "canonical": "oklch(75.4% 0.026 288.3)",
+        "tonalRamp": [
+          "#0B0915",
+          "#242331",
+          "#41404F",
+          "#605F6F",
+          "#818091",
+          "#A4A3B5",
+          "#C8C7D9",
+          "#EDECFF"
+        ]
+      },
+      "ink-3": {
+        "role": "neutral",
+        "displayName": "Tinta Terciária",
+        "canonical": "oklch(64.5% 0.031 287.7)",
+        "tonalRamp": [
+          "#0B0917",
+          "#242333",
+          "#414052",
+          "#605F72",
+          "#818094",
+          "#A3A2B8",
+          "#C7C6DD",
+          "#EDECFF"
+        ]
+      },
+      "accent": {
+        "role": "primary",
+        "displayName": "Periwinkle de Ação",
+        "canonical": "oklch(69.2% 0.167 282.3)",
+        "tonalRamp": [
+          "#0A002F",
+          "#23006D",
+          "#3B2996",
+          "#574DBB",
+          "#7671E2",
+          "#9897FF",
+          "#C0C3FF",
+          "#EBEDFF"
+        ]
+      },
+      "accent-ink": {
+        "role": "primary",
+        "displayName": "Tinta sobre Acento",
+        "canonical": "oklch(19.5% 0.051 282.3)",
+        "tonalRamp": [
+          "#090720",
+          "#21213D",
+          "#3E3F5D",
+          "#5C5E7E",
+          "#7D7FA1",
+          "#A0A2C5",
+          "#C3C6EA",
+          "#EBEDFF"
+        ]
+      },
+      "pill": {
+        "role": "primary",
+        "displayName": "Pílula Ativa (índigo)",
+        "canonical": "oklch(44.8% 0.216 274.2)",
+        "tonalRamp": [
+          "#060032",
+          "#180074",
+          "#2C1AB1",
+          "#4447D8",
+          "#606DFF",
+          "#8A9CFF",
+          "#B8C6FF",
+          "#E9EEFF"
+        ]
+      },
+      "pill-ink": {
+        "role": "primary",
+        "displayName": "Tinta da Pílula",
+        "canonical": "oklch(100.0% 0.000 89.9)",
+        "tonalRamp": [
+          "#0B0B0B",
+          "#252525",
+          "#424242",
+          "#616161",
+          "#828282",
+          "#A5A5A5",
+          "#C9C9C9",
+          "#EEEEEE"
+        ]
+      },
+      "mint": {
+        "role": "secondary",
+        "displayName": "Menta Elétrica",
+        "canonical": "oklch(86.3% 0.180 160.0)",
+        "tonalRamp": [
+          "#000F06",
+          "#002E1B",
+          "#004F32",
+          "#00744A",
+          "#009B65",
+          "#00C381",
+          "#2DECA0",
+          "#C2FFDD"
+        ]
+      },
+      "ok": {
+        "role": "secondary",
+        "displayName": "Verde de Confirmação",
+        "canonical": "oklch(86.3% 0.180 160.0)",
+        "tonalRamp": [
+          "#000F06",
+          "#002E1B",
+          "#004F32",
+          "#00744A",
+          "#009B65",
+          "#00C381",
+          "#2DECA0",
+          "#C2FFDD"
+        ]
+      },
+      "ok-ink": {
+        "role": "secondary",
+        "displayName": "Tinta sobre Verde",
+        "canonical": "oklch(24.0% 0.047 161.4)",
+        "tonalRamp": [
+          "#000F07",
+          "#0B2C1E",
+          "#2A4A3A",
+          "#496A59",
+          "#6A8B79",
+          "#8CAF9C",
+          "#AFD3C0",
+          "#D4F9E5"
+        ]
+      },
+      "warn": {
+        "role": "tertiary",
+        "displayName": "Âmbar de Aviso",
+        "canonical": "oklch(80.9% 0.128 73.4)",
+        "tonalRamp": [
+          "#130900",
+          "#352000",
+          "#5B3A00",
+          "#845600",
+          "#B07406",
+          "#D5973D",
+          "#FBBC64",
+          "#FFEBD2"
+        ]
+      },
+      "crit": {
+        "role": "tertiary",
+        "displayName": "Coral de Erro",
+        "canonical": "oklch(76.2% 0.142 28.6)",
+        "tonalRamp": [
+          "#1F0000",
+          "#4D0001",
+          "#7C100D",
+          "#A2392F",
+          "#C95C4F",
+          "#F17F71",
+          "#FFB3A8",
+          "#FFE9E5"
+        ]
+      },
+      "wa": {
+        "role": "channel",
+        "displayName": "WhatsApp",
+        "canonical": "oklch(64.8% 0.139 161.4)",
+        "tonalRamp": [
+          "#000F07",
+          "#002E1C",
+          "#004F33",
+          "#00744D",
+          "#009A68",
+          "#3DBF89",
+          "#68E5AC",
+          "#C2FFDF"
+        ]
+      },
+      "mail": {
+        "role": "channel",
+        "displayName": "E-mail",
+        "canonical": "oklch(63.8% 0.176 281.7)",
+        "tonalRamp": [
+          "#0A002F",
+          "#22006D",
+          "#3A279A",
+          "#564CC0",
+          "#746FE7",
+          "#9798FF",
+          "#C0C3FF",
+          "#EBEDFF"
+        ]
+      },
+      "sms": {
+        "role": "channel",
+        "displayName": "SMS",
+        "canonical": "oklch(65.4% 0.124 71.5)",
+        "tonalRamp": [
+          "#140800",
+          "#361F00",
+          "#5C3900",
+          "#865500",
+          "#B07414",
+          "#D59743",
+          "#FCBB69",
+          "#FFEBD4"
+        ]
+      },
+      "ig": {
+        "role": "channel",
+        "displayName": "Instagram",
+        "canonical": "oklch(63.5% 0.155 341.2)",
+        "tonalRamp": [
+          "#1C0013",
+          "#460035",
+          "#730A59",
+          "#98347B",
+          "#BE579D",
+          "#E47BC1",
+          "#FFA9E0",
+          "#FFE6F5"
+        ]
+      },
+      "g-1": {
+        "role": "chart",
+        "displayName": "Série 1 (verde)",
+        "canonical": "oklch(64.8% 0.139 161.4)",
+        "tonalRamp": [
+          "#000F07",
+          "#002E1C",
+          "#004F33",
+          "#00744D",
+          "#009A68",
+          "#3DBF89",
+          "#68E5AC",
+          "#C2FFDF"
+        ]
+      },
+      "g-2": {
+        "role": "chart",
+        "displayName": "Série 2 (periwinkle)",
+        "canonical": "oklch(63.8% 0.176 281.7)",
+        "tonalRamp": [
+          "#0A002F",
+          "#22006D",
+          "#3A279A",
+          "#564CC0",
+          "#746FE7",
+          "#9798FF",
+          "#C0C3FF",
+          "#EBEDFF"
+        ]
+      },
+      "g-3": {
+        "role": "chart",
+        "displayName": "Série 3 (ocre)",
+        "canonical": "oklch(65.4% 0.124 71.5)",
+        "tonalRamp": [
+          "#140800",
+          "#361F00",
+          "#5C3900",
+          "#865500",
+          "#B07414",
+          "#D59743",
+          "#FCBB69",
+          "#FFEBD4"
+        ]
+      },
+      "g-4": {
+        "role": "chart",
+        "displayName": "Série 4 (magenta)",
+        "canonical": "oklch(63.5% 0.155 341.2)",
+        "tonalRamp": [
+          "#1C0013",
+          "#460035",
+          "#730A59",
+          "#98347B",
+          "#BE579D",
+          "#E47BC1",
+          "#FFA9E0",
+          "#FFE6F5"
+        ]
+      },
+      "light-ground": {
+        "role": "neutral",
+        "displayName": "Chão Noturno (tema claro)",
+        "canonical": "oklch(96.1% 0.014 304.1)",
+        "tonalRamp": [
+          "#0C0A10",
+          "#26232B",
+          "#434048",
+          "#635F68",
+          "#848089",
+          "#A7A3AC",
+          "#CBC7D1",
+          "#F0ECF6"
+        ]
+      },
+      "light-rail": {
+        "role": "neutral",
+        "displayName": "Rail (tema claro)",
+        "canonical": "oklch(100.0% 0.000 89.9)",
+        "tonalRamp": [
+          "#0B0B0B",
+          "#252525",
+          "#424242",
+          "#616161",
+          "#828282",
+          "#A5A5A5",
+          "#C9C9C9",
+          "#EEEEEE"
+        ]
+      },
+      "light-surface": {
+        "role": "neutral",
+        "displayName": "Cartão (tema claro)",
+        "canonical": "oklch(100.0% 0.000 89.9)",
+        "tonalRamp": [
+          "#0B0B0B",
+          "#252525",
+          "#424242",
+          "#616161",
+          "#828282",
+          "#A5A5A5",
+          "#C9C9C9",
+          "#EEEEEE"
+        ]
+      },
+      "light-surface-2": {
+        "role": "neutral",
+        "displayName": "Superfície 2 (tema claro)",
+        "canonical": "oklch(95.6% 0.014 308.3)",
+        "tonalRamp": [
+          "#0D0A10",
+          "#27232A",
+          "#444048",
+          "#635F68",
+          "#858089",
+          "#A7A3AC",
+          "#CCC7D0",
+          "#F1ECF6"
+        ]
+      },
+      "light-surface-3": {
+        "role": "neutral",
+        "displayName": "Superfície 3 (tema claro)",
+        "canonical": "oklch(92.3% 0.021 306.8)",
+        "tonalRamp": [
+          "#0D0912",
+          "#28222D",
+          "#453F4B",
+          "#645E6B",
+          "#867F8D",
+          "#A8A2B0",
+          "#CDC6D4",
+          "#F2EBFA"
+        ]
+      },
+      "light-field": {
+        "role": "neutral",
+        "displayName": "Campo (tema claro)",
+        "canonical": "oklch(98.5% 0.006 308.4)",
+        "tonalRamp": [
+          "#0C0B0D",
+          "#262427",
+          "#434144",
+          "#626064",
+          "#838185",
+          "#A6A4A8",
+          "#CAC8CC",
+          "#EFEDF1"
+        ]
+      },
+      "light-line": {
+        "role": "neutral",
+        "displayName": "Linha (tema claro)",
+        "canonical": "oklch(91.7% 0.021 306.8)",
+        "tonalRamp": [
+          "#0D0912",
+          "#28222D",
+          "#453F4B",
+          "#645E6B",
+          "#867F8D",
+          "#A8A2B0",
+          "#CDC6D4",
+          "#F2EBFA"
+        ]
+      },
+      "light-line-strong": {
+        "role": "neutral",
+        "displayName": "Linha Forte (tema claro)",
+        "canonical": "oklch(83.9% 0.033 305.3)",
+        "tonalRamp": [
+          "#0E0716",
+          "#292132",
+          "#463E50",
+          "#665D71",
+          "#877E93",
+          "#AAA0B6",
+          "#CEC4DB",
+          "#F3EAFF"
+        ]
+      },
+      "light-ink": {
+        "role": "neutral",
+        "displayName": "Tinta (tema claro)",
+        "canonical": "oklch(19.6% 0.014 291.6)",
+        "tonalRamp": [
+          "#0B0A11",
+          "#25242B",
+          "#424149",
+          "#616069",
+          "#82818A",
+          "#A5A4AD",
+          "#C9C8D2",
+          "#EEEDF7"
+        ]
+      },
+      "light-ink-2": {
+        "role": "neutral",
+        "displayName": "Tinta de Apoio (tema claro)",
+        "canonical": "oklch(45.3% 0.037 288.8)",
+        "tonalRamp": [
+          "#0B081A",
+          "#242236",
+          "#413F55",
+          "#605E76",
+          "#817F98",
+          "#A4A2BC",
+          "#C8C6E1",
+          "#EDECFF"
+        ]
+      },
+      "light-ink-3": {
+        "role": "neutral",
+        "displayName": "Tinta Terciária (tema claro)",
+        "canonical": "oklch(51.7% 0.036 289.1)",
+        "tonalRamp": [
+          "#0B0819",
+          "#242236",
+          "#413F54",
+          "#605E75",
+          "#817F97",
+          "#A4A2BB",
+          "#C8C6E0",
+          "#EDECFF"
+        ]
+      },
+      "light-accent": {
+        "role": "primary",
+        "displayName": "Periwinkle de Ação (tema claro)",
+        "canonical": "oklch(44.8% 0.216 274.2)",
+        "tonalRamp": [
+          "#060032",
+          "#180074",
+          "#2C1AB1",
+          "#4447D8",
+          "#606DFF",
+          "#8A9CFF",
+          "#B8C6FF",
+          "#E9EEFF"
+        ]
+      },
+      "light-accent-ink": {
+        "role": "primary",
+        "displayName": "Tinta sobre Acento (tema claro)",
+        "canonical": "oklch(100.0% 0.000 89.9)",
+        "tonalRamp": [
+          "#0B0B0B",
+          "#252525",
+          "#424242",
+          "#616161",
+          "#828282",
+          "#A5A5A5",
+          "#C9C9C9",
+          "#EEEEEE"
+        ]
+      },
+      "light-pill": {
+        "role": "primary",
+        "displayName": "Pílula Ativa (índigo) (tema claro)",
+        "canonical": "oklch(86.3% 0.180 160.0)",
+        "tonalRamp": [
+          "#000F06",
+          "#002E1B",
+          "#004F32",
+          "#00744A",
+          "#009B65",
+          "#00C381",
+          "#2DECA0",
+          "#C2FFDD"
+        ]
+      },
+      "light-pill-ink": {
+        "role": "primary",
+        "displayName": "Tinta da Pílula (tema claro)",
+        "canonical": "oklch(25.1% 0.048 162.6)",
+        "tonalRamp": [
+          "#000F07",
+          "#092C1E",
+          "#294A3A",
+          "#486A59",
+          "#688C7A",
+          "#8AAF9C",
+          "#AED3C0",
+          "#D3F9E5"
+        ]
+      },
+      "light-ok": {
+        "role": "secondary",
+        "displayName": "Verde de Confirmação (tema claro)",
+        "canonical": "oklch(49.4% 0.111 159.2)",
+        "tonalRamp": [
+          "#000F06",
+          "#002E1A",
+          "#004F31",
+          "#06744A",
+          "#3B966A",
+          "#61BA8C",
+          "#86E0AF",
+          "#C3FFDC"
+        ]
+      },
+      "light-ok-ink": {
+        "role": "secondary",
+        "displayName": "Tinta sobre Verde (tema claro)",
+        "canonical": "oklch(100.0% 0.000 89.9)",
+        "tonalRamp": [
+          "#0B0B0B",
+          "#252525",
+          "#424242",
+          "#616161",
+          "#828282",
+          "#A5A5A5",
+          "#C9C9C9",
+          "#EEEEEE"
+        ]
+      },
+      "light-warn": {
+        "role": "tertiary",
+        "displayName": "Âmbar de Aviso (tema claro)",
+        "canonical": "oklch(52.2% 0.109 73.3)",
+        "tonalRamp": [
+          "#130900",
+          "#352000",
+          "#5B3A00",
+          "#845600",
+          "#AA772C",
+          "#CE9A52",
+          "#F4BE76",
+          "#FFEBD2"
+        ]
+      },
+      "light-crit": {
+        "role": "tertiary",
+        "displayName": "Coral de Erro (tema claro)",
+        "canonical": "oklch(52.1% 0.161 30.3)",
+        "tonalRamp": [
+          "#1F0000",
+          "#4C0200",
+          "#7F0700",
+          "#A92F21",
+          "#D15544",
+          "#F97966",
+          "#FFB3A6",
+          "#FFE9E5"
+        ]
+      },
+      "light-wa": {
+        "role": "channel",
+        "displayName": "WhatsApp (tema claro)",
+        "canonical": "oklch(49.4% 0.111 159.2)",
+        "tonalRamp": [
+          "#000F06",
+          "#002E1A",
+          "#004F31",
+          "#06744A",
+          "#3B966A",
+          "#61BA8C",
+          "#86E0AF",
+          "#C3FFDC"
+        ]
+      },
+      "light-mail": {
+        "role": "channel",
+        "displayName": "E-mail (tema claro)",
+        "canonical": "oklch(50.7% 0.209 277.2)",
+        "tonalRamp": [
+          "#070031",
+          "#1C0071",
+          "#331BAC",
+          "#4C46D3",
+          "#696CFB",
+          "#8F9AFF",
+          "#BBC5FF",
+          "#EAEDFF"
+        ]
+      },
+      "light-sms": {
+        "role": "channel",
+        "displayName": "SMS (tema claro)",
+        "canonical": "oklch(53.0% 0.117 62.9)",
+        "tonalRamp": [
+          "#150700",
+          "#391D00",
+          "#613600",
+          "#8D5000",
+          "#B3712D",
+          "#D99452",
+          "#FFB877",
+          "#FFEAD9"
+        ]
+      },
+      "light-ig": {
+        "role": "channel",
+        "displayName": "Instagram (tema claro)",
+        "canonical": "oklch(55.1% 0.165 343.6)",
+        "tonalRamp": [
+          "#1C0012",
+          "#460033",
+          "#760057",
+          "#9C2E79",
+          "#C3539B",
+          "#EA76BF",
+          "#FFAADC",
+          "#FFE6F4"
+        ]
+      },
+      "light-g-1": {
+        "role": "chart",
+        "displayName": "Série 1 (verde) (tema claro)",
+        "canonical": "oklch(61.2% 0.138 158.8)",
+        "tonalRamp": [
+          "#000F06",
+          "#002E1A",
+          "#005030",
+          "#007448",
+          "#099B63",
+          "#46BF84",
+          "#6FE4A8",
+          "#C3FFDC"
+        ]
+      },
+      "light-g-2": {
+        "role": "chart",
+        "displayName": "Série 2 (periwinkle) (tema claro)",
+        "canonical": "oklch(50.7% 0.209 277.2)",
+        "tonalRamp": [
+          "#070031",
+          "#1C0071",
+          "#331BAC",
+          "#4C46D3",
+          "#696CFB",
+          "#8F9AFF",
+          "#BBC5FF",
+          "#EAEDFF"
+        ]
+      },
+      "light-g-3": {
+        "role": "chart",
+        "displayName": "Série 3 (ocre) (tema claro)",
+        "canonical": "oklch(59.1% 0.129 63.4)",
+        "tonalRamp": [
+          "#150700",
+          "#391D00",
+          "#613600",
+          "#8D5100",
+          "#B76F1A",
+          "#DD9246",
+          "#FFB876",
+          "#FFEAD8"
+        ]
+      },
+      "light-g-4": {
+        "role": "chart",
+        "displayName": "Série 4 (magenta) (tema claro)",
+        "canonical": "oklch(55.1% 0.165 343.6)",
+        "tonalRamp": [
+          "#1C0012",
+          "#460033",
+          "#760057",
+          "#9C2E79",
+          "#C3539B",
+          "#EA76BF",
+          "#FFAADC",
+          "#FFE6F4"
+        ]
+      }
+    },
+    "typographyMeta": {
+      "display": {
+        "displayName": "Display",
+        "purpose": "Só a saudação do Início; 28px abaixo de 900px."
+      },
+      "headline": {
+        "displayName": "Headline",
+        "purpose": "Título de página (h1); 26px abaixo de 900px."
+      },
+      "figure": {
+        "displayName": "Número",
+        "purpose": "Número principal de KPI; variantes de 17–22px em conversão, total de campanha e anel."
+      },
+      "title": {
+        "displayName": "Título de bloco",
+        "purpose": "Título de bloco do painel; parentes de 15–19px em seção, item, coluna e cartão."
+      },
+      "body": {
+        "displayName": "Corpo",
+        "purpose": "Todo texto corrido da interface."
+      },
+      "label": {
+        "displayName": "Rótulo",
+        "purpose": "Rótulo de KPI, botão, nome em lista."
+      },
+      "caption": {
+        "displayName": "Legenda",
+        "purpose": "Subtítulo de bloco, ajuda de campo, rodapé de KPI, legenda de gráfico."
+      },
+      "axis": {
+        "displayName": "Eixo",
+        "purpose": "Marcas de eixo dos gráficos."
+      },
+      "mono": {
+        "displayName": "Mono",
+        "purpose": "Chave, URL de webhook, telefone, código."
+      }
+    },
+    "themes": {
+      "default": "dark",
+      "switch": "html[data-theme=\"light\"]",
+      "storageKey": "prospecta:tema",
+      "prePaint": "script inline em app/index.html",
+      "themeColor": {
+        "dark": "#0D0D12",
+        "light": "#F4F0FA"
+      },
+      "note": "Chaves light-* do frontmatter são o valor da mesma variável CSS no tema claro."
+    },
+    "shadows": [
+      {
+        "name": "shadow",
+        "value": "0 1px 0 rgba(255,255,255,.03) inset, 0 18px 40px -24px rgba(0,0,0,.8)",
+        "valueLight": "0 1px 2px rgba(40,30,70,.04), 0 12px 32px -18px rgba(40,30,70,.22)",
+        "purpose": "Cartão: painel, KPI, card do Kanban."
+      },
+      {
+        "name": "shadow-pop",
+        "value": "0 20px 50px -18px rgba(0,0,0,.85), 0 0 0 1px var(--line)",
+        "valueLight": "0 18px 44px -14px rgba(40,30,70,.30), 0 0 0 1px var(--line)",
+        "purpose": "Flutuante: dica do gráfico, rail como gaveta, cartão de entrar."
+      },
+      {
+        "name": "focus-halo",
+        "value": "0 0 0 4px var(--accent-soft)",
+        "purpose": "Campo focado, com borda accent-line."
+      },
+      {
+        "name": "blob-1",
+        "value": "rgba(98,92,235,.30) / claro rgba(140,135,255,.30), círculo 52vw, blur(110px), fixo no alto à direita",
+        "purpose": "Atmosfera atrás dos cartões opacos."
+      },
+      {
+        "name": "blob-2",
+        "value": "rgba(61,245,168,.09) / claro rgba(61,245,168,.20), círculo 40vw, blur(110px), fixo embaixo à esquerda",
+        "purpose": "Atmosfera atrás dos cartões opacos."
+      },
+      {
+        "name": "topo-glass",
+        "value": "background: color-mix(in oklab, var(--ground) 78%, transparent); backdrop-filter: blur(14px) saturate(1.2)",
+        "purpose": "Topo preso: separa o que rola do que fica."
+      }
+    ],
+    "motion": [
+      {
+        "name": "ease",
+        "value": "cubic-bezier(.22,1,.36,1)",
+        "purpose": "Curva única de todas as transições e entradas."
+      },
+      {
+        "name": "state",
+        "value": ".16s",
+        "purpose": "Hover, foco e troca de cor/borda."
+      },
+      {
+        "name": "press",
+        "value": ".12s translateY(1px)",
+        "purpose": "Botão pressionado."
+      },
+      {
+        "name": "disclosure",
+        "value": "grid-template-rows .22s",
+        "purpose": "Abrir grupo do rail."
+      },
+      {
+        "name": "drawer",
+        "value": "translate .28s",
+        "purpose": "Rail como gaveta abaixo de 900px."
+      },
+      {
+        "name": "chart-draw",
+        "value": "stroke-dashoffset .9s, delay .05s",
+        "purpose": "Linha do gráfico se desenha."
+      },
+      {
+        "name": "chart-area",
+        "value": "opacity .6s, delay .35s",
+        "purpose": "Área e trecho parcial surgem depois da linha."
+      },
+      {
+        "name": "bar-grow",
+        "value": "scaleX .8s, +40ms por item",
+        "purpose": "Barras horizontais crescem da esquerda."
+      },
+      {
+        "name": "skeleton",
+        "value": "background-position 1.4s linear infinite",
+        "purpose": "Esqueleto de carregamento."
+      },
+      {
+        "name": "reduced-motion",
+        "value": ".01ms",
+        "purpose": "prefers-reduced-motion: tudo instantâneo, linha já desenhada."
+      }
+    ],
+    "breakpoints": [
+      {
+        "name": "grade-colapsa",
+        "value": "1100px"
+      },
+      {
+        "name": "gaveta",
+        "value": "900px"
+      },
+      {
+        "name": "kpi-duas-colunas",
+        "value": "560px"
+      }
+    ],
+    "chart": {
+      "yAxes": 1,
+      "stackedPanelGap": "44px",
+      "curve": "monotone (Fritsch–Carlson)",
+      "strokeWidth": "2.25px",
+      "areaGradient": ".34 → 0",
+      "barGradient": "1 → .35",
+      "partialToday": {
+        "line": "stroke-dasharray 3 5",
+        "bar": "fill-opacity .45",
+        "tooltip": "hoje, parcial"
+      },
+      "crosshair": "line-strong, stroke-dasharray 3 4",
+      "marker": "r 5, anel surface 2.5px",
+      "series": [
+        "--g-1",
+        "--g-2",
+        "--g-3",
+        "--g-4"
+      ]
+    },
+    "icons": {
+      "source": "app/src/componentes/icones.tsx, app/src/componentes/base.tsx",
+      "grid": 24,
+      "strokeWidth": 1.7,
+      "linecap": "round",
+      "linejoin": "round",
+      "fill": "none"
+    }
+  },
+  "components": [
+    {
+      "name": "Botão primário",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "A ação principal de uma área de decisão; um por área.",
+      "html": "<button class=\"ds-btn ds-btn-prim\">Continuar configuração</button>",
+      "css": ".ds-btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:40px;padding:0 16px;border-radius:var(--r-sm,12px);font:600 13.5px/1.5 var(--ui,\"Roboto Variable\",Roboto,sans-serif);cursor:pointer;white-space:nowrap;transition:background-color .16s var(--ease, cubic-bezier(.22,1,.36,1)),filter .16s var(--ease, cubic-bezier(.22,1,.36,1)),transform .12s var(--ease, cubic-bezier(.22,1,.36,1))} .ds-btn-prim{background:var(--accent,#8E8BFF);color:var(--accent-ink,#12112B);border:1px solid transparent} .ds-btn-prim:hover{filter:brightness(1.08)} .ds-btn:active{transform:translateY(1px)} .ds-btn:focus-visible{outline:2px solid var(--accent,#8E8BFF);outline-offset:2px}"
+    },
+    {
+      "name": "Botão secundário",
+      "kind": "button",
+      "refersTo": "button-secondary",
+      "description": "Ação de apoio e ação de estado vazio.",
+      "html": "<button class=\"ds-btn2\">Ir para campanhas</button>",
+      "css": ".ds-btn2{display:inline-flex;align-items:center;min-height:40px;padding:0 16px;border-radius:var(--r-sm,12px);border:1px solid var(--line-strong,#3C3C4A);background:var(--surface,#1A1A21);color:var(--ink,#F4F2FA);font:600 13.5px/1.5 var(--ui,\"Roboto Variable\",Roboto,sans-serif);cursor:pointer;transition:background-color .16s var(--ease, cubic-bezier(.22,1,.36,1)),transform .12s var(--ease, cubic-bezier(.22,1,.36,1))} .ds-btn2:hover{background:var(--surface-2,#23232C)} .ds-btn2:active{transform:translateY(1px)} .ds-btn2:focus-visible{outline:2px solid var(--accent,#8E8BFF);outline-offset:2px}"
+    },
+    {
+      "name": "Navegação do rail",
+      "kind": "nav",
+      "refersTo": "nav-item-active",
+      "description": "Item ativo como pílula preenchida (índigo no escuro, menta no claro), contador em acento suave.",
+      "html": "<nav class=\"ds-nav\"><button aria-current=\"true\"><svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><rect x=\"3.5\" y=\"3.5\" width=\"7\" height=\"8\" rx=\"2\"/><rect x=\"13.5\" y=\"3.5\" width=\"7\" height=\"5\" rx=\"2\"/><rect x=\"13.5\" y=\"11.5\" width=\"7\" height=\"9\" rx=\"2\"/><rect x=\"3.5\" y=\"14.5\" width=\"7\" height=\"6\" rx=\"2\"/></svg><span>Início</span></button><button><svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M4 18.5V7a3 3 0 0 1 3-3h10a3 3 0 0 1 3 3v6.5a3 3 0 0 1-3 3H8z\"/><path d=\"M8.5 9h7M8.5 12.5h4.5\"/></svg><span>Respostas</span><i class=\"ds-conta\">4</i></button><button><svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><rect x=\"3.5\" y=\"4\" width=\"4.5\" height=\"16\" rx=\"1.8\"/><rect x=\"9.75\" y=\"4\" width=\"4.5\" height=\"11\" rx=\"1.8\"/><rect x=\"16\" y=\"4\" width=\"4.5\" height=\"7\" rx=\"1.8\"/></svg><span>Funil</span></button></nav>",
+      "css": ".ds-nav{display:flex;flex-direction:column;gap:2px;width:220px;padding:14px;background:var(--rail,#121218)} .ds-nav button{display:flex;align-items:center;gap:12px;height:40px;padding:0 12px;border:0;border-radius:12px;background:none;color:var(--ink-2,#AEADBF);font:400 14px var(--ui,\"Roboto Variable\",Roboto,sans-serif);text-align:left;cursor:pointer;transition:background-color .16s var(--ease, cubic-bezier(.22,1,.36,1)),color .16s var(--ease, cubic-bezier(.22,1,.36,1))} .ds-nav button span{flex:1} .ds-nav svg{fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round} .ds-nav svg{width:19px;height:19px} .ds-nav button:hover{background:var(--surface-2,#23232C);color:var(--ink,#F4F2FA)} .ds-nav button[aria-current=\"true\"]{background:var(--pill,#3A37C9);color:var(--pill-ink,#FFFFFF);font-weight:600} .ds-nav button:focus-visible{outline:2px solid var(--accent,#8E8BFF);outline-offset:2px} .ds-conta{font-style:normal;min-width:22px;height:20px;padding:0 7px;border-radius:99px;display:grid;place-items:center;font-size:11.5px;font-weight:600;background:var(--accent-soft,rgba(142,139,255,.14));color:var(--accent,#8E8BFF)}"
+    },
+    {
+      "name": "Campo",
+      "kind": "input",
+      "refersTo": "input",
+      "description": "Campo de formulário com rótulo acima, foco em acento com halo de 4px.",
+      "html": "<div class=\"ds-campo\"><label for=\"ds-n\">Nome da campanha</label><input id=\"ds-n\" placeholder=\"Resgate de cotações 2025\"><span>Aparece só para a equipe.</span></div>",
+      "css": ".ds-campo{display:flex;flex-direction:column;gap:6px;width:300px;font-family:var(--ui,\"Roboto Variable\",Roboto,sans-serif)} .ds-campo label{font-size:13px;font-weight:600;color:var(--ink,#F4F2FA)} .ds-campo input{height:42px;padding:0 13px;border:1px solid var(--line,#2A2A34);border-radius:var(--r-sm,12px);background:var(--field,#14141A);color:var(--ink,#F4F2FA);font:inherit;font-size:14px;transition:border-color .16s var(--ease, cubic-bezier(.22,1,.36,1)),box-shadow .16s var(--ease, cubic-bezier(.22,1,.36,1))} .ds-campo input::placeholder{color:var(--ink-3,#8C8BA0)} .ds-campo input:hover{border-color:var(--line-strong,#3C3C4A)} .ds-campo input:focus{outline:none;border-color:var(--accent-line,rgba(142,139,255,.45));box-shadow:0 0 0 4px var(--accent-soft,rgba(142,139,255,.14))} .ds-campo span{font-size:12.5px;color:var(--ink-3,#8C8BA0)}"
+    },
+    {
+      "name": "Chips e variação",
+      "kind": "chip",
+      "refersTo": "chip",
+      "description": "Chips semânticos em pílula e a variação contra o período anterior.",
+      "html": "<div class=\"ds-chips\"><span class=\"ds-chip\">WhatsApp</span><span class=\"ds-chip ds-ok\"><i></i>Canais</span><span class=\"ds-chip ds-acento\">87 oportunidades</span><span class=\"ds-chip ds-erro\">pediu para sair</span><span class=\"ds-delta\"><svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M6 15l6-6 6 6\"/></svg>21%</span><span class=\"ds-delta ds-baixa\"><svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M6 9l6 6 6-6\"/></svg>4%</span></div>",
+      "css": ".ds-chips{display:flex;flex-wrap:wrap;gap:6px;align-items:center;font-family:var(--ui,\"Roboto Variable\",Roboto,sans-serif)} .ds-chip{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:500;padding:3px 10px;border-radius:999px;background:var(--surface-2,#23232C);color:var(--ink-2,#AEADBF)} .ds-chip i{width:8px;height:8px;border-radius:50%;background:currentColor} .ds-ok{background:var(--ok-soft,rgba(61,245,168,.12));color:var(--ok,#3DF5A8)} .ds-acento{background:var(--accent-soft,rgba(142,139,255,.14));color:var(--accent,#8E8BFF)} .ds-erro{background:var(--crit-soft,rgba(255,140,125,.13));color:var(--crit,#FF8C7D)} .ds-delta{display:inline-flex;align-items:center;gap:3px;font-size:12px;font-weight:600;padding:2px 8px;border-radius:999px;background:var(--ok-soft,rgba(61,245,168,.12));color:var(--ok,#3DF5A8);font-variant-numeric:tabular-nums} .ds-delta svg{width:11px;height:11px;fill:none;stroke:currentColor;stroke-width:2.4;stroke-linecap:round;stroke-linejoin:round} .ds-baixa{background:var(--crit-soft,rgba(255,140,125,.13));color:var(--crit,#FF8C7D)}"
+    },
+    {
+      "name": "KPI com tendência",
+      "kind": "card",
+      "refersTo": "kpi",
+      "description": "Rótulo, número em Anek comprimida com variação, rodapé e a curva da série encostada na borda de baixo.",
+      "html": "<article class=\"ds-kpi\"><span class=\"ds-r\">Mensagens que saíram</span><div class=\"ds-num\"><b>2.760</b><span class=\"ds-delta\"><svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M6 15l6-6 6 6\"/></svg>21%</span></div><span class=\"ds-s\">em 14 dias · 72 falharam</span><svg class=\"ds-curva\" viewBox=\"0 0 300 64\" preserveAspectRatio=\"none\"><defs><linearGradient id=\"dsk\" x1=\"0\" y1=\"0\" x2=\"0\" y2=\"1\"><stop offset=\"0\" stop-color=\"var(--g-1,#16A873)\" stop-opacity=\".42\"/><stop offset=\"1\" stop-color=\"var(--g-1,#16A873)\" stop-opacity=\"0\"/></linearGradient></defs><path d=\"M0,52C40,48 60,46 100,40C140,34 160,30 200,28C240,26 260,30 300,22L300,64L0,64Z\" fill=\"url(#dsk)\"/><path d=\"M0,52C40,48 60,46 100,40C140,34 160,30 200,28C240,26 260,30 300,22\" fill=\"none\" stroke=\"var(--g-1,#16A873)\" stroke-width=\"2\" vector-effect=\"non-scaling-stroke\"/></svg></article>",
+      "css": ".ds-kpi{width:260px;display:flex;flex-direction:column;background:var(--surface,#1A1A21);border:1px solid var(--line,#2A2A34);border-radius:var(--r,18px);padding:18px 18px 0;overflow:hidden;box-shadow:var(--shadow,0 18px 40px -24px rgba(0,0,0,.8));font-family:var(--ui,\"Roboto Variable\",Roboto,sans-serif)} .ds-r{font-size:13.5px;font-weight:600;color:var(--ink-2,#AEADBF)} .ds-num{display:flex;align-items:baseline;gap:10px} .ds-num b{font-family:var(--display,\"Anek Latin Variable\",sans-serif);font-size:30px;font-weight:600;font-stretch:92%;letter-spacing:-.02em;line-height:1.05;margin:10px 0 2px;font-variant-numeric:tabular-nums;color:var(--ink,#F4F2FA)} .ds-s{font-size:12.5px;color:var(--ink-3,#8C8BA0)} .ds-curva{display:block;width:calc(100% + 36px);height:64px;margin:12px -18px 0} .ds-delta{display:inline-flex;align-items:center;gap:3px;font-size:12px;font-weight:600;padding:2px 8px;border-radius:999px;background:var(--ok-soft,rgba(61,245,168,.12));color:var(--ok,#3DF5A8)} .ds-delta svg{width:11px;height:11px;fill:none;stroke:currentColor;stroke-width:2.4;stroke-linecap:round}"
+    },
+    {
+      "name": "Faixa de modo simulado",
+      "kind": "custom",
+      "refersTo": "banner-simulated",
+      "description": "Primeiro bloco do Início quando nada saiu de verdade: âmbar, nunca verde.",
+      "html": "<div class=\"ds-faixa\" role=\"note\"><svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M12 4.5l8.5 15h-17z\"/><path d=\"M12 10v4M12 16.8v.2\"/></svg><p><b>Modo simulado.</b> Nos últimos 14 dias o motor fez o caminho inteiro e nenhuma mensagem saiu de verdade: as 2.830 abaixo são simuladas.</p></div>",
+      "css": ".ds-faixa{display:flex;align-items:center;gap:12px;max-width:640px;padding:12px 16px;border-radius:var(--r-md,14px);background:var(--warn-soft,rgba(242,179,91,.13));color:var(--warn,#F2B35B);border:1px solid color-mix(in oklab,var(--warn,#F2B35B) 28%,transparent);font:400 13.5px/1.5 var(--ui,\"Roboto Variable\",Roboto,sans-serif)} .ds-faixa svg{width:18px;height:18px;flex:none;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round} .ds-faixa p{margin:0}"
+    },
+    {
+      "name": "Item de índice",
+      "kind": "card",
+      "refersTo": "list-item",
+      "description": "Linha de índice das telas de grupo: ícone na cor diluída, título em Anek, contagem e seta.",
+      "html": "<button class=\"ds-item\"><span class=\"ds-ico\"><svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><rect x=\"3\" y=\"5.5\" width=\"18\" height=\"13\" rx=\"2.5\"/><path d=\"M4 7l8 6 8-6\"/></svg></span><span class=\"ds-txt\"><b>E-mail</b><small>Os provedores de e-mail deste cliente.</small></span><span class=\"ds-cont\">2 contas</span><svg class=\"ds-seta\" viewBox=\"0 0 24 24\"><path d=\"M9 6l6 6-6 6\"/></svg></button>",
+      "css": ".ds-item{display:flex;align-items:center;gap:15px;width:520px;text-align:left;padding:15px 16px;background:var(--surface,#1A1A21);border:1px solid var(--line,#2A2A34);border-radius:var(--r-md,14px);color:var(--ink,#F4F2FA);font-family:var(--ui,\"Roboto Variable\",Roboto,sans-serif);cursor:pointer;transition:border-color .16s var(--ease, cubic-bezier(.22,1,.36,1)),background-color .16s var(--ease, cubic-bezier(.22,1,.36,1))} .ds-item:hover{border-color:var(--line-strong,#3C3C4A)} .ds-item:hover .ds-seta{color:var(--ink,#F4F2FA);translate:2px 0} .ds-item:focus-visible{outline:2px solid var(--accent,#8E8BFF);outline-offset:2px} .ds-ico{width:42px;height:42px;flex:none;border-radius:13px;display:grid;place-items:center;background:color-mix(in oklab,var(--mail,#7D79F2) 16%,transparent);color:var(--mail,#7D79F2)} .ds-ico svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round} .ds-txt{flex:1;min-width:0} .ds-txt b{display:block;font-family:var(--display,\"Anek Latin Variable\",sans-serif);font-stretch:96%;font-size:16.5px;font-weight:600;line-height:1.25} .ds-txt small{display:block;margin-top:3px;font-size:13px;color:var(--ink-3,#8C8BA0)} .ds-cont{font-size:12.5px;color:var(--ink-3,#8C8BA0)} .ds-seta{width:17px;height:17px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;color:var(--ink-3,#8C8BA0);transition:translate .2s var(--ease, cubic-bezier(.22,1,.36,1))}"
+    },
+    {
+      "name": "Segmento de período",
+      "kind": "custom",
+      "refersTo": "segment",
+      "description": "Seletor 7/14/30 dias no cabeçalho do Início.",
+      "html": "<div class=\"ds-seg\" role=\"group\" aria-label=\"Período\"><button>7 dias</button><button aria-pressed=\"true\">14 dias</button><button>30 dias</button></div>",
+      "css": ".ds-seg{display:inline-flex;gap:2px;padding:4px;border-radius:13px;background:var(--surface,#1A1A21);border:1px solid var(--line,#2A2A34)} .ds-seg button{height:32px;padding:0 13px;border:0;border-radius:9px;background:none;font:600 13px var(--ui,\"Roboto Variable\",Roboto,sans-serif);color:var(--ink-3,#8C8BA0);cursor:pointer;transition:background-color .16s var(--ease, cubic-bezier(.22,1,.36,1)),color .16s var(--ease, cubic-bezier(.22,1,.36,1))} .ds-seg button:hover{color:var(--ink,#F4F2FA)} .ds-seg button[aria-pressed=\"true\"]{background:var(--surface-3,#2D2D38);color:var(--ink,#F4F2FA)} .ds-seg button:focus-visible{outline:2px solid var(--accent,#8E8BFF);outline-offset:2px}"
+    },
+    {
+      "name": "Busca do topo",
+      "kind": "input",
+      "refersTo": "input",
+      "description": "Busca de contato no topo preso, com ícone dentro do campo.",
+      "html": "<form class=\"ds-busca\"><svg viewBox=\"0 0 24 24\"><circle cx=\"11\" cy=\"11\" r=\"6.5\"/><path d=\"M16 16l4 4\"/></svg><input placeholder=\"Buscar contato por nome ou número\" aria-label=\"Buscar contato\"></form>",
+      "css": ".ds-busca{position:relative;width:380px} .ds-busca svg{position:absolute;left:13px;top:50%;width:17px;height:17px;translate:0 -50%;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;color:var(--ink-3,#8C8BA0);pointer-events:none} .ds-busca input{width:100%;height:40px;padding:0 14px 0 38px;border-radius:12px;border:1px solid var(--line,#2A2A34);background:var(--surface,#1A1A21);color:var(--ink,#F4F2FA);font:400 13.5px var(--ui,\"Roboto Variable\",Roboto,sans-serif);transition:border-color .16s var(--ease, cubic-bezier(.22,1,.36,1)),box-shadow .16s var(--ease, cubic-bezier(.22,1,.36,1))} .ds-busca input::placeholder{color:var(--ink-3,#8C8BA0)} .ds-busca input:focus{outline:none;border-color:var(--accent-line,rgba(142,139,255,.45));box-shadow:0 0 0 4px var(--accent-soft,rgba(142,139,255,.14))}"
+    }
+  ],
+  "narrative": {
+    "northStar": "O Motor à Vista",
+    "overview": "O Prospecta é um motor que trabalha sozinho, e a tela existe para que ninguém confunda \"rodou e não fez nada\" com \"rodou e deu certo\". O sistema visual inteiro serve a essa leitura: um chão escuro e calmo (`ground`), cartões opacos um degrau acima (`surface`), e cor só onde há um fato — menta para o que deu certo, âmbar para o que o motor não fez, coral para o que deu errado, periwinkle/índigo para a mão da pessoa (ação, foco, seleção). O mundo vem da referência escolhida pelo usuário, o \"Dashboard\" de Anya Masher no Behance: Anek Latin estreita nos títulos e números, Roboto na interface, neutros carvão e lavanda, item ativo como pílula preenchida, gráficos de área em gradiente e blobs desfocados atrás dos cartões.\n\nA densidade é de painel de operação, não de página de marketing: texto de 14px, rótulos de 12,5–13,5px, números grandes só onde são o dado principal. A página inicial lê de cima para baixo na ordem do que pede atenção: primeiro o que o motor **não** fez (faixa de modo simulado, cartão de configuração pela metade), depois os números do período contra o período anterior, depois o ritmo diário, e por fim funil, quem respondeu e campanhas ligadas.\n\nO escuro é o padrão; o claro é escolha da pessoa, guardada em `prospecta:tema` e aplicada antes da primeira pintura por um script em `index.html`. Os dois temas são o mesmo sistema com os mesmos nomes de token — só o valor muda sob `:root[data-theme=\"light\"]`.",
+    "keyCharacteristics": [
+      "Escuro por padrão, claro opcional, tokens com o mesmo nome nos dois.",
+      "Profundidade tonal: chão → rail → cartão → superfície 2 → superfície 3, com sombra macia e blobs só nas calhas.",
+      "Duas famílias com papéis fixos: Anek Latin (comprimida, 90–96%) para títulos e números; Roboto para todo o resto.",
+      "Cor semântica, nunca decorativa; cor de gráfico só pelos quatro `--g-*` validados.",
+      "Gráficos sem biblioteca, um eixo Y só, hoje tracejado, mira e dica em todos.",
+      "Ícones desenhados no próprio produto, traço 1.7, grade 24."
+    ],
+    "rules": [
+      {
+        "name": "The Menta-na-Interface Rule",
+        "body": "`#3DF5A8` pinta interface (pílula clara, ponto da marca, anel, `ok` escuro) e nunca preenche área de gráfico; a série verde do gráfico é `--g-1`.",
+        "section": "colors"
+      },
+      {
+        "name": "The Validator Rule",
+        "body": "Cor de gráfico sai só de `--g-1..4`. Série nova ou tom novo passa pelo validador de paleta nos dois temas antes de entrar; cor escolhida a olho não entra, nem \"uma variação\" de um `--g-*`.",
+        "section": "colors"
+      },
+      {
+        "name": "The Canal-Vira-Texto Rule",
+        "body": "No tema claro, `--wa`, `--mail`, `--sms` e `--ig` também são cor de texto (nome do canal, iniciais) e precisam passar de 4,5:1 contra o fundo onde o texto de fato está — inclusive a tinta diluída do ícone ou do avatar, não só o cartão branco. Sobre a tinta, o ícone e as iniciais nunca usam a cor pura: `tinta()` (em `componentes/base.tsx`) puxa a cor do canal 28% para `--ink` (`color-mix(in oklab, cor 72%, var(--ink))`), o que passa de 4,9:1 nos dois temas.",
+        "section": "colors"
+      },
+      {
+        "name": "The Simulado-É-Âmbar Rule",
+        "body": "Modo simulado fala em `warn`, nunca em `ok`. Mensagem simulada nunca é rotulada como \"enviada\" ou \"que saíram\": o rótulo troca para \"Mensagens simuladas\", a taxa de resposta vira \"—\" com o motivo, e a faixa âmbar diz quantas foram simuladas.",
+        "section": "colors"
+      },
+      {
+        "name": "The Número-em-Anek Rule",
+        "body": "Todo número que é o dado principal (KPI, total, conversão, progresso) é Anek Latin 600 comprimida com `font-variant-numeric: tabular-nums`. Número dentro de tabela, dica e legenda fica em Roboto, também tabular.",
+        "section": "typography"
+      },
+      {
+        "name": "The Sem-Caixa-Alta Rule",
+        "body": "Rótulos são frase normal em português, sem caixa alta e sem sobrelinha (\"kicker\") acima de título. O build não tem nenhum, e o tamanho e o peso já fazem a hierarquia.",
+        "section": "typography"
+      },
+      {
+        "name": "The Grupo-Fechado Rule",
+        "body": "Grupos do rail (Canais, Configurações) abrem fechados; só abrem quando a rota atual está dentro deles. Grupo abre índice, não conteúdo — a tela de Configurações é uma lista de itens, cada assunto na sua própria tela (D21).",
+        "section": "layout"
+      },
+      {
+        "name": "The Blob-Atrás Rule",
+        "body": "Os blobs ficam atrás de cartões opacos e nunca capturam clique; cartão translúcido sobre blob não existe. A única exceção é a coluna do Kanban, que é `surface` a 55% de propósito, porque é calha e não cartão.",
+        "section": "elevation"
+      }
+    ],
+    "dos": [
+      "Do usar sempre `var(--token)`; os dois temas trocam o valor sob o mesmo nome.",
+      "Do abrir o Início pelo que o motor não fez (faixa âmbar de simulado, cartão de configuração pendente) antes de qualquer número.",
+      "Do comparar todo número do período com o período anterior por meio de uma variação (delta), e taxas em pontos percentuais.",
+      "Do separar grandezas de escala diferente em painéis empilhados com o mesmo eixo de tempo.",
+      "Do desenhar o dia de hoje tracejado (linha `3 5`, barra a 45%) e dizer \"hoje, parcial\" na dica.",
+      "Do dar a todo gráfico mira, dica, navegação por setas e tabela oculta.",
+      "Do tirar cor de gráfico só de `--g-1..4`, e passar pelo validador de paleta nos dois temas qualquer cor nova.",
+      "Do conferir 4,5:1 para toda cor de canal usada como texto no tema claro, contra o fundo real (incluindo a tinta diluída).",
+      "Do usar Anek Latin 600 comprimida e algarismos tabulares para todo número principal.",
+      "Do manter os grupos do rail fechados por padrão (D21).",
+      "Do respeitar `prefers-reduced-motion`: animações e transições caem para .01ms e a linha do gráfico aparece já desenhada."
+    ],
+    "donts": [
+      "Don't pôr um segundo eixo Y em gráfico nenhum.",
+      "Don't rotular mensagem simulada como \"enviada\" ou \"que saiu\", nem calcular taxa de resposta sem envio real.",
+      "Don't usar a menta `#3DF5A8` como preenchimento de área de gráfico.",
+      "Don't escolher cor de gráfico a olho nem derivar tom de um `--g-*` sem o validador.",
+      "Don't usar emoji, glifo de fonte ou biblioteca de ícones; ícone novo é desenhado em `icones.tsx` no mesmo traço.",
+      "Don't pôr caixa alta, sobrelinha (\"kicker\") ou rótulo-chamariz acima de título.",
+      "Don't abrir grupo de Configurações ou Canais expandido por padrão.",
+      "Don't usar o anel para algo que não seja progresso de passos de verdade.",
+      "Don't usar sombra dura ou deslocada; profundidade é tom, borda de 1px e a sombra macia do sistema.",
+      "Don't deixar cartão translúcido sobre os blobs; cartão é opaco."
+    ]
+  }
+}

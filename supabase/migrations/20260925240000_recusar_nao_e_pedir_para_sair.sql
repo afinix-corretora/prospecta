@@ -1,0 +1,63 @@
+-- Recusar a oferta não é pedir para sair (D58).
+--
+-- Achado ao construir o classificador de recusa, e só visível porque as duas
+-- listas ficaram lado a lado: `opt_out_termos` do D48 traz
+--
+--     'nao tenho interesse'   vale sozinho
+--     'sem interesse'         vale sozinho
+--
+-- Ou seja: quem responde "não tenho interesse, obrigado" — uma recusa educada
+-- desta oferta — é **suprimido para sempre**, em todos os canais, em todas as
+-- campanhas futuras, e o CRM recebe `opt_out` dizendo que a pessoa pediu para
+-- sair. Ela não pediu.
+--
+-- Isso contradiz o raciocínio que o próprio D48 escreveu:
+--
+--   > Termo que nao tem outra leitura possivel numa resposta a prospeccao —
+--   > "pare", "descadastrar" — vale sozinho.
+--   > Falso positivo aqui e irreversivel.
+--
+-- "Não tenho interesse" TEM outra leitura, e é a mais comum: *não quero esta
+-- oferta*. Não é *nunca mais fale comigo*. Quem não quer plano individual hoje
+-- pode querer PME em seis meses — é a mesma família de erro que o D48 evitou
+-- em "quero sair do meu plano", só que escapou nestes dois.
+--
+-- A distinção tem nome na base de conhecimento da casa, que separa RECUSA de
+-- opt-out justamente porque o projeto anterior tratava as duas de formas
+-- diferentes: recusa encerra o ciclo, opt-out encerra a relação.
+--
+-- Os dois termos saem daqui e entram em `recusa_termos`, onde já estão. O
+-- efeito: quem recusa fica em `respondeu`, o CRM não recebe `opt_out`, e uma
+-- campanha futura pode alcançá-lo. Quem quer de fato sair continua dizendo
+-- "pare", "descadastrar", "me tira da lista", "não envie mais" — que seguem
+-- valendo sozinhos, porque esses não têm segunda leitura.
+--
+-- ---------------------------------------------------------------------------
+-- Se você discordar, é uma linha
+-- ---------------------------------------------------------------------------
+--
+-- Esta é uma decisão de operação, não de engenharia, e o vocabulário mora numa
+-- TABELA exatamente para poder ser mudado sem migration. Para voltar ao
+-- comportamento anterior:
+--
+--   INSERT INTO opt_out_termos (termo, exige_uma_de, nota) VALUES
+--     ('nao tenho interesse', NULL, 'decisao da operacao: recusa suprime'),
+--     ('sem interesse', NULL, 'idem');
+--
+-- O lado conservador (suprimir) protege de reclamação; o lado escolhido aqui
+-- protege o lead. Escolhi o segundo porque a supressão é irreversível e a
+-- recusa não, e porque o D48 já tinha escrito que a trava mora do lado do erro
+-- caro — só não tinha aplicado a estes dois.
+--
+-- Sem barra invertida (D32).
+-- Reversível: supabase/down/20260925240000_recusar_nao_e_pedir_para_sair.down.sql
+
+DELETE FROM opt_out_termos WHERE termo IN ('nao tenho interesse', 'sem interesse');
+
+-- A supressão já gravada NÃO é desfeita, e não por descuido: ela é imutável
+-- por gatilho desde a primeira migration, e desfazê-la por migration seria
+-- abrir a porta que quatro decisões fecham. Quem foi suprimido por este
+-- defeito continua suprimido até alguém decidir caso a caso.
+--
+-- Hoje isso é zero pessoas — nada foi enviado ainda, então nada foi
+-- respondido. Se não fosse, esta linha seria um aviso e não uma nota.
